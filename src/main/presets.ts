@@ -113,6 +113,10 @@ export interface ConsolePreset {
   mods?: { targets: ModTarget[]; gamebanana?: boolean }
   /** Toggles such as widescreen patches. */
   patches?: { id: string; label: string; default?: boolean; on: GameOption; off: GameOption }[]
+  /** RetroAchievements login written into the emulator ({rauser}, {ratoken}); "off" runs when not logged in. */
+  achievements?: { on: ConfigStep[]; off?: ConfigStep[] }
+  /** RetroArch core name as the netplay lobby shows it (e.g. "Mesen"). */
+  netplayCore?: string
   quickResume: boolean
   shaderHint?: boolean
   netplay?: boolean
@@ -156,6 +160,8 @@ export interface EmulatorPreset {
   /** Folder names this emulator has in an EmuDeck / Desktop\Emulator setup. */
   importNames: string[]
   versionHint?: string
+  /** License of the emulator (shown in Settings → About). */
+  license?: string
 }
 
 let consoles: ConsolePreset[] = []
@@ -232,6 +238,8 @@ export function vars(c: ConsolePreset, extra: Record<string, string> = {}): Reco
     crt: 'false',
     n64res: '640x480',
     n64hires: 'False',
+    nprelayon: 'false',
+    nprelay: 'madrid',
     ...padVars(),
     ...extra
   }

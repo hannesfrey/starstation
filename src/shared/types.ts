@@ -14,6 +14,8 @@ export interface Settings {
   graphicsDefault: GraphicsLevel
   crtDefault: boolean
   netplayNickname: string
+  /** RetroArch relay server for hosting: nyc, madrid, saopaulo, singapore. */
+  netplayRelay: string
   /** Seconds the boot animation lasts (0 = skip). */
   bootAnimation: boolean
 }
@@ -29,6 +31,7 @@ export const DEFAULT_SETTINGS: Settings = {
   graphicsDefault: 'enhanced',
   crtDefault: false,
   netplayNickname: 'Player',
+  netplayRelay: 'madrid',
   bootAnimation: true
 }
 
@@ -174,7 +177,21 @@ export interface StarstationApi {
   getState(): Promise<AppState>
   setSetting<K extends keyof Settings>(key: K, value: Settings[K]): Promise<Settings>
   rescan(): Promise<LibraryView>
-  launch(gameId: string, mode?: 'fresh' | 'resume'): Promise<LaunchResult>
+  launch(gameId: string, mode?: 'fresh' | 'resume', netplay?: { host: true } | { join: NetplayRoom }): Promise<LaunchResult>
+  health(): Promise<HealthIssue[]>
+  exportReport(): Promise<string | null>
+  raStatus(): Promise<{ loggedIn: boolean; username?: string; hasPassword: boolean; hasApiKey: boolean }>
+  raLogin(): Promise<{ ok: boolean; error?: string }>
+  raLogout(): Promise<void>
+  netplayRooms(gameId: string): Promise<NetplayRoom[]>
+  steamStatus(): Promise<{ found: boolean; added: boolean; running: boolean }>
+  addToSteam(): Promise<{ ok: boolean; error?: string; users?: number }>
+  customConsole(id: string): Promise<CustomConsoleForm | null>
+  saveCustomConsole(form: CustomConsoleForm): Promise<{ ok: boolean; error?: string; id?: string }>
+  removeCustomConsole(id: string): Promise<void>
+  pickExe(): Promise<string | null>
+  clearLibraryCache(): Promise<void>
+  licenses(): Promise<{ id: string; name: string; license: string; file?: string }[]>
   gameDetails(gameId: string): Promise<GameDetails | null>
   backupNow(gameId: string): Promise<BackupInfo | null>
   restoreBackup(gameId: string, backupId: string): Promise<{ ok: boolean; error?: string }>
@@ -322,6 +339,42 @@ export interface Screenshot {
 export interface BatteryInfo {
   level: number | null
   wired: boolean
+}
+
+export interface HealthIssue {
+  severity: 'error' | 'warning' | 'info'
+  title: string
+  detail?: string
+  fix?: { label: string; command: string; arg?: string }
+}
+
+export interface Achievement {
+  title: string
+  description?: string
+  game?: string
+  points?: number
+}
+
+export interface NetplayRoom {
+  host: string
+  country?: string
+  game: string
+  /** Same ROM (CRC or file name) as the local game. */
+  sameGame: boolean
+  password: boolean
+  relay: boolean
+  address: string
+  port: number
+  session?: string
+}
+
+export interface CustomConsoleForm {
+  id?: string
+  name: string
+  short?: string
+  exe: string
+  args: string
+  extensions: string
 }
 
 export interface Collection {

@@ -236,5 +236,20 @@
         }
       }
     ]
+  },
+  "achievements": {
+    "on": [
+      {
+        "type": "ini",
+        "file": "{emu}/User/Config/RetroAchievements.ini",
+        "set": {
+          "Achievements": {
+            "Enabled": "True",
+            "Username": "{rauser}",
+            "ApiToken": "{ratoken}"
+          }
+        }
+      }
+    ]
   }
 }

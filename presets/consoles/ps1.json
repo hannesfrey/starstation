@@ -281,5 +281,19 @@
         }
       }
     ]
+  },
+  "achievements": {
+    "on": [
+      {
+        "type": "ini",
+        "file": "{emu}/settings.ini",
+        "set": {
+          "Cheevos": {
+            "Enabled": "true",
+            "Username": "{rauser}"
+          }
+        }
+      }
+    ]
   }
 }

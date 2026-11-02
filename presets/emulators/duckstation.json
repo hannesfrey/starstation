@@ -3,7 +3,20 @@
   "name": "DuckStation",
   "folder": "duckstation",
   "exe": "duckstation-qt-x64-ReleaseLTCG.exe",
-  "download": { "type": "github", "repo": "stenzek/duckstation", "asset": "^duckstation-windows-x64-release\\.zip$" },
-  "portable": [{ "type": "touch", "path": "{emu}/portable.txt" }],
-  "importNames": ["duckstation", "DuckStation"]
+  "download": {
+    "type": "github",
+    "repo": "stenzek/duckstation",
+    "asset": "^duckstation-windows-x64-release\\.zip$"
+  },
+  "portable": [
+    {
+      "type": "touch",
+      "path": "{emu}/portable.txt"
+    }
+  ],
+  "importNames": [
+    "duckstation",
+    "DuckStation"
+  ],
+  "license": "CC BY-NC-ND 4.0"
 }

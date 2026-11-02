@@ -345,5 +345,28 @@
         }
       }
     ]
+  },
+  "achievements": {
+    "on": [
+      {
+        "type": "ini",
+        "file": "{emu}/inis/PCSX2.ini",
+        "set": {
+          "Achievements": {
+            "Enabled": "true",
+            "Username": "{rauser}"
+          }
+        }
+      },
+      {
+        "type": "ini",
+        "file": "{emu}/inis/secrets.ini",
+        "set": {
+          "Achievements": {
+            "Token": "{ratoken}"
+          }
+        }
+      }
+    ]
   }
 }

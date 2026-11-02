@@ -3,7 +3,21 @@
   "name": "Dolphin",
   "folder": "dolphin",
   "exe": "Dolphin.exe",
-  "download": { "type": "url", "url": "https://dl.dolphin-emu.org/releases/2609a/dolphin-2609a-x64.7z", "page": "https://dolphin-emu.org/download/" },
-  "portable": [{ "type": "touch", "path": "{emu}/portable.txt" }],
-  "importNames": ["Dolphin-x64", "Dolphin", "dolphin"]
+  "download": {
+    "type": "url",
+    "url": "https://dl.dolphin-emu.org/releases/2609a/dolphin-2609a-x64.7z",
+    "page": "https://dolphin-emu.org/download/"
+  },
+  "portable": [
+    {
+      "type": "touch",
+      "path": "{emu}/portable.txt"
+    }
+  ],
+  "importNames": [
+    "Dolphin-x64",
+    "Dolphin",
+    "dolphin"
+  ],
+  "license": "GPL-2.0-or-later"
 }

@@ -654,3 +654,65 @@ body,
 .battery.low .battery-fill {
   background: #ff8a6a;
 }
+
+/* ---------- controller test ---------- */
+.padtest {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  background: rgba(3, 5, 12, 0.94);
+  padding: 12vh 10vw;
+  animation: fadeIn 0.2s;
+}
+.padtest-title {
+  font-size: 1.6rem;
+}
+.padtest-name {
+  color: var(--text-dim);
+  margin: 1vh 0 4vh;
+}
+.padtest-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(90px, 1fr));
+  gap: 1vh 1vw;
+  max-width: 900px;
+}
+.padtest-btn {
+  padding: 1.6vh 0;
+  text-align: center;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.04);
+}
+.padtest-btn.on {
+  background: rgba(255, 255, 255, 0.88);
+  color: #0a1020;
+  box-shadow: 0 0 18px rgba(255, 255, 255, 0.5);
+}
+.padtest-sticks {
+  display: flex;
+  gap: 3vw;
+  margin-top: 4vh;
+}
+.padtest-stick {
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  display: grid;
+  place-items: center;
+}
+.padtest-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--text);
+}
+.padtest-hint {
+  margin-top: 4vh;
+  color: var(--text-dim);
+}
+
+.entry.over {
+  z-index: 26;
+}

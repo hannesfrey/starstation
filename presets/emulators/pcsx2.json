@@ -3,7 +3,22 @@
   "name": "PCSX2",
   "folder": "pcsx2",
   "exe": "pcsx2-qt.exe",
-  "download": { "type": "github", "repo": "PCSX2/pcsx2", "asset": "windows-x64-Qt\\.7z$" },
-  "portable": [{ "type": "touch", "path": "{emu}/portable.ini" }],
-  "importNames": ["PCSX2-Qt", "pcsx2-qt", "PCSX2", "pcsx2"]
+  "download": {
+    "type": "github",
+    "repo": "PCSX2/pcsx2",
+    "asset": "windows-x64-Qt\\.7z$"
+  },
+  "portable": [
+    {
+      "type": "touch",
+      "path": "{emu}/portable.ini"
+    }
+  ],
+  "importNames": [
+    "PCSX2-Qt",
+    "pcsx2-qt",
+    "PCSX2",
+    "pcsx2"
+  ],
+  "license": "GPL-3.0"
 }

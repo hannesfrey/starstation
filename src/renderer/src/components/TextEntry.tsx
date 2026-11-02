@@ -20,15 +20,17 @@ export interface EntryResult {
 }
 
 export interface EntryState {
-  kind: 'search' | 'new-collection' | 'rename-collection'
+  kind: 'search' | 'new-collection' | 'rename-collection' | 'field'
   title: string
   value: string
   row: number
   col: number
   focus: 'keys' | 'results'
   result: number
-  /** Game to add to the new collection / collection to rename. */
+  /** Game to add to the new collection / collection to rename / form field. */
   target?: string
+  /** Opened from a panel (form field): drawn and handled above it. */
+  overPanel?: boolean
 }
 
 export function clampCol(row: number, col: number): number {
@@ -47,7 +49,7 @@ export function TextEntry(p: {
   // keep the selected result in view: show a window of 8
   const start = Math.max(0, Math.min(e.result - 3, list.length - 8))
   return (
-    <div className={`entry ${results ? 'with-results' : ''}`} data-testid={`entry-${e.kind}`}>
+    <div className={`entry ${results ? 'with-results' : ''} ${e.overPanel ? 'over' : ''}`} data-testid={`entry-${e.kind}`}>
       <div className="entry-title">{e.title}</div>
       <div className="entry-box" data-testid="entry-value">
         {e.kind === 'search' && <Icon name="search" size={28} />}

@@ -23,7 +23,7 @@ export function setSetting<K extends keyof Settings>(key: K, value: Settings[K])
 /** Local secrets (ScreenScraper / RetroAchievements). Never packaged, never committed. */
 export interface Secrets {
   screenscraper?: { username?: string; password?: string; devid?: string; devpassword?: string }
-  retroachievements?: { username?: string; password?: string; webApiKey?: string }
+  retroachievements?: { username?: string; password?: string; webApiKey?: string; token?: string }
 }
 export function getSecrets(): Secrets {
   return readJson<Secrets>(dir('config', 'secrets.json'), {})

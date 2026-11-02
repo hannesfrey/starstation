@@ -11,7 +11,7 @@
       "-L",
       "{emu}/cores/{core}_libretro.dll",
       "--appendconfig",
-      "{config}/retroarch/{console}.cfg",
+      "{config}/retroarch/{console}.cfg|{config}/retroarch/achievements.cfg",
       "-f",
       "{launch}"
     ]
@@ -75,7 +75,9 @@
         "video_smooth = \"false\"",
         "video_shader_enable = \"{crt}\"",
         "core_options_path = \"{config}/retroarch/{console}-core-options.cfg\"",
-        "global_core_options = \"true\""
+        "global_core_options = \"true\"",
+        "netplay_use_mitm_server = \"{nprelayon}\"",
+        "netplay_mitm_server = \"{nprelay}\""
       ]
     },
     {
@@ -155,6 +157,30 @@
             "n64hires": "False"
           }
         }
+      }
+    ]
+  },
+  "netplayCore": "Mupen64Plus-Next",
+  "achievements": {
+    "on": [
+      {
+        "type": "write",
+        "file": "{config}/retroarch/achievements.cfg",
+        "lines": [
+          "cheevos_enable = \"true\"",
+          "cheevos_username = \"{rauser}\"",
+          "cheevos_token = \"{ratoken}\"",
+          "cheevos_hardcore_mode_enable = \"false\""
+        ]
+      }
+    ],
+    "off": [
+      {
+        "type": "write",
+        "file": "{config}/retroarch/achievements.cfg",
+        "lines": [
+          "# not logged in to RetroAchievements through Starstation"
+        ]
       }
     ]
   }

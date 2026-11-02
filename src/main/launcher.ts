@@ -5,6 +5,8 @@ import { getConsole, getEmulator, emulatorDir, emulatorExe, fill } from './prese
 import { gameVars, keepPreviousResume, resumeLaunch } from './gamedata'
 import { applyGameOptions, optionVars } from './gameoptions'
 import { applyModSettings, modVars } from './mods'
+import { raVars } from './retroach'
+import { applyStep } from './emuconfig'
 import { applyConsoleConfig } from './emuconfig'
 import { biosStatus } from './bios'
 import { getGame, updateStats, view } from './library/library'
@@ -69,16 +71,33 @@ export function buildCommand(gameId: string, extraArgs: string[] = [], resumeArg
 
 export type LaunchMode = 'fresh' | 'resume'
 
-export async function launch(gameId: string, mode: LaunchMode = 'fresh', extraArgs: string[] = []): Promise<LaunchResult> {
+export async function launch(
+  gameId: string,
+  mode: LaunchMode = 'fresh',
+  extraArgs: string[] = [],
+  extra: { args?: string[]; vars?: Record<string, string> } = {}
+): Promise<LaunchResult> {
   if (running) return { ok: false, error: `${running.title} is still running.` }
   const game = getGame(gameId)
   const c = game ? getConsole(game.console) : undefined
   const rl = game ? resumeLaunch(game, mode) : { args: [], at: 0, vars: {} }
   // per-game options (graphics level, CRT filter, patches) first fill placeholders, then add their own steps/args
-  const ov = game && c ? { ...optionVars(c, game), ...modVars(c, game) } : {}
+  const ov = game && c ? { ...optionVars(c, game), ...modVars(c, game), ...raVars(), ...(extra.vars ?? {}) } : {}
   if (c) applyConsoleConfig(c, { ...rl.vars, ...ov })
   const optionArgs = game && c ? applyGameOptions(c, game, { ...rl.vars, ...ov }) : []
   if (game && c) applyModSettings(c, game, { ...rl.vars, ...ov })
+  // RetroAchievements: give the emulator Starstation's login, or leave its own settings alone
+  if (game && c?.achievements) {
+    const steps = ov.ratoken ? c.achievements.on : (c.achievements.off ?? [])
+    for (const s of steps) {
+      try {
+        applyStep(s, gameVars(game, { ...rl.vars, ...ov }))
+      } catch (e) {
+        log.warn('achievements step failed', e)
+      }
+    }
+  }
+  optionArgs.push(...(extra.args ?? []))
   const at = rl.args.length ? rl.at : (c?.launch.insertAt ?? 0)
   const cmd = buildCommand(gameId, extraArgs, [...optionArgs, ...rl.args], at)
   if ('ok' in cmd) {

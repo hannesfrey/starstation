@@ -11,7 +11,7 @@
       "-L",
       "{emu}/cores/{core}_libretro.dll",
       "--appendconfig",
-      "{config}/retroarch/{console}.cfg",
+      "{config}/retroarch/{console}.cfg|{config}/retroarch/achievements.cfg",
       "-f",
       "{launch}"
     ]
@@ -77,7 +77,9 @@
         "video_driver = \"d3d11\"",
         "video_scale_integer = \"{raint}\"",
         "video_smooth = \"false\"",
-        "video_shader_enable = \"{crt}\""
+        "video_shader_enable = \"{crt}\"",
+        "netplay_use_mitm_server = \"{nprelayon}\"",
+        "netplay_mitm_server = \"{nprelay}\""
       ]
     },
     {
@@ -128,5 +130,29 @@
         "crt": "false"
       }
     }
+  },
+  "netplayCore": "Snes9x",
+  "achievements": {
+    "on": [
+      {
+        "type": "write",
+        "file": "{config}/retroarch/achievements.cfg",
+        "lines": [
+          "cheevos_enable = \"true\"",
+          "cheevos_username = \"{rauser}\"",
+          "cheevos_token = \"{ratoken}\"",
+          "cheevos_hardcore_mode_enable = \"false\""
+        ]
+      }
+    ],
+    "off": [
+      {
+        "type": "write",
+        "file": "{config}/retroarch/achievements.cfg",
+        "lines": [
+          "# not logged in to RetroAchievements through Starstation"
+        ]
+      }
+    ]
   }
 }

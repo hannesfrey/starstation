@@ -1,4 +1,4 @@
-import type { AddGamesResult, AppState, EmulatorInfo, Game, GameDetails, GbGame, GbMod, GbModDetails, ModsView, GraphicsLevel, ImportProgressInfo, ImportResultInfo, ImportSourceInfo, Settings } from '../../../shared/types'
+import type { AddGamesResult, AppState, CustomConsoleForm, EmulatorInfo, Game, GameDetails, GbGame, GbMod, GbModDetails, HealthIssue, ModsView, NetplayRoom, GraphicsLevel, ImportProgressInfo, ImportResultInfo, ImportSourceInfo, Settings } from '../../../shared/types'
 import { formatPlayTime } from './model'
 
 /** Data some panels load on demand. */
@@ -19,6 +19,13 @@ export interface PanelExtra {
   /** Two mods want the same files. */
   modConflict?: { gameId: string; modId: string; name: string; with: string[]; files: number }
   gb: { games?: GbGame[]; mods?: GbMod[]; page: number; more: boolean; detail: Record<number, GbModDetails>; busy?: string; error?: string }
+  health?: HealthIssue[]
+  ra?: { loggedIn: boolean; username?: string; hasPassword: boolean; hasApiKey: boolean }
+  rooms?: { gameId: string; list?: NetplayRoom[]; error?: string }
+  steam?: { found: boolean; added: boolean; running: boolean }
+  licenses?: { id: string; name: string; license: string; file?: string }[]
+  form?: CustomConsoleForm
+  pad?: { name: string; api: string } | null
 }
 
 export interface PItem {
@@ -66,6 +73,21 @@ export interface PanelHandlers {
   gbMore: (g: Game) => void
   gbInstall: (g: Game, modId: number, fileId: number) => void
   refreshArtwork: (g: Game) => void
+  runHealth: () => void
+  exportReport: () => void
+  raLogin: () => void
+  raLogout: () => void
+  playOnline: (g: Game, how: { host: true } | { join: NetplayRoom }) => void
+  loadRooms: (g: Game) => void
+  addToSteam: () => void
+  editField: (field: 'name' | 'short' | 'args' | 'extensions' | 'nickname') => void
+  pickExe: () => void
+  saveForm: () => void
+  removeConsole: (id: string) => void
+  editConsole: (id: string) => void
+  newConsole: () => void
+  clearCache: () => void
+  testPad: () => void
   deleteGame: (g: Game, withSaves: boolean) => void
   addGamesDialog: () => void
   addGameAs: (path: string, consoleId: string) => void
@@ -116,11 +138,7 @@ export function buildPanel(id: string, arg: string | undefined, state: AppState,
               label: `${e.name}${e.version ? ` ${e.version}` : ''} · ${e.consoles.join(', ')}`,
               value: status,
               disabled: !!busy,
-              run: () => {
-                if (e.page) h.command('open-url', e.page)
-                else if (!e.installed || e.updateAvailable) h.installEmulator(e.id)
-                return 'keep' as const
-              }
+              run: () => (h.openPanel('emulator', e.id), 'keep' as const)
             }
           }),
           { key: 'check', label: 'Check for updates', run: () => (h.checkUpdates(), 'keep') },
@@ -200,13 +218,6 @@ export function buildPanel(id: string, arg: string | undefined, state: AppState,
             )
           },
           {
-            key: 'gfx',
-            label: 'Graphics for games',
-            value: LEVEL_LABEL[s.graphicsDefault],
-            run: () => (h.setSetting('graphicsDefault', nextLevel(s.graphicsDefault)), 'keep')
-          },
-          { key: 'crt', label: 'CRT filter for retro games', value: onOff(s.crtDefault), run: () => (h.setSetting('crtDefault', !s.crtDefault), 'keep') },
-          {
             key: 'login',
             label: 'Start with Windows',
             value: onOff(s.startWithWindows),
@@ -218,19 +229,217 @@ export function buildPanel(id: string, arg: string | undefined, state: AppState,
     case 'console': {
       const c = state.consoles.find((x) => x.id === arg)
       if (!c) return null
+      const items: PItem[] = [
+        { key: 'status', label: c.statusText, info: true },
+        { key: 'emu', label: `Emulator: ${c.emulatorName}`, info: true },
+        { key: 'types', label: `Game files: ${c.extensions.join(' ')}`, info: true },
+        { key: 'add', label: 'Add games…', run: () => h.addGamesDialog() },
+        { key: 'games', label: 'Open games folder', run: () => h.command('open-folder', `games:${c.id}`) },
+        { key: 'bios', label: 'Open BIOS folder', run: () => h.command('open-folder', `bios:${c.id}`) },
+        { key: 'saves', label: 'Open saves folder', run: () => h.command('open-folder', `saves:${c.id}`) }
+      ]
+      if (c.custom)
+        items.push(
+          { key: 'edit', label: 'Edit this console…', run: () => (h.editConsole(c.id), 'keep') },
+          { key: 'remove', label: 'Remove this console', run: () => (h.openPanel('console-remove', c.id), 'keep') }
+        )
+      return { id, title: c.name, items }
+    }
+    case 'console-remove': {
+      const c = state.consoles.find((x) => x.id === arg)
+      if (!c) return null
       return {
         id,
-        title: c.name,
+        title: `Remove ${c.name}?`,
         items: [
-          { key: 'status', label: c.statusText, info: true },
-          { key: 'emu', label: `Emulator: ${c.emulatorName}`, info: true },
-          { key: 'types', label: `Game files: ${c.extensions.join(' ')}`, info: true },
-          { key: 'games', label: 'Open games folder', run: () => h.command('open-folder', `games:${c.id}`) },
-          { key: 'bios', label: 'Open BIOS folder', run: () => h.command('open-folder', `bios:${c.id}`) },
-          { key: 'saves', label: 'Open saves folder', run: () => h.command('open-folder', `saves:${c.id}`) }
+          { key: 'msg', label: 'Only the console entry is removed. Its games, saves and the emulator stay on disk.', info: true },
+          { key: 'yes', label: 'Remove', run: () => h.removeConsole(c.id) },
+          { key: 'no', label: 'Cancel' }
         ]
       }
     }
+    case 'custom-console': {
+      const f = x.form
+      if (!f) return null
+      const show = (v: string) => v || '—'
+      return {
+        id,
+        title: f.id ? 'Edit console' : 'Add a console',
+        items: [
+          { key: 'msg', label: 'For consoles without a preset: games start with your command, without the smart features.', info: true },
+          { key: 'name', label: 'Name', value: show(f.name), run: () => (h.editField('name'), 'keep') },
+          { key: 'short', label: 'Short name', value: show(f.short ?? ''), run: () => (h.editField('short'), 'keep') },
+          { key: 'exe', label: 'Emulator program', value: f.exe ? f.exe.split(/[\\/]/).pop() : '—', run: () => (h.pickExe(), 'keep') },
+          { key: 'args', label: 'Launch command', value: show(f.args), run: () => (h.editField('args'), 'keep') },
+          { key: 'ext', label: 'Game file types', value: show(f.extensions), run: () => (h.editField('extensions'), 'keep') },
+          { key: 'help', label: '{launch} is replaced by the game file. Example: -f "{launch}"', info: true },
+          { key: 'save', label: 'Save console', run: () => (h.saveForm(), 'keep') }
+        ]
+      }
+    }
+    case 'graphics':
+      return {
+        id,
+        title: 'Graphics',
+        items: [
+          { key: 'msg', label: 'Defaults for every game. Each game can change them in its Triangle menu.', info: true },
+          { key: 'gfx', label: 'Graphics level', value: LEVEL_LABEL[s.graphicsDefault], run: () => (h.setSetting('graphicsDefault', nextLevel(s.graphicsDefault)), 'keep') },
+          { key: 'crt', label: 'CRT filter for NES, SNES, N64', value: onOff(s.crtDefault), run: () => (h.setSetting('crtDefault', !s.crtDefault), 'keep') }
+        ]
+      }
+    case 'controllers': {
+      const icons: Settings['buttonIcons'][] = ['auto', 'playstation', 'xbox']
+      const iconLabel = { auto: 'Automatic', playstation: 'PlayStation', xbox: 'Xbox' }
+      return {
+        id,
+        title: 'Controllers',
+        items: [
+          { key: 'pad', label: x.pad ? `Player 1: ${x.pad.name}` : 'No controller connected', info: true },
+          { key: 'how', label: 'One mapping for every emulator: it is written into each emulator before every game (✕/A = bottom button).', info: true },
+          { key: 'test', label: 'Test buttons', run: () => (h.testPad(), 'keep') },
+          { key: 'icons', label: 'Button icons', value: iconLabel[s.buttonIcons], run: () => (h.setSetting('buttonIcons', icons[(icons.indexOf(s.buttonIcons) + 1) % icons.length]), 'keep') },
+          { key: 'shot', label: 'Screenshot button: F12 on the keyboard; touchpad (PS4/PS5) or Share (Xbox Series) on pads the emulator sees directly.', info: true },
+          { key: 'wheel', label: 'Racing wheels and pedals are ignored by the menu.', info: true },
+          { key: '3ds', label: '3DS (Azahar): map the controller once in Azahar itself.', info: true }
+        ]
+      }
+    }
+    case 'emulator': {
+      const e = x.emulators?.find((y) => y.id === arg)
+      if (!e) return null
+      const lic = x.licenses?.find((y) => y.id === e.id)
+      const busy = x.emuProgress[e.id]
+      const items: PItem[] = [
+        { key: 'ver', label: e.installed ? `Installed: ${e.version ?? 'unknown version'}` : 'Not installed', info: true },
+        { key: 'for', label: `Used for: ${e.consoles.join(', ')}`, info: true }
+      ]
+      if (busy) items.push({ key: 'busy', label: busy, info: true })
+      if (e.page) items.push({ key: 'page', label: 'Open download page', run: () => h.command('open-url', e.page!) })
+      else if (e.canInstall) {
+        if (!e.installed) items.push({ key: 'install', label: `Install ${e.name}`, disabled: !!busy, run: () => (h.installEmulator(e.id), 'keep') })
+        else {
+          if (e.updateAvailable) items.push({ key: 'update', label: `Update to ${e.latest}`, disabled: !!busy, run: () => (h.installEmulator(e.id), 'keep') })
+          items.push({ key: 'repair', label: 'Repair / reinstall', value: 'keeps settings and saves', disabled: !!busy, run: () => (h.installEmulator(e.id), 'keep') })
+        }
+      }
+      items.push({ key: 'folder', label: 'Open emulator folder', run: () => h.command('open-folder', `emulators:${e.id}`) })
+      if (lic) items.push({ key: 'lic', label: `License: ${lic.license}`, info: !lic.file, run: lic.file ? () => h.command('open-path', lic.file!) : undefined })
+      return { id, title: e.name, items }
+    }
+    case 'health': {
+      if (!x.health) return { id, title: 'Health check', items: [{ key: 'loading', label: 'Checking…', info: true }] }
+      const mark = { error: '✕', warning: '!', info: 'i' }
+      const items: PItem[] = x.health.length
+        ? x.health.map((i, k) => ({
+            key: `h${k}`,
+            label: `${mark[i.severity]}  ${i.title}${i.detail ? ' — ' + i.detail : ''}`,
+            value: i.fix?.label,
+            info: !i.fix,
+            run: i.fix ? () => h.command(i.fix!.command, i.fix!.arg) : undefined
+          }))
+        : [{ key: 'ok', label: 'Everything looks good: emulators, BIOS, games and disk space.', info: true }]
+      items.push({ key: 'again', label: 'Check again', run: () => (h.runHealth(), 'keep') })
+      return { id, title: 'Health check', items }
+    }
+    case 'retroachievements': {
+      const r = x.ra
+      if (!r) return { id, title: 'RetroAchievements', items: [{ key: 'loading', label: 'Loading…', info: true }] }
+      const items: PItem[] = []
+      if (r.loggedIn) {
+        items.push({ key: 'who', label: `Logged in as ${r.username}. PCSX2, Dolphin and RetroArch use this login automatically.`, info: true })
+        items.push({ key: 'ds', label: 'PS1 (DuckStation) protects its login: log in once inside DuckStation.', info: true })
+        if (!r.hasApiKey) items.push({ key: 'key', label: 'Add your web API key to secrets.json to see unlocks here after playing.', info: true })
+        items.push({ key: 'out', label: 'Log out', run: () => (h.raLogout(), 'keep') })
+      } else {
+        items.push({ key: 'how', label: 'Put your username and password into secrets.json, save it, then choose Log in. Only a login token is kept for the emulators.', info: true })
+        items.push({ key: 'in', label: 'Log in', disabled: !r.hasPassword, run: () => (h.raLogin(), 'keep') })
+      }
+      items.push({ key: 'file', label: 'Open secrets.json', run: () => h.command('open-secrets') })
+      return { id, title: 'RetroAchievements', items }
+    }
+    case 'netplay-settings': {
+      const relays = ['madrid', 'nyc', 'saopaulo', 'singapore']
+      const relayName: Record<string, string> = { madrid: 'Madrid', nyc: 'New York', saopaulo: 'São Paulo', singapore: 'Singapore' }
+      return {
+        id,
+        title: 'Netplay',
+        items: [
+          { key: 'msg', label: 'Play NES, SNES and N64 games online. Host or join from a game\'s Triangle menu → Play online.', info: true },
+          { key: 'nick', label: 'Your name', value: s.netplayNickname, run: () => (h.editField('nickname'), 'keep') },
+          { key: 'relay', label: 'Relay server', value: relayName[s.netplayRelay] ?? s.netplayRelay, run: () => (h.setSetting('netplayRelay', relays[(relays.indexOf(s.netplayRelay) + 1) % relays.length]), 'keep') }
+        ]
+      }
+    }
+    case 'netplay': {
+      const g = state.library.games.find((y) => y.id === arg)
+      if (!g) return null
+      return {
+        id,
+        title: `Play online · ${g.title}`,
+        items: [
+          { key: 'name', label: `You play as "${s.netplayNickname}" (change it in Settings → Netplay).`, info: true },
+          { key: 'host', label: 'Host a game', value: 'others join you', run: () => h.playOnline(g, { host: true }) },
+          { key: 'join', label: 'Join a game…', run: () => (h.loadRooms(g), 'keep') }
+        ]
+      }
+    }
+    case 'rooms': {
+      const g = state.library.games.find((y) => y.id === arg)
+      if (!g) return null
+      const r = x.rooms?.gameId === g.id ? x.rooms : undefined
+      const items: PItem[] = []
+      if (!r || (!r.list && !r.error)) items.push({ key: 'loading', label: 'Looking for open games…', info: true })
+      if (r?.error) items.push({ key: 'err', label: r.error, info: true })
+      if (r?.list && !r.list.length) items.push({ key: 'none', label: 'Nobody is hosting this game right now.', info: true })
+      for (const [k, room] of (r?.list ?? []).entries())
+        items.push({
+          key: `r${k}`,
+          label: `${room.host}${room.country ? ` (${room.country.toUpperCase()})` : ''} · ${room.game}`,
+          value: room.password ? 'password' : room.sameGame ? 'same game' : 'other version',
+          disabled: room.password,
+          run: () => h.playOnline(g, { join: room })
+        })
+      items.push({ key: 'again', label: 'Refresh', run: () => (h.loadRooms(g), 'keep') })
+      return { id, title: 'Join a game', items }
+    }
+    case 'steam': {
+      const st = x.steam
+      const items: PItem[] = []
+      if (!st) items.push({ key: 'loading', label: 'Looking for Steam…', info: true })
+      else if (!st.found) items.push({ key: 'none', label: "Steam isn't installed on this PC.", info: true })
+      else {
+        items.push({ key: 'msg', label: 'Adds Starstation to your Steam library, so it starts from Big Picture mode in fullscreen.', info: true })
+        if (st.added) items.push({ key: 'added', label: 'Starstation is already in Steam.', info: true })
+        if (st.running) items.push({ key: 'run', label: 'Steam is running: close it first (Steam → Exit).', info: true })
+        items.push({ key: 'add', label: st.added ? 'Update the Steam shortcut' : 'Add Starstation to Steam', disabled: st.running, run: () => (h.addToSteam(), 'keep') })
+      }
+      return { id, title: 'Steam', items }
+    }
+    case 'diagnostics':
+      return {
+        id,
+        title: 'Diagnostics',
+        items: [
+          { key: 'msg', label: 'A zip with logs, settings and a summary of this PC. Logins (secrets.json), saves and games are never included.', info: true },
+          { key: 'export', label: 'Export report…', run: () => h.exportReport() },
+          { key: 'logs', label: 'Open logs folder', run: () => h.command('open-folder', 'logs') }
+        ]
+      }
+    case 'licenses':
+      return {
+        id,
+        title: 'Licenses',
+        items: [
+          { key: 'msg', label: 'Starstation runs these emulators. Each one belongs to its authors under its own license.', info: true },
+          ...(x.licenses ?? []).map((l) => ({
+            key: `l-${l.id}`,
+            label: l.name,
+            value: l.license,
+            info: !l.file,
+            run: l.file ? () => h.command('open-path', l.file!) : undefined
+          }))
+        ]
+      }
     case 'library':
       return {
         id,
@@ -240,6 +449,9 @@ export function buildPanel(id: string, arg: string | undefined, state: AppState,
           { key: 'add', label: 'Add games…', run: () => h.addGamesDialog() },
           { key: 'drop', label: 'Tip: you can also drag game files into this window.', info: true },
           { key: 'rescan', label: 'Rescan games', run: () => h.command('rescan') },
+          { key: 'refresh', label: 'Refresh titles and artwork', run: () => h.clearCache() },
+          { key: 'ss', label: 'ScreenScraper (extra artwork): add your login to secrets.json', info: true },
+          { key: 'secrets', label: 'Open secrets.json', run: () => h.command('open-secrets') },
           { key: 'games', label: 'Open games folder', run: () => h.command('open-folder', 'games') }
         ]
       }
@@ -250,7 +462,9 @@ export function buildPanel(id: string, arg: string | undefined, state: AppState,
         items: [
           { key: 'v', label: `Version ${state.info.version}`, info: true },
           { key: 'f', label: `Folder: ${state.info.filesDir}`, info: true },
-          { key: 'logs', label: 'Open logs folder', run: () => h.command('open-folder', 'logs') }
+          { key: 'logs', label: 'Open logs folder', run: () => h.command('open-folder', 'logs') },
+          { key: 'lic', label: 'Licenses of the emulators', run: () => (h.openPanel('licenses'), 'keep') },
+          { key: 'own', label: 'Starstation uses only its own artwork and sounds.', info: true }
         ]
       }
     case 'game': {
@@ -268,6 +482,7 @@ export function buildPanel(id: string, arg: string | undefined, state: AppState,
         { key: 'fav', label: st?.favorite ? 'Remove from Favorites' : 'Add to Favorites', run: () => (h.toggleFavorite(g), 'keep') },
         { key: 'collect', label: 'Add to collection…', run: () => (h.openPanel('add-to-collection', g.id), 'keep') }
       )
+      if (c?.netplay) items.splice(d?.resume ? 2 : 1, 0, { key: 'online', label: 'Play online', run: () => (h.openPanel('netplay', g.id), 'keep') })
       if (d?.available.graphics)
         items.push({
           key: 'graphics',

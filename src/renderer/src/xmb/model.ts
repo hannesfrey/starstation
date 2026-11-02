@@ -37,6 +37,7 @@ export interface ModelHandlers {
   openSearch: () => void
   newCollection: () => void
   openPhoto: (index: number) => void
+  newConsole: () => void
 }
 
 export function formatPlayTime(sec: number): string {
@@ -73,6 +74,7 @@ export function buildColumns(state: AppState, h: ModelHandlers, shots: Screensho
     icon: 'settings',
     items: [
       { key: 'general', label: 'General', sub: 'Fullscreen, sounds, empty consoles, button icons', icon: 'settings', kind: 'action', run: () => h.openPanel('general') },
+      { key: 'graphics', label: 'Graphics', sub: 'Default graphics level and CRT filter', icon: 'display', kind: 'action', run: () => h.openPanel('graphics') },
       {
         key: 'consoles',
         label: 'Consoles',
@@ -80,15 +82,26 @@ export function buildColumns(state: AppState, h: ModelHandlers, shots: Screensho
         icon: 'controller',
         kind: 'folder',
         children: () =>
-          consoles.map((c) => ({
-            key: `console-${c.id}`,
-            label: c.name,
-            sub: c.statusText,
-            icon: c.icon,
-            kind: 'action' as const,
-            run: () => h.openPanel('console', c.id)
-          }))
+          [
+            ...consoles.map((c) => ({
+              key: `console-${c.id}`,
+              label: c.name,
+              sub: c.statusText,
+              icon: c.icon,
+              kind: 'action' as const,
+              run: () => h.openPanel('console', c.id)
+            })),
+            {
+              key: 'console-new',
+              label: 'Add a console',
+              sub: 'Advanced: any other emulator, without a preset',
+              icon: 'controller',
+              kind: 'action' as const,
+              run: () => h.newConsole()
+            }
+          ]
       },
+      { key: 'controllers', label: 'Controllers', sub: 'One mapping for every emulator · test buttons', icon: 'controller', kind: 'action', run: () => h.openPanel('controllers') },
       {
         key: 'emulators',
         label: 'Emulators',
@@ -113,6 +126,11 @@ export function buildColumns(state: AppState, h: ModelHandlers, shots: Screensho
         kind: 'action',
         run: () => h.openPanel('library')
       },
+      { key: 'health', label: 'Health check', sub: 'Emulators, BIOS, broken games, disk space', icon: 'health', kind: 'action', run: () => h.openPanel('health') },
+      { key: 'ra', label: 'RetroAchievements', sub: 'Log in once for all emulators', icon: 'trophy', kind: 'action', run: () => h.openPanel('retroachievements') },
+      { key: 'netplay', label: 'Netplay', sub: `Play online as "${settings.netplayNickname}"`, icon: 'network', kind: 'action', run: () => h.openPanel('netplay-settings') },
+      { key: 'steam', label: 'Steam', sub: 'Add Starstation to Steam for Big Picture mode', icon: 'steam', kind: 'action', run: () => h.openPanel('steam') },
+      { key: 'diagnostics', label: 'Diagnostics', sub: 'Export a report with logs and settings', icon: 'info', kind: 'action', run: () => h.openPanel('diagnostics') },
       {
         key: 'display',
         label: 'Fullscreen',

@@ -3,7 +3,21 @@
   "name": "Xenia Canary",
   "folder": "xenia",
   "exe": "xenia_canary.exe",
-  "download": { "type": "github", "repo": "xenia-canary/xenia-canary-releases", "asset": "^xenia_canary_windows.*\\.zip$" },
-  "portable": [{ "type": "touch", "path": "{emu}/portable.txt" }],
-  "importNames": ["xenia_canary", "xenia", "Xenia"]
+  "download": {
+    "type": "github",
+    "repo": "xenia-canary/xenia-canary-releases",
+    "asset": "^xenia_canary_windows.*\\.zip$"
+  },
+  "portable": [
+    {
+      "type": "touch",
+      "path": "{emu}/portable.txt"
+    }
+  ],
+  "importNames": [
+    "xenia_canary",
+    "xenia",
+    "Xenia"
+  ],
+  "license": "BSD-3-Clause"
 }

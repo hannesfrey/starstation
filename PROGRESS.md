@@ -4,8 +4,8 @@ Read SPEC.md first. This file tracks where the build stands and every small deci
 
 ## Current state
 
-- **Phase:** Building. Steps 1–9 done. **Playable milestone reached 2026-11-02:** Hannes's setup is imported and Midnight Club 3 boots from Starstation (PS2).
-- **Next step:** Step 10 — Settings complete
+- **Phase:** Building. Steps 1–10 done. **Playable milestone reached 2026-11-02:** Hannes's setup is imported and Midnight Club 3 boots from Starstation (PS2).
+- **Next step:** Step 11 — Setup wizard & packages
 
 ## How to work on it
 
@@ -163,6 +163,23 @@ Flags checked on 2026-11-02 against current sources: Azahar `-f <file>` (citra_q
 - **Background music**: original, generated live with Web Audio (slow four-chord pad + soft bell notes, low-pass filtered); off by default (Settings → General); stops while a game runs or the screensaver is on.
 - **Controller battery** (top right): XInput battery of pad 0 read about once a minute through a hidden PowerShell call (`XInputGetBatteryInformation`, `windowsHide`), only while the menu is visible and no game runs. Hannes's DS3 through SCP reports **wired** → a plug icon. Low battery (≤ 30 %) shows in orange.
 - Tests: unit `parseBattery`; e2e `media.spec.ts` (fake libretro server: icon + background in the menu, miss remembered, Refresh artwork; Photo column order, titles, viewer ← →, close).
+
+### Step 10 — Settings complete (done 2026-11-02, tag `step-10-settings`)
+
+Settings column now: General · Graphics · Consoles (+ Add a console) · Controllers · Emulators · Import from EmuDeck · Library · Health check · RetroAchievements · Netplay · Steam · Diagnostics · Fullscreen · About · Quit. (Packages come with step 11.)
+
+- **Health check**: per console with games — emulator missing (Install / download page), BIOS/firmware/core missing (the preset's fix or Open BIOS folder), update available (Update); broken games (missing file, 0-byte file, .cue/.m3u pointing at missing tracks → Open game folder); low disk space (< 10 GB warning, < 2 GB error); Starstation inside OneDrive. Hannes's real setup: no issues.
+- **Diagnostics → Export report**: zip (Windows tar) with logs, settings, controllers, import history and a summary (versions, consoles, emulators, game counts, health, OS/CPU/RAM). secrets.json, saves, BIOS and games are never included. Default location `config\diagnostics\`.
+- **RetroAchievements**: login uses username + password from `secrets.json` (Hannes's choice), calls `dorequest.php?r=login2`, keeps only the **token** in secrets.json. Before each launch the preset's `achievements.on` steps write it: PCSX2 `[Achievements] Enabled/Username` + token in `inis\secrets.ini` (PCSX2 moved tokens there); Dolphin `RetroAchievements.ini` `Enabled/Username/ApiToken`; RetroArch a separate `achievements.cfg` (second `--appendconfig` file, empty when logged out, so RetroArch's own login stays untouched). **DuckStation encrypts its token per PC** (`DecryptLoginToken`), so Starstation only switches achievements on there — log in once inside DuckStation. With the web API key in secrets.json, unlocks of the session are shown as notifications afterwards (`API_GetUserRecentAchievements`). Not tested against the real service yet (no credentials).
+- **Netplay** (NES/SNES/N64, Triangle → Play online): Host = `--host --nick <name>` through the relay chosen in Settings → Netplay (`netplay_use_mitm_server`, `netplay_mitm_server` = madrid/nyc/saopaulo/singapore — names from RetroArch's netplay_frontend.c; default madrid). Join = rooms from the public lobby (`http://lobby.libretro.com/list/`; https failed on Hannes's network) filtered by core (`netplayCore` in the preset: Mesen, Snes9x, Mupen64Plus-Next) and game (ROM CRC32 or file name first), then `--connect <relay> --port <p> --nick <name> --mitm-session <id>` (flags from retroarch.c).
+- **Steam → Add Starstation to Steam**: writes a non-Steam shortcut (own binary VDF reader/writer) into every `userdata\<id>\config\shortcuts.vdf`, keeps other shortcuts, updates instead of duplicating, backs the file up (`.starstation-backup`), refuses while Steam runs. Launch option `--fullscreen` (new command-line switch). Steam path read from the registry (read only). **Not run on Hannes's real Steam yet** — it writes into the Steam folder, so ask first.
+- **Consoles → Add a console** (advanced form from spec 6): name, short name, emulator .exe, launch command (`{launch}` = game file), file types → `config\consoles\x-<name>.json`, games in `games\x-<name>\`. Edit and Remove (only the entry; games/saves stay).
+- **Controllers**: player 1 pad, how the mapping works, Test buttons screen (live buttons + sticks), button icons, screenshot button, wheels ignored, 3DS note. Per-console overrides: not built (one mapping for all was enough so far).
+- **Emulators**: each emulator opens its own panel: version, consoles, Install / Update / Repair-reinstall (keeps settings and saves), folder, license.
+- **Library**: Add games, Rescan, Refresh titles and artwork (clears the cache), ScreenScraper login via secrets.json.
+- **About**: + Licenses of the emulators (from the preset + the emulator's LICENSE file). Check for updates comes with step 12.
+- Fixes: the menu could start on Settings when the first library update arrived between two renders (auto-column now stops only after a console with games was shown); keyboards opened from a form sit above the panel (`overPanel`).
+- Tests: `tests/e2e/settings.spec.ts` (health incl. UI, report contents, RA login/token/logout against a fake server, netplay rooms + host/join args against a fake lobby, Steam add/refuse/no duplicate on a fake Steam folder, custom console launch/edit/remove, form field keyboard, all new settings screens, pad test).
 
 ### Small technical choices (steps 2–3)
 

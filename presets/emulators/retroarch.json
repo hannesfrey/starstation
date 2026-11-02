@@ -3,7 +3,16 @@
   "name": "RetroArch",
   "folder": "retroarch",
   "exe": "retroarch.exe",
-  "download": { "type": "url", "url": "https://buildbot.libretro.com/stable/1.22.2/windows/x86_64/RetroArch.7z", "page": "https://www.retroarch.com/?page=platforms" },
+  "download": {
+    "type": "url",
+    "url": "https://buildbot.libretro.com/stable/1.22.2/windows/x86_64/RetroArch.7z",
+    "page": "https://www.retroarch.com/?page=platforms"
+  },
   "portable": [],
-  "importNames": ["RetroArch-Win64", "RetroArch", "retroarch"]
+  "importNames": [
+    "RetroArch-Win64",
+    "RetroArch",
+    "retroarch"
+  ],
+  "license": "GPL-3.0"
 }

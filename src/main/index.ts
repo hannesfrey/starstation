@@ -5,6 +5,7 @@ import { spawn } from 'node:child_process'
 import { pathToFileURL } from 'node:url'
 import { filesDir, dir, ensureDataDirs, redirectElectronPaths } from './paths'
 import { logger } from './log'
+import { writeJson } from './store'
 import { getSettings, setSetting } from './settings'
 import { allConsoles, emulatorDir, emulatorExe, getConsole, getEmulator, loadPresets } from './presets'
 import { applyConsoleConfig } from './emuconfig'
@@ -23,10 +24,17 @@ import { fetchArtwork, queueArtwork } from './artwork'
 import { listScreenshots } from './screenshots'
 import { readBattery } from './battery'
 import { reattachArtwork } from './library/library'
+import { healthCheck } from './health'
+import { exportReport } from './diagnostics'
+import { lastUnlockCheck, raLogin, raLogout, raStatus, recentUnlocks } from './retroach'
+import { listRooms, netplayArgs, netplayVars } from './netplay'
+import { addToSteam, steamStatus } from './steam'
+import { customConsoleForm, removeCustomConsole, saveCustomConsole } from './customconsole'
+import { allEmulators } from './presets'
 import { consoleInfos } from './consoles'
 import { launch, setLauncherWindow, runningGame, stopRunning, onBeforeLaunch, onAfterExit } from './launcher'
 import { attachWindow, notify, send } from './notify'
-import type { AddGamesResult, AppState, EmulatorInfo, GameDetails, Settings } from '../shared/types'
+import type { AddGamesResult, AppState, CustomConsoleForm, EmulatorInfo, GameDetails, NetplayRoom, Settings } from '../shared/types'
 
 // ---- before ready: keep everything inside Files\ ----
 redirectElectronPaths()
@@ -56,7 +64,7 @@ function createWindow(): BrowserWindow {
     backgroundColor: '#05070d',
     title: 'Starstation',
     show: false,
-    fullscreen: s.startFullscreen && !HEADLESS,
+    fullscreen: (s.startFullscreen || process.argv.includes('--fullscreen')) && !HEADLESS,
     autoHideMenuBar: true,
     skipTaskbar: HEADLESS,
     paintWhenInitiallyHidden: true,
@@ -130,6 +138,12 @@ async function runCommand(command: string, arg?: string): Promise<void> {
       }
       return
     }
+    case 'show-file': {
+      // only files inside Files (e.g. the diagnostics report)
+      const p = arg ? path.resolve(arg) : ''
+      if (p && fs.existsSync(p)) shell.showItemInFolder(p)
+      return
+    }
     case 'open-path': {
       // only folders inside Files\ (e.g. one save backup)
       const p = arg ? path.resolve(arg) : ''
@@ -157,6 +171,12 @@ async function runCommand(command: string, arg?: string): Promise<void> {
     case 'install-ps3-firmware':
       await installPs3Firmware()
       return
+    case 'open-secrets': {
+      const f = dir('config', 'secrets.json')
+      if (!fs.existsSync(f)) writeJson(f, { screenscraper: { username: '', password: '', devid: '', devpassword: '' }, retroachievements: { username: '', password: '', webApiKey: '' } })
+      await shell.openPath(f)
+      return
+    }
     case 'open-url':
       // only official pages from presets are passed here
       if (arg && /^https:\/\//.test(arg)) await shell.openExternal(arg)
@@ -253,7 +273,73 @@ function registerIpc(): void {
     send('consoles', consoleInfos())
     return l
   })
-  ipcMain.handle('launch', (_e, id: string, mode?: 'fresh' | 'resume') => launch(id, mode === 'resume' ? 'resume' : 'fresh'))
+  ipcMain.handle('launch', (_e, id: string, mode?: 'fresh' | 'resume', np?: { host: true } | { join: NetplayRoom }) => {
+    const g = getGame(id)
+    const online = np && g && getConsole(g.console)?.netplay ? np : undefined
+    return launch(id, mode === 'resume' ? 'resume' : 'fresh', [], online ? { args: netplayArgs(online), vars: netplayVars('host' in online) } : {})
+  })
+  ipcMain.handle('health', () => healthCheck())
+  ipcMain.handle('export-report', async () => {
+    const name = `starstation-report-${new Date().toISOString().slice(0, 10)}.zip`
+    let to = dir('config', 'diagnostics', name)
+    if (!HEADLESS) {
+      const pick = await dialog.showSaveDialog(win!, { title: 'Save diagnostics report', defaultPath: to, filters: [{ name: 'Zip', extensions: ['zip'] }] })
+      if (pick.canceled || !pick.filePath) return null
+      to = pick.filePath
+    }
+    await exportReport(to)
+    notify({ kind: 'success', title: 'Report saved', detail: to, action: { label: 'Show file', command: 'show-file', arg: to } })
+    return to
+  })
+  ipcMain.handle('ra-status', () => raStatus())
+  ipcMain.handle('ra-login', async () => {
+    const r = await raLogin()
+    notify(r.ok ? { kind: 'achievement', title: 'Logged in to RetroAchievements', detail: raStatus().username } : { kind: 'error', title: 'RetroAchievements login failed', detail: r.error })
+    return r
+  })
+  ipcMain.handle('ra-logout', () => raLogout())
+  ipcMain.handle('netplay-rooms', (_e, id: string) => {
+    const g = getGame(id)
+    return g ? listRooms(g) : []
+  })
+  ipcMain.handle('steam-status', () => steamStatus())
+  ipcMain.handle('steam-add', () => {
+    const r = addToSteam()
+    notify(r.ok ? { kind: 'success', title: 'Added to Steam', detail: 'Start Steam: Starstation is in your library (Non-Steam).' } : { kind: 'error', title: 'Not added to Steam', detail: r.error })
+    return r
+  })
+  ipcMain.handle('custom-console', (_e, id: string) => customConsoleForm(id))
+  ipcMain.handle('custom-console-save', (_e, form: CustomConsoleForm) => {
+    const r = saveCustomConsole(form)
+    if (r.ok) {
+      send('library', rescan())
+      send('consoles', consoleInfos())
+    }
+    return r
+  })
+  ipcMain.handle('custom-console-remove', (_e, id: string) => {
+    removeCustomConsole(id)
+    send('library', rescan())
+    send('consoles', consoleInfos())
+  })
+  ipcMain.handle('pick-exe', async () => {
+    const pick = await dialog.showOpenDialog(win!, { title: 'Choose the emulator program', properties: ['openFile'], filters: [{ name: 'Programs', extensions: ['exe'] }] })
+    return pick.canceled ? null : (pick.filePaths[0] ?? null)
+  })
+  ipcMain.handle('library-clear-cache', () => {
+    fs.rmSync(dir('config', 'library', 'library.json'), { force: true })
+    loadLibrary()
+    scanAndArt()
+  })
+  ipcMain.handle('licenses', () =>
+    allEmulators()
+      .filter((e) => !path.isAbsolute(e.folder))
+      .map((e) => {
+        const d = emulatorDir(e)
+        const f = ['LICENSE.txt', 'LICENSE', 'COPYING', 'COPYING.txt', 'LICENSE.md'].map((n) => path.join(d, n)).find((p) => fs.existsSync(p))
+        return { id: e.id, name: e.name, license: e.license ?? 'see the emulator', file: f }
+      })
+  )
   ipcMain.handle('game-details', (_e, id: string): GameDetails | null => {
     const g = getGame(id)
     if (!g) return null
@@ -458,6 +544,15 @@ function registerHooks(): void {
     if (!g) return
     const b = await backupGame(g, 'launch')
     if (b) await pruneBackups(g)
+  })
+  onAfterExit(async (id, seconds) => {
+    const g = getGame(id)
+    if (!g || !getConsole(g.console)?.achievements || !raStatus().hasApiKey || seconds < 30) return
+    const since = Math.max(lastUnlockCheck(), Date.now() - seconds * 1000)
+    const list = await recentUnlocks((Date.now() - since) / 60000 + 1)
+    lastUnlockCheck(Date.now())
+    for (const a of list.slice(0, 3)) notify({ kind: 'achievement', title: `Achievement unlocked: ${a.title}`, detail: a.description })
+    if (list.length > 3) notify({ kind: 'achievement', title: `${list.length - 3} more achievements unlocked`, detail: g.title })
   })
   onAfterExit(() => {
     // new screenshots from the session show up in the Photo column

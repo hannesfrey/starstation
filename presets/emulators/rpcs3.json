@@ -3,7 +3,15 @@
   "name": "RPCS3",
   "folder": "rpcs3",
   "exe": "rpcs3.exe",
-  "download": { "type": "github", "repo": "RPCS3/rpcs3-binaries-win", "asset": "_win64_msvc\\.7z$" },
+  "download": {
+    "type": "github",
+    "repo": "RPCS3/rpcs3-binaries-win",
+    "asset": "_win64_msvc\\.7z$"
+  },
   "portable": [],
-  "importNames": ["RPCS3", "rpcs3"]
+  "importNames": [
+    "RPCS3",
+    "rpcs3"
+  ],
+  "license": "GPL-2.0"
 }
