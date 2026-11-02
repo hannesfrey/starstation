@@ -85,7 +85,7 @@ export interface ConsolePreset {
     select?: BiosSelect | BiosSelect[]
   }
   gameId?: {
-    method: 'ps1-serial' | 'ps2-serial' | 'ps3-sfo' | 'gc-header' | 'filename'
+    method: 'ps1-serial' | 'ps2-serial' | 'ps3-sfo' | 'gc-header' | '3ds-header' | 'n64-header' | 'filename'
     titleDb?: { type: 'yaml-serial'; file: string }
   }
   saves?: { dir: string; note?: string }
@@ -109,6 +109,8 @@ export interface ConsolePreset {
   graphics?: Record<'original' | 'enhanced' | 'max', GameOption>
   /** CRT filter (RetroArch). */
   crt?: { on: GameOption; off: GameOption }
+  /** Where mods and texture packs go. */
+  mods?: { targets: ModTarget[]; gamebanana?: boolean }
   /** Toggles such as widescreen patches. */
   patches?: { id: string; label: string; default?: boolean; on: GameOption; off: GameOption }[]
   quickResume: boolean
@@ -123,6 +125,25 @@ export interface GameOption {
   vars?: Record<string, string>
   steps?: ConfigStep[]
   args?: string[]
+}
+
+/** A place an emulator loads mods from (texture packs, patches, romfs mods …). */
+export interface ModTarget {
+  id: string
+  label: string
+  /** Folder for this game, e.g. "{emu}/textures/{serial}". */
+  dir: string
+  /** Files that belong here (regex on the path inside the mod) — used to guess where a mod goes. */
+  match?: string
+  /** Folder name the mod's content starts at, e.g. "^replacements$" or "^(romfs|exefs)$". */
+  anchor?: string
+  /** Subfolder to use when the mod has no anchor folder. */
+  into?: string
+  /** Put every file straight into dir (patch files). */
+  flatten?: boolean
+  /** Emulator settings while at least one mod of this kind is on / when none is. */
+  enabled?: GameOption
+  disabled?: GameOption
 }
 
 export interface EmulatorPreset {
@@ -210,6 +231,7 @@ export function vars(c: ConsolePreset, extra: Record<string, string> = {}): Reco
     raint: 'false',
     crt: 'false',
     n64res: '640x480',
+    n64hires: 'False',
     ...padVars(),
     ...extra
   }

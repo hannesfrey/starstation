@@ -4,8 +4,8 @@ Read SPEC.md first. This file tracks where the build stands and every small deci
 
 ## Current state
 
-- **Phase:** Building. Steps 1–7 done. **Playable milestone reached 2026-11-02:** Hannes's setup is imported and Midnight Club 3 boots from Starstation (PS2).
-- **Next step:** Step 8 — Mods
+- **Phase:** Building. Steps 1–8 done. **Playable milestone reached 2026-11-02:** Hannes's setup is imported and Midnight Club 3 boots from Starstation (PS2).
+- **Next step:** Step 9 — Artwork & atmosphere
 
 ## How to work on it
 
@@ -132,6 +132,24 @@ Flags checked on 2026-11-02 against current sources: Azahar `-f <file>` (citra_q
 - **Shader hint**: first start of a PS3 / Xbox 360 game shows "The first minutes may stutter…" for 3.5 s before launching.
 - Fixes found while testing: placeholders only normalize real absolute paths (bindings like `SDL-0/Touchpad` keep their slash); YAML keys keep their indentation (RPCS3 `config.yml`); INI keys can have several values (bind lists); `launch.insertAt` says where resume/option arguments go; the menu no longer misses a library update that arrives during startup (could leave it on Settings).
 - Tests: `tests/unit/ini.test.ts`; e2e "per-game graphics, CRT filter and patches; controller mapping follows the connected pad" (XInput → SDL switch, touchpad/share screenshot lines, shader hint notice).
+
+### Step 8 — Mods (done 2026-11-02, tag `step-08-mods`)
+
+- **Mod manager** (Triangle → Mods): list with On/Off, per mod: description, where it goes, number of files, switch on/off, delete; Add mod from file… / Add mod folder… / Browse GameBanana… / Open mods folder. Dragging files onto the window while the mod manager is open adds them as mods (otherwise as games).
+- **Storage:** originals in `mods\<console>\<game>\<mod>\` + `mods.json` (mods, on/off, which mod owns which placed file). Switching on places **hard links** (same drive: no extra space; removing them never touches the original), falling back to copies; switching off removes exactly those files and empty folders it created. Files Starstation didn't place are **never overwritten or removed** (reported as "left alone").
+- **Where mods go** (`mods.targets` in the preset): folder per game + rules (`match` regex, `anchor` folder such as `replacements` or `romfs|exefs`, `into`, `flatten`) + emulator settings while a mod of that kind is on. If the guess isn't clear (e.g. a `.pnach` could be a patch or a cheat) Starstation asks "Where does this mod go?". Archives with one wrapping folder are looked into.
+  - PS2 (PCSX2): texture packs `textures\<serial>\replacements` + `[EmuCore/GS] LoadTextureReplacements`; patches `patches\*.pnach`; cheats `cheats\*.pnach` + `[EmuCore] EnableCheats`.
+  - PS1 (DuckStation): `textures\<serial>\replacements` + `[TextureReplacements] EnableTextureReplacements`.
+  - GameCube/Wii (Dolphin): `User\Load\Textures\<game ID>` + `GFX.ini HiresTextures`.
+  - 3DS (Azahar): game mods `user\load\mods\<title ID>` (romfs/exefs/code.ips) and texture packs `user\load\textures\<title ID>` + `[Utility] custom_textures`. Title ID now read from the .3ds/.cci (NCSD) header.
+  - N64 (Mupen64Plus-Next): `<bios>\Mupen64plus\hires_texture\<ROM name>` (path from GLideN64's Config.cpp) + core option `mupen64plus-txHiresEnable`. ROM name/code now read from the ROM header (.z64/.v64/.n64 byte orders). Library cache version bumped so existing games get the new IDs.
+  - PS3, Xbox, Xbox 360: no mod support yet (the menu says so).
+- **Conflicts:** switching on a mod whose files another active mod already placed → "Two mods change the same files. Which one should win?" (use the new one / keep the old one). When the winner is switched off, the other mod's files come back.
+- **Safety:** a save backup (`before-mod`) is made the first time a mod is switched on.
+- **GameBanana** (public API v11, checked 2026-11-02): game search by title (`Util/Game/NameMatch`; picked automatically when there's one match, otherwise a list; remembered per game), mods sorted by downloads (`Mod/Index`), details with picture/description/files (`Mod/<id>`). Install = download → **MD5 check** → unpack → same placement rules. Only .zip/.7z/.rar files that passed GameBanana's virus scan are offered; Starstation never runs anything from a mod. Preview images are allowed from `images.gamebanana.com` (CSP).
+- Archives: zip and rar via Windows `tar` (bsdtar), 7z via the bundled `7zr.exe` (Windows tar has no LZMA).
+- Tests: `tests/e2e/mods.spec.ts` — zip pack with wrapper folder, placement by anchor, links on/off, before-mod backup, emulator setting at launch, conflict both ways + file coming back, untouched user file, ask for `.pnach`, delete, and GameBanana against a local fake server (search, list, details, MD5-checked install, `.exe` refused).
+- Packages (export with on/off state) come with step 11.
 
 ### Small technical choices (steps 2–3)
 

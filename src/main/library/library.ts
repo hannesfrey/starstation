@@ -3,7 +3,7 @@ import path from 'node:path'
 import { dir } from '../paths'
 import { readJson, writeJson } from '../store'
 import { allConsoles, fill, vars, type ConsolePreset } from '../presets'
-import { cleanTitle, discSerial, nintendoDiscId, ps3FromFolder, ps3FromIso } from '../formats/gameid'
+import { cleanTitle, discSerial, n3dsTitleId, n64Header, nintendoDiscId, ps3FromFolder, ps3FromIso } from '../formats/gameid'
 import { parseSfo } from '../formats/sfo'
 import { loadSerialDb, stripDisc } from './titledb'
 import { folderSize, scanConsole, type ScanEntry } from './scan'
@@ -11,7 +11,7 @@ import { logger } from '../log'
 import type { Game, GameStats, LibraryView } from '../../shared/types'
 
 const log = logger('library')
-const CACHE_VERSION = 1
+const CACHE_VERSION = 2 // 2: 3DS title IDs, N64 ROM names
 
 interface CacheFile {
   version: number
@@ -164,6 +164,15 @@ function identify(c: ConsolePreset, e: ScanEntry, addedAt?: number): (Game & { m
       g.serial = h.id
       // File names are usually better titles; use the disc header only when the name is just an ID.
       if (h.title && /^[A-Z0-9]{4,6}$/i.test(g.title)) g.title = h.title
+    }
+  } else if (method === '3ds-header') {
+    const id = n3dsTitleId(e.path)
+    if (id) g.serial = id
+  } else if (method === 'n64-header') {
+    const h = n64Header(e.path)
+    if (h) {
+      g.romName = h.name
+      if (h.code.trim()) g.serial = h.code
     }
   }
   attachLocalArtwork(g)

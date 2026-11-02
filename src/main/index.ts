@@ -17,6 +17,8 @@ import { createCollection, deleteCollection, listCollections, removeGameFromColl
 import { addGames } from './addgames'
 import { availableOptions, gameOptions, setGameOption } from './gameoptions'
 import { reportPads } from './controllers'
+import { addMod, deleteMod, finishAdd, gamebananaGame, listMods, modSupport, setGamebananaGame, setModEnabled } from './mods'
+import { gbModDetails, installGbMod, listGbMods, searchGames } from './gamebanana'
 import { consoleInfos } from './consoles'
 import { launch, setLauncherWindow, runningGame, stopRunning, onBeforeLaunch, onAfterExit } from './launcher'
 import { attachWindow, notify, send } from './notify'
@@ -252,7 +254,8 @@ function registerIpc(): void {
   ipcMain.handle('game-details', (_e, id: string): GameDetails | null => {
     const g = getGame(id)
     if (!g) return null
-    return { options: gameOptions(g), available: availableOptions(g), resume: resumeInfo(g), backups: listBackups(g), ownSaves: ownSaves(g).length, canBackup: !!getConsole(g.console)?.backup?.length, previousResume: previousResume(g)?.savedAt ?? null }
+    const ml = listMods(g)
+    return { mods: { total: ml.length, on: ml.filter((m) => m.enabled).length, supported: modSupport(g).targets.length > 0 }, options: gameOptions(g), available: availableOptions(g), resume: resumeInfo(g), backups: listBackups(g), ownSaves: ownSaves(g).length, canBackup: !!getConsole(g.console)?.backup?.length, previousResume: previousResume(g)?.savedAt ?? null }
   })
   ipcMain.handle('backup-now', async (_e, id: string) => {
     const g = getGame(id)
@@ -292,6 +295,47 @@ function registerIpc(): void {
     return g ? setGameOption(g, key, value, patchId) : null
   })
   ipcMain.handle('report-pads', (_e, ids: string[]) => reportPads(Array.isArray(ids) ? ids.map(String) : []))
+  // ---- mods ----
+  const withGame = <T>(id: string, fn: (g: NonNullable<ReturnType<typeof getGame>>) => T): T | { ok: false; error: string } => {
+    const g = getGame(id)
+    return g ? fn(g) : { ok: false, error: 'Game not found' }
+  }
+  const notRunning = (id: string) => (runningGame()?.gameId === id ? { ok: false as const, error: 'Close the game first.' } : null)
+  ipcMain.handle('mods', (_e, id: string) => {
+    const g = getGame(id)
+    return g ? { mods: listMods(g), ...modSupport(g) } : null
+  })
+  ipcMain.handle('mod-add', (_e, id: string, p: string) => withGame(id, (g) => addMod(g, p).then(modAdded(g))))
+  ipcMain.handle('mod-add-dialog', async (_e, id: string, folder: boolean) => {
+    const g = getGame(id)
+    if (!g) return null
+    const pick = await dialog.showOpenDialog(win!, {
+      title: folder ? 'Choose a mod folder' : 'Choose a mod file',
+      properties: [folder ? 'openDirectory' : 'openFile'],
+      ...(folder ? {} : { filters: [{ name: 'Mods', extensions: ['zip', '7z', 'rar', 'pnach', 'png', 'dds', 'ips'] }, { name: 'All files', extensions: ['*'] }] })
+    })
+    if (pick.canceled || !pick.filePaths[0]) return null
+    return addMod(g, pick.filePaths[0]).then(modAdded(g))
+  })
+  ipcMain.handle('mod-place', (_e, id: string, pending: string, target: string) => withGame(id, (g) => finishAdd(g, pending, target).then(modAdded(g))))
+  ipcMain.handle('mod-toggle', (_e, id: string, modId: string, on: boolean, winner?: 'this' | 'other') =>
+    notRunning(id) ?? withGame(id, (g) => setModEnabled(g, modId, !!on, winner === 'this' || winner === 'other' ? winner : undefined))
+  )
+  ipcMain.handle('mod-delete', (_e, id: string, modId: string) => notRunning(id) ?? withGame(id, (g) => deleteMod(g, modId)))
+  ipcMain.handle('gb-search', async (_e, id: string, name?: string) => {
+    const g = getGame(id)
+    if (!g) return { games: [] }
+    return { games: await searchGames(name ?? g.title), chosen: gamebananaGame(g) }
+  })
+  ipcMain.handle('gb-choose', (_e, id: string, gbId: number) => {
+    const g = getGame(id)
+    if (g) setGamebananaGame(g, Number(gbId))
+  })
+  ipcMain.handle('gb-mods', (_e, gbId: number, page: number) => listGbMods(Number(gbId), Number(page) || 1))
+  ipcMain.handle('gb-mod', (_e, modId: number) => gbModDetails(Number(modId)))
+  ipcMain.handle('gb-install', (_e, id: string, modId: number, fileId: number) =>
+    withGame(id, (g) => installGbMod(g, Number(modId), Number(fileId)).then(modAdded(g)))
+  )
   ipcMain.handle('delete-game', (_e, id: string, withSaves: boolean) => deleteGame(id, !!withSaves))
   ipcMain.handle('collection-create', (_e, name: string, first?: string) => pushCollections(createCollection(name, first)))
   ipcMain.handle('collection-rename', (_e, id: string, name: string) => pushCollections(renameCollection(id, name)))
@@ -312,6 +356,15 @@ function registerIpc(): void {
     return win.isFullScreen()
   })
   ipcMain.handle('quit', () => app.quit())
+}
+
+/** Notification after a mod was added (or why not). */
+function modAdded(g: { title: string }) {
+  return <T extends { ok: boolean; mod?: { name: string }; error?: string; ask?: unknown }>(r: T): T => {
+    if (r.ok && r.mod) notify({ kind: 'mod', title: 'Mod installed', detail: `${r.mod.name} · ${g.title}` })
+    else if (!r.ok && r.error && r.error !== 'Cancelled.') notify({ kind: 'error', title: 'Mod not added', detail: r.error })
+    return r
+  }
 }
 
 function pushCollections<T>(list: T): T {

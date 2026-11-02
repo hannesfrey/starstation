@@ -39,7 +39,7 @@
     ]
   },
   "gameId": {
-    "method": "filename"
+    "method": "n64-header"
   },
   "saves": {
     "dir": "{saves}"
@@ -86,7 +86,8 @@
       "type": "write",
       "file": "{config}/retroarch/{console}-core-options.cfg",
       "lines": [
-        "mupen64plus-43screensize = \"{n64res}\""
+        "mupen64plus-43screensize = \"{n64res}\"",
+        "mupen64plus-txHiresEnable = \"{n64hires}\""
       ]
     }
   ],
@@ -136,5 +137,25 @@
         "crt": "false"
       }
     }
+  },
+  "mods": {
+    "targets": [
+      {
+        "id": "textures",
+        "label": "Texture pack",
+        "dir": "{bios}/Mupen64plus/hires_texture/{romname}",
+        "match": "\\.(png|dds|jpg|jpeg|webp)$",
+        "enabled": {
+          "vars": {
+            "n64hires": "True"
+          }
+        },
+        "disabled": {
+          "vars": {
+            "n64hires": "False"
+          }
+        }
+      }
+    ]
   }
 }

@@ -243,5 +243,43 @@
         ]
       }
     }
-  ]
+  ],
+  "mods": {
+    "targets": [
+      {
+        "id": "textures",
+        "label": "Texture pack",
+        "dir": "{emu}/textures/{serial}",
+        "match": "\\.(png|dds|jpg|jpeg|webp)$",
+        "anchor": "^replacements$",
+        "into": "replacements",
+        "enabled": {
+          "steps": [
+            {
+              "type": "ini",
+              "file": "{emu}/settings.ini",
+              "set": {
+                "TextureReplacements": {
+                  "EnableTextureReplacements": "true"
+                }
+              }
+            }
+          ]
+        },
+        "disabled": {
+          "steps": [
+            {
+              "type": "ini",
+              "file": "{emu}/settings.ini",
+              "set": {
+                "TextureReplacements": {
+                  "EnableTextureReplacements": "false"
+                }
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
 }

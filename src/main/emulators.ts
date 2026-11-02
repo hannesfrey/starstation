@@ -105,11 +105,12 @@ function run(exe: string, args: string[], cwd?: string): Promise<number> {
 }
 
 /** Extract an archive into `to`; if everything sits in one top folder, that folder is flattened. */
-export async function extract(archive: string, to: string): Promise<void> {
+export async function extract(archive: string, to: string, opts: { flatten?: boolean } = {}): Promise<void> {
   const tmp = `${to}.extract-${Date.now()}`
   await fsp.mkdir(tmp, { recursive: true })
   const lower = archive.toLowerCase()
-  const code = lower.endsWith('.zip')
+  // Windows' tar reads zip and rar; 7z needs the bundled 7-Zip
+  const code = lower.endsWith('.zip') || lower.endsWith('.rar')
     ? await run(path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'tar.exe'), ['-xf', archive, '-C', tmp])
     : await run(sevenZip(), ['x', '-y', `-o${tmp}`, archive])
   if (code !== 0) {
@@ -118,7 +119,7 @@ export async function extract(archive: string, to: string): Promise<void> {
   }
   let root = tmp
   const ents = await fsp.readdir(tmp)
-  if (ents.length === 1 && (await fsp.stat(path.join(tmp, ents[0]))).isDirectory()) root = path.join(tmp, ents[0])
+  if (opts.flatten !== false && ents.length === 1 && (await fsp.stat(path.join(tmp, ents[0]))).isDirectory()) root = path.join(tmp, ents[0])
   await fsp.mkdir(to, { recursive: true })
   await fsp.cp(root, to, { recursive: true, force: true })
   await fsp.rm(tmp, { recursive: true, force: true })

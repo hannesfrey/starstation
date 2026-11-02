@@ -1,9 +1,11 @@
 import type { Panel } from './panels'
+import { api } from '../api'
 
 export function PanelView({ panel, index, onSelect, onRun }: { panel: Panel; index: number; onSelect: (i: number) => void; onRun: () => void }) {
   return (
     <div className="panel" data-testid={`panel-${panel.id}`}>
       <div className="panel-title">{panel.title}</div>
+      {panel.image && <img className="panel-image" src={panel.image.startsWith('https://') ? panel.image : api.mediaUrl(panel.image)} alt="" />}
       <div className="panel-items">
         {panel.items.map((it, i) => (
           <div

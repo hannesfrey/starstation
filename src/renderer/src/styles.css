@@ -607,3 +607,12 @@ body,
   background: rgba(5, 8, 16, 0.6);
   pointer-events: none;
 }
+
+.panel-image {
+  display: block;
+  max-width: 100%;
+  max-height: 24vh;
+  margin: 0 0 1.4vh;
+  border-radius: 8px;
+  object-fit: cover;
+}

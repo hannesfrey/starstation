@@ -75,6 +75,8 @@ export interface Game {
   size: number
   addedAt: number
   discs?: number
+  /** N64: internal ROM name (texture pack folder). */
+  romName?: string
 }
 
 export interface GameStats {
@@ -179,6 +181,17 @@ export interface StarstationApi {
   restorePreviousResume(gameId: string): Promise<{ ok: boolean; error?: string }>
   setGameOption(gameId: string, key: 'graphics' | 'crt' | 'patch', value: string | boolean, patchId?: string): Promise<GameOptions | null>
   reportPads(ids: string[]): Promise<void>
+  mods(gameId: string): Promise<ModsView | null>
+  modAddDialog(gameId: string, folder: boolean): Promise<ModAddResult | null>
+  modAdd(gameId: string, path: string): Promise<ModAddResult>
+  modPlace(gameId: string, pending: string, target: string): Promise<ModAddResult>
+  modToggle(gameId: string, modId: string, on: boolean, winner?: 'this' | 'other'): Promise<ModToggleResult>
+  modDelete(gameId: string, modId: string): Promise<void>
+  gbSearch(gameId: string, name?: string): Promise<{ games: GbGame[]; chosen?: number }>
+  gbChoose(gameId: string, gbGameId: number): Promise<void>
+  gbMods(gbGameId: number, page: number): Promise<{ mods: GbMod[]; more: boolean }>
+  gbMod(modId: number): Promise<GbModDetails>
+  gbInstall(gameId: string, modId: number, fileId: number): Promise<ModAddResult>
   deleteGame(gameId: string, withSaves: boolean): Promise<{ ok: boolean; error?: string }>
   collectionCreate(name: string, firstGame?: string): Promise<Collection[]>
   collectionRename(id: string, name: string): Promise<Collection[]>
@@ -206,7 +219,7 @@ export interface StarstationApi {
 export interface BackupInfo {
   id: string
   createdAt: number
-  reason: 'launch' | 'manual' | 'before-restore'
+  reason: 'launch' | 'manual' | 'before-restore' | 'before-mod'
   bytes: number
   folder: string
 }
@@ -235,8 +248,63 @@ export interface GameDetails {
   ownSaves: number
   /** Save backups are possible for this console. */
   canBackup: boolean
+  mods: { total: number; on: number; supported: boolean }
   /** Resume state kept from before the last "Start fresh". */
   previousResume: number | null
+}
+
+export interface ModInfo {
+  id: string
+  name: string
+  description?: string
+  /** Label of where it goes (e.g. "Texture pack"). */
+  target: string
+  enabled: boolean
+  files: number
+  source: 'file' | 'gamebanana'
+  image?: string
+}
+
+export interface ModsView {
+  mods: ModInfo[]
+  targets: { id: string; label: string }[]
+  /** Why mods can't be used for this game, if so. */
+  reason?: string
+  gamebanana: boolean
+}
+
+export type ModAddResult =
+  | { ok: true; mod: ModInfo }
+  | { ok: false; error: string }
+  | { ok: false; ask: { pending: string; name: string; targets: { id: string; label: string }[] } }
+
+export type ModToggleResult = { ok: true; skipped: number } | { ok: false; error: string } | { ok: false; conflict: { with: string[]; files: number } }
+
+export interface GbGame {
+  id: number
+  name: string
+  icon?: string
+}
+export interface GbMod {
+  id: number
+  name: string
+  image?: string
+  downloads?: number
+}
+export interface GbFile {
+  id: number
+  name: string
+  size: number
+  url: string
+  md5?: string
+  ok: boolean
+}
+export interface GbModDetails {
+  id: number
+  name: string
+  text: string
+  image?: string
+  files: GbFile[]
 }
 
 export interface Collection {

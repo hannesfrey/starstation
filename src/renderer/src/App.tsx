@@ -12,7 +12,7 @@ import { Xmb } from './xmb/Xmb'
 import { PanelView } from './xmb/PanelView'
 import { buildColumns, type XItem } from './xmb/model'
 import { buildPanel, type Panel, type PanelExtra } from './xmb/panels'
-import type { AddGamesResult, AppState, Game, LaunchResult, Notice, Settings } from '../../shared/types'
+import type { AddGamesResult, AppState, Game, LaunchResult, ModAddResult, Notice, Settings } from '../../shared/types'
 
 const byTitle = (a: Game, b: Game) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base', numeric: true })
 
@@ -38,10 +38,12 @@ export function App() {
   const [rows, setRows] = useState<Record<string, { index: number; key?: string }>>({})
   const [folders, setFolders] = useState<Record<string, FolderRef[]>>({})
   const [panels, setPanels] = useState<PanelRef[]>([])
+  const panelsRef = useRef<PanelRef[]>([])
+  panelsRef.current = panels
   const [errorPanel, setErrorPanel] = useState<{ title: string; result: LaunchResult; index: number } | null>(null)
   const [pad, setPad] = useState<PadKind | null>(null)
   const [idle, setIdle] = useState(false)
-  const [extra, setExtra] = useState<PanelExtra>({ emuProgress: {}, importing: false, details: {} })
+  const [extra, setExtra] = useState<PanelExtra>({ emuProgress: {}, importing: false, details: {}, mods: {}, gb: { page: 1, more: false, detail: {} } })
   const [entry, setEntry] = useState<EntryState | null>(null)
   const [dragging, setDragging] = useState(false)
   const lastInput = useRef(Date.now())
@@ -210,6 +212,14 @@ export function App() {
   const openPanel = useCallback((id: string, arg?: string) => {
     setPanels((p) => [...p, { id, arg, index: 0 }])
     if (arg && ['game', 'backups', 'delete'].includes(id)) void loadDetails(arg)
+    if (arg && id === 'mods') void api.mods(arg).then((v) => v && setExtra((x) => ({ ...x, mods: { ...x.mods, [arg]: v } })))
+    if (arg && id === 'gb-mod') {
+      const mid = Number(arg.split('|')[1])
+      api
+        .gbMod(mid)
+        .then((d) => setExtra((x) => ({ ...x, gb: { ...x.gb, detail: { ...x.gb.detail, [mid]: d } } })))
+        .catch((e) => setExtra((x) => ({ ...x, gb: { ...x.gb, error: `GameBanana can't be reached right now (${(e as Error).message}).` } })))
+    }
     if (id === 'emulators') {
       api.emulators().then((emulators) => setExtra((x) => ({ ...x, emulators })))
       api.checkEmulatorUpdates().then((emulators) => setExtra((x) => ({ ...x, emulators })))
@@ -247,6 +257,104 @@ export function App() {
       if (options) setExtra((x) => (x.details[g.id] ? { ...x, details: { ...x.details, [g.id]: { ...x.details[g.id], options } } } : x))
     })
   }, [])
+  // ---- mods ----
+  const loadMods = useCallback(async (gid: string) => {
+    const v = await api.mods(gid)
+    if (v) setExtra((x) => ({ ...x, mods: { ...x.mods, [gid]: v } }))
+    void loadDetails(gid)
+  }, [loadDetails])
+  const onModAdded = useCallback(
+    (gid: string, r: ModAddResult | null) => {
+      if (!r) return
+      if (!r.ok && 'ask' in r) {
+        setExtra((x) => ({ ...x, modAsk: { gameId: gid, ...r.ask } }))
+        setPanels((p) => [...p.filter((q) => q.id !== 'mod-place'), { id: 'mod-place', index: 0 }])
+        return
+      }
+      setPanels((p) => p.filter((q) => q.id !== 'mod-place'))
+      void loadMods(gid)
+    },
+    [loadMods]
+  )
+  const modToggle = useCallback(
+    (g: Game, modId: string, on: boolean, winner?: 'this' | 'other') => {
+      void api.modToggle(g.id, modId, on, winner).then((r) => {
+        if (!r.ok && 'conflict' in r) {
+          const name = extra.mods[g.id]?.mods.find((m) => m.id === modId)?.name ?? modId
+          setExtra((x) => ({ ...x, modConflict: { gameId: g.id, modId, name, ...r.conflict } }))
+          setPanels((p) => [...p, { id: 'mod-conflict', index: 0 }])
+          return
+        }
+        if (!r.ok && 'error' in r) notify({ kind: 'error', title: "Couldn't switch the mod", detail: r.error })
+        if (r.ok && r.skipped) notify({ kind: 'warning', title: 'Some files were left alone', detail: `${r.skipped} file(s) were already there and weren't made by Starstation.` })
+        if (r.ok && on) notify({ kind: 'mod', title: 'Mod switched on', detail: g.title })
+        setPanels((p) => p.filter((q) => q.id !== 'mod-conflict'))
+        void loadMods(g.id)
+      })
+    },
+    [extra.mods, loadMods, notify]
+  )
+  const modDelete = useCallback((g: Game, modId: string) => void api.modDelete(g.id, modId).then(() => loadMods(g.id)), [loadMods])
+  const modAddDialog = useCallback((g: Game, folder: boolean) => void api.modAddDialog(g.id, folder).then((r) => onModAdded(g.id, r)), [onModAdded])
+  const modPlace = useCallback((gid: string, pending: string, target: string) => void api.modPlace(gid, pending, target).then((r) => onModAdded(gid, r)), [onModAdded])
+  const gbFail = (e: unknown) => setExtra((x) => ({ ...x, gb: { ...x.gb, busy: undefined, error: `GameBanana can't be reached right now (${(e as Error).message}).` } }))
+  const gbLoadMods = useCallback((gbId: number, page: number) => {
+    setExtra((x) => ({ ...x, gb: { ...x.gb, busy: 'Loading mods…', error: undefined, ...(page === 1 ? { mods: undefined } : {}) } }))
+    api
+      .gbMods(gbId, page)
+      .then((r) => setExtra((x) => ({ ...x, gb: { ...x.gb, busy: undefined, page, more: r.more, mods: page === 1 ? r.mods : [...(x.gb.mods ?? []), ...r.mods] } })))
+      .catch(gbFail)
+  }, [])
+  const gbGameRef = useRef<Record<string, number>>({})
+  const gbOpen = useCallback(
+    (g: Game) => {
+      setExtra((x) => ({ ...x, gb: { page: 1, more: false, detail: x.gb.detail, busy: 'Looking for the game on GameBanana…' } }))
+      api
+        .gbSearch(g.id)
+        .then((r) => {
+          const pick = r.chosen ?? (r.games.length === 1 ? r.games[0].id : undefined)
+          if (pick) {
+            gbGameRef.current[g.id] = pick
+            if (!r.chosen) void api.gbChoose(g.id, pick)
+            setPanels((p) => [...p, { id: 'gb-mods', arg: g.id, index: 0 }])
+            gbLoadMods(pick, 1)
+          } else {
+            setExtra((x) => ({ ...x, gb: { ...x.gb, busy: undefined, games: r.games } }))
+            setPanels((p) => [...p, { id: 'gb-games', arg: g.id, index: 0 }])
+          }
+        })
+        .catch(gbFail)
+    },
+    [gbLoadMods]
+  )
+  const gbChoose = useCallback(
+    (g: Game, gbId: number) => {
+      gbGameRef.current[g.id] = gbId
+      void api.gbChoose(g.id, gbId)
+      setPanels((p) => [...p.filter((q) => q.id !== 'gb-games'), { id: 'gb-mods', arg: g.id, index: 0 }])
+      gbLoadMods(gbId, 1)
+    },
+    [gbLoadMods]
+  )
+  const gbMore = useCallback((g: Game) => {
+    const id = gbGameRef.current[g.id]
+    if (id) gbLoadMods(id, extra.gb.page + 1)
+  }, [gbLoadMods, extra.gb.page])
+  const gbInstall = useCallback(
+    (g: Game, modId: number, fileId: number) => {
+      setExtra((x) => ({ ...x, gb: { ...x.gb, busy: 'Downloading and installing…' } }))
+      api
+        .gbInstall(g.id, modId, fileId)
+        .then((r) => {
+          setExtra((x) => ({ ...x, gb: { ...x.gb, busy: undefined } }))
+          onModAdded(g.id, r)
+          if (r.ok) setPanels((p) => p.filter((q) => !q.id.startsWith('gb-')))
+        })
+        .catch(gbFail)
+    },
+    [onModAdded]
+  )
+
   const restorePreviousResume = useCallback((g: Game) => void api.restorePreviousResume(g.id).then(() => loadDetails(g.id)), [loadDetails])
   const deleteGame = useCallback((g: Game, withSaves: boolean) => void api.deleteGame(g.id, withSaves), [])
   const addGamesDialog = useCallback(() => void api.addGamesDialog().then(handleAdd), [handleAdd])
@@ -335,7 +443,11 @@ export function App() {
       e.preventDefault()
       setDragging(false)
       const paths = [...(e.dataTransfer?.files ?? [])].map((f) => api.pathForFile(f)).filter(Boolean)
-      if (paths.length) void api.addGames(paths).then(handleAdd)
+      const top = panelsRef.current[panelsRef.current.length - 1]
+      if (paths.length && top?.id === 'mods' && top.arg) {
+        const gid = top.arg
+        for (const p of paths) void api.modAdd(gid, p).then((r) => onModAdded(gid, r))
+      } else if (paths.length) void api.addGames(paths).then(handleAdd)
     }
     window.addEventListener('dragover', over)
     window.addEventListener('dragleave', leave)
@@ -345,7 +457,7 @@ export function App() {
       window.removeEventListener('dragleave', leave)
       window.removeEventListener('drop', drop)
     }
-  }, [handleAdd])
+  }, [handleAdd, onModAdded])
 
   // ---- model ----
   const columns = useMemo(
@@ -443,6 +555,14 @@ export function App() {
         restoreBackup,
         restorePreviousResume,
         setGameOption,
+        modToggle,
+        modDelete,
+        modAddDialog,
+        modPlace,
+        gbOpen,
+        gbChoose,
+        gbMore,
+        gbInstall,
         deleteGame,
         addGamesDialog,
         addGameAs
@@ -469,6 +589,14 @@ export function App() {
     restoreBackup,
     restorePreviousResume,
     setGameOption,
+    modToggle,
+    modDelete,
+    modAddDialog,
+    modPlace,
+    gbOpen,
+    gbChoose,
+    gbMore,
+    gbInstall,
     deleteGame,
     addGamesDialog,
     addGameAs,

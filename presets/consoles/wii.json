@@ -201,5 +201,41 @@
         ]
       }
     }
-  ]
+  ],
+  "mods": {
+    "targets": [
+      {
+        "id": "textures",
+        "label": "Texture pack",
+        "dir": "{emu}/User/Load/Textures/{serial}",
+        "match": "\\.(png|dds|jpg|jpeg|webp)$",
+        "enabled": {
+          "steps": [
+            {
+              "type": "ini",
+              "file": "{emu}/User/Config/GFX.ini",
+              "set": {
+                "Settings": {
+                  "HiresTextures": "True"
+                }
+              }
+            }
+          ]
+        },
+        "disabled": {
+          "steps": [
+            {
+              "type": "ini",
+              "file": "{emu}/User/Config/GFX.ini",
+              "set": {
+                "Settings": {
+                  "HiresTextures": "False"
+                }
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
 }

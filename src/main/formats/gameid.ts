@@ -127,3 +127,38 @@ export function cleanTitle(name: string): string {
   if (m) t = `${m[2]} ${m[1]}${m[3] ?? ''}`
   return t || name
 }
+
+/** 3DS cartridge dump (.3ds/.cci, NCSD): title ID as 16 hex digits, as Azahar names its mod folders. */
+export function n3dsTitleId(file: string): string | null {
+  if (!/\.(3ds|cci)$/i.test(file)) return null
+  try {
+    const fd = fs.openSync(file, 'r')
+    const b = Buffer.alloc(0x110)
+    fs.readSync(fd, b, 0, 0x110, 0)
+    fs.closeSync(fd)
+    if (b.toString('latin1', 0x100, 0x104) !== 'NCSD') return null
+    return b.readBigUInt64LE(0x108).toString(16).toUpperCase().padStart(16, '0')
+  } catch {
+    return null
+  }
+}
+
+/** N64 ROM header (any byte order): internal name (texture pack folder) and 4-letter game code. */
+export function n64Header(file: string): { name: string; code: string } | null {
+  if (!/\.(z64|n64|v64)$/i.test(file)) return null
+  try {
+    const fd = fs.openSync(file, 'r')
+    const b = Buffer.alloc(0x40)
+    fs.readSync(fd, b, 0, 0x40, 0)
+    fs.closeSync(fd)
+    const magic = b.readUInt32BE(0)
+    if (magic === 0x37804012) b.swap16() // .v64: byte-swapped
+    else if (magic === 0x40123780) b.swap32() // .n64: little-endian
+    else if (magic !== 0x80371240) return null
+    const name = b.toString('latin1', 0x20, 0x34).replace(/\0/g, '').trimEnd()
+    const code = b.toString('latin1', 0x3b, 0x3f).replace(/\0/g, '')
+    return name ? { name, code } : null
+  } catch {
+    return null
+  }
+}

@@ -21,7 +21,7 @@
     ".axf"
   ],
   "gameId": {
-    "method": "filename"
+    "method": "3ds-header"
   },
   "saves": {
     "dir": "{saves}",
@@ -125,5 +125,54 @@
         }
       ]
     }
+  },
+  "mods": {
+    "targets": [
+      {
+        "id": "mods",
+        "label": "Game mod (romfs / exefs)",
+        "dir": "{emu}/user/load/mods/{titleid}",
+        "match": "(^|/)(romfs|exefs)/|\\.ips$|exheader\\.bin$",
+        "anchor": "^(romfs|exefs)$"
+      },
+      {
+        "id": "textures",
+        "label": "Texture pack",
+        "dir": "{emu}/user/load/textures/{titleid}",
+        "match": "\\.(png|dds|jpg|jpeg|webp)$",
+        "enabled": {
+          "steps": [
+            {
+              "type": "ini",
+              "file": "{emu}/user/config/qt-config.ini",
+              "set": {
+                "Utility": {
+                  "custom_textures\\default": "false",
+                  "custom_textures": "true"
+                }
+              },
+              "spacing": "=",
+              "ifExists": true
+            }
+          ]
+        },
+        "disabled": {
+          "steps": [
+            {
+              "type": "ini",
+              "file": "{emu}/user/config/qt-config.ini",
+              "set": {
+                "Utility": {
+                  "custom_textures\\default": "false",
+                  "custom_textures": "false"
+                }
+              },
+              "spacing": "=",
+              "ifExists": true
+            }
+          ]
+        }
+      }
+    ]
   }
 }

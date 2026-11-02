@@ -1,4 +1,4 @@
-import type { AddGamesResult, AppState, EmulatorInfo, Game, GameDetails, GraphicsLevel, ImportProgressInfo, ImportResultInfo, ImportSourceInfo, Settings } from '../../../shared/types'
+import type { AddGamesResult, AppState, EmulatorInfo, Game, GameDetails, GbGame, GbMod, GbModDetails, ModsView, GraphicsLevel, ImportProgressInfo, ImportResultInfo, ImportSourceInfo, Settings } from '../../../shared/types'
 import { formatPlayTime } from './model'
 
 /** Data some panels load on demand. */
@@ -13,6 +13,12 @@ export interface PanelExtra {
   details: Record<string, GameDetails>
   /** Files whose console has to be picked by hand. */
   addAsk?: AddGamesResult['ask']
+  mods: Record<string, ModsView>
+  /** "Where does this mod go?" */
+  modAsk?: { gameId: string; pending: string; name: string; targets: { id: string; label: string }[] }
+  /** Two mods want the same files. */
+  modConflict?: { gameId: string; modId: string; name: string; with: string[]; files: number }
+  gb: { games?: GbGame[]; mods?: GbMod[]; page: number; more: boolean; detail: Record<number, GbModDetails>; busy?: string; error?: string }
 }
 
 export interface PItem {
@@ -30,6 +36,8 @@ export interface Panel {
   id: string
   title: string
   items: PItem[]
+  /** Picture shown above the items (GameBanana preview). */
+  image?: string
 }
 
 export interface PanelHandlers {
@@ -49,6 +57,14 @@ export interface PanelHandlers {
   restoreBackup: (g: Game, backupId: string) => void
   restorePreviousResume: (g: Game) => void
   setGameOption: (g: Game, key: 'graphics' | 'crt' | 'patch', value: string | boolean, patchId?: string) => void
+  modToggle: (g: Game, modId: string, on: boolean, winner?: 'this' | 'other') => void
+  modDelete: (g: Game, modId: string) => void
+  modAddDialog: (g: Game, folder: boolean) => void
+  modPlace: (gameId: string, pending: string, target: string) => void
+  gbOpen: (g: Game) => void
+  gbChoose: (g: Game, gbGameId: number) => void
+  gbMore: (g: Game) => void
+  gbInstall: (g: Game, modId: number, fileId: number) => void
   deleteGame: (g: Game, withSaves: boolean) => void
   addGamesDialog: () => void
   addGameAs: (path: string, consoleId: string) => void
@@ -65,7 +81,7 @@ export function formatDate(t: number): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
-const REASON = { launch: 'before playing', manual: 'by hand', 'before-restore': 'before a restore' }
+const REASON = { launch: 'before playing', manual: 'by hand', 'before-restore': 'before a restore', 'before-mod': 'before a mod' }
 
 function formatSize(bytes: number): string {
   if (bytes < 0) return '—'
@@ -273,6 +289,13 @@ export function buildPanel(id: string, arg: string | undefined, state: AppState,
           value: d ? `${d.backups.length}` : undefined,
           run: () => (h.openPanel('backups', g.id), 'keep')
         })
+      if (d?.mods.supported ?? true)
+        items.push({
+          key: 'mods',
+          label: 'Mods',
+          value: d?.mods.total ? `${d.mods.on} of ${d.mods.total} on` : undefined,
+          run: () => (h.openPanel('mods', g.id), 'keep')
+        })
       items.push(
         { key: 'folders', label: 'Open folder…', run: () => (h.openPanel('folders', g.id), 'keep') },
         { key: 'info', label: 'Game info', run: () => (h.openPanel('info', g.id), 'keep') },
@@ -406,6 +429,109 @@ export function buildPanel(id: string, arg: string | undefined, state: AppState,
       else items.push({ key: 'shared', label: 'Its saves stay: none belong only to this game (memory cards are shared).', info: true })
       items.push({ key: 'cancel', label: 'Cancel' })
       return { id, title: 'Delete game?', items }
+    }
+    case 'mods': {
+      const g = state.library.games.find((x) => x.id === arg)
+      if (!g) return null
+      const v = x.mods[g.id]
+      if (!v) return { id, title: 'Mods', items: [{ key: 'loading', label: 'Loading…', info: true }] }
+      const items: PItem[] = []
+      if (v.reason) items.push({ key: 'reason', label: v.reason, info: true })
+      for (const m of v.mods)
+        items.push({ key: `mod-${m.id}`, label: m.name, value: m.enabled ? 'On' : 'Off', run: () => (h.openPanel('mod', `${g.id}|${m.id}`), 'keep') })
+      if (!v.mods.length && !v.reason) items.push({ key: 'none', label: 'No mods yet. Add a file or folder, or drag one onto this window.', info: true })
+      if (v.targets.length) {
+        items.push({ key: 'add-file', label: 'Add mod from file…', run: () => (h.modAddDialog(g, false), 'keep') })
+        items.push({ key: 'add-folder', label: 'Add mod folder…', run: () => (h.modAddDialog(g, true), 'keep') })
+        if (v.gamebanana) items.push({ key: 'gb', label: 'Browse GameBanana…', run: () => (h.gbOpen(g), 'keep') })
+      }
+      items.push({ key: 'open', label: 'Open mods folder', run: () => h.command('open-folder', `mods:${g.console}`) })
+      return { id, title: `Mods · ${g.title}`, items }
+    }
+    case 'mod': {
+      const [gid, mid] = (arg ?? '').split('|')
+      const g = state.library.games.find((y) => y.id === gid)
+      const m = g && x.mods[g.id]?.mods.find((y) => y.id === mid)
+      if (!g || !m) return null
+      const items: PItem[] = []
+      if (m.description) items.push({ key: 'desc', label: m.description.length > 260 ? m.description.slice(0, 257) + '…' : m.description, info: true })
+      items.push({ key: 'where', label: `${m.target} · ${m.files} file${m.files === 1 ? '' : 's'}${m.source === 'gamebanana' ? ' · from GameBanana' : ''}`, info: true })
+      items.push({ key: 'toggle', label: m.enabled ? 'Switch off' : 'Switch on', value: m.enabled ? 'On' : 'Off', run: () => (h.modToggle(g, m.id, !m.enabled), 'keep') })
+      items.push({ key: 'delete', label: 'Delete mod', run: () => (h.modDelete(g, m.id), undefined) })
+      return { id, title: m.name, items, image: m.image }
+    }
+    case 'mod-conflict': {
+      const q = x.modConflict
+      const g = q && state.library.games.find((y) => y.id === q.gameId)
+      if (!q || !g) return null
+      return {
+        id,
+        title: 'Two mods change the same files',
+        items: [
+          { key: 'msg', label: `${q.name} and ${q.with.join(', ')} both change ${q.files} file${q.files === 1 ? '' : 's'}. Which one should win?`, info: true },
+          { key: 'this', label: `Use ${q.name}`, run: () => (h.modToggle(g, q.modId, true, 'this'), 'keep') },
+          { key: 'other', label: `Keep ${q.with.join(', ')}`, run: () => (h.modToggle(g, q.modId, true, 'other'), 'keep') },
+          { key: 'cancel', label: 'Cancel' }
+        ]
+      }
+    }
+    case 'mod-place': {
+      const q = x.modAsk
+      if (!q) return null
+      return {
+        id,
+        title: 'Where does this mod go?',
+        items: [
+          { key: 'msg', label: `Starstation isn't sure what kind of mod "${q.name}" is.`, info: true },
+          ...q.targets.map((t) => ({ key: `t-${t.id}`, label: t.label, run: () => (h.modPlace(q.gameId, q.pending, t.id), 'keep' as const) })),
+          { key: 'cancel', label: 'Cancel', run: () => (h.modPlace(q.gameId, q.pending, ''), 'keep' as const) }
+        ]
+      }
+    }
+    case 'gb-games': {
+      const g = state.library.games.find((y) => y.id === arg)
+      if (!g) return null
+      const items: PItem[] = []
+      if (x.gb.busy) items.push({ key: 'busy', label: x.gb.busy, info: true })
+      if (x.gb.error) items.push({ key: 'err', label: x.gb.error, info: true })
+      if (x.gb.games && !x.gb.games.length) items.push({ key: 'none', label: `GameBanana has no page for "${g.title}".`, info: true })
+      for (const gg of x.gb.games ?? []) items.push({ key: `gg-${gg.id}`, label: gg.name, run: () => (h.gbChoose(g, gg.id), 'keep') })
+      return { id, title: 'Which game on GameBanana?', items }
+    }
+    case 'gb-mods': {
+      const g = state.library.games.find((y) => y.id === arg)
+      if (!g) return null
+      const items: PItem[] = []
+      if (x.gb.busy) items.push({ key: 'busy', label: x.gb.busy, info: true })
+      if (x.gb.error) items.push({ key: 'err', label: x.gb.error, info: true })
+      if (x.gb.mods && !x.gb.mods.length) items.push({ key: 'none', label: 'No mods for this game on GameBanana.', info: true })
+      for (const m of x.gb.mods ?? [])
+        items.push({
+          key: `gm-${m.id}`,
+          label: m.name,
+          value: m.downloads ? `${m.downloads.toLocaleString()} downloads` : undefined,
+          run: () => (h.openPanel('gb-mod', `${g.id}|${m.id}`), 'keep')
+        })
+      if (x.gb.more) items.push({ key: 'more', label: 'Show more…', run: () => (h.gbMore(g), 'keep') })
+      return { id, title: 'GameBanana', items }
+    }
+    case 'gb-mod': {
+      const [gid, mid] = (arg ?? '').split('|')
+      const g = state.library.games.find((y) => y.id === gid)
+      const d = x.gb.detail[Number(mid)]
+      if (!g) return null
+      if (!d) return { id, title: 'GameBanana', items: [{ key: 'loading', label: x.gb.error ?? 'Loading…', info: true }] }
+      const items: PItem[] = []
+      if (x.gb.busy) items.push({ key: 'busy', label: x.gb.busy, info: true })
+      if (d.text) items.push({ key: 'text', label: d.text.length > 320 ? d.text.slice(0, 317) + '…' : d.text, info: true })
+      for (const f of d.files)
+        items.push(
+          f.ok
+            ? { key: `f-${f.id}`, label: `Install ${f.name}`, value: formatSize(f.size), disabled: !!x.gb.busy, run: () => (h.gbInstall(g, d.id, f.id), 'keep') }
+            : { key: `f-${f.id}`, label: `${f.name}: can't be installed here`, info: true }
+        )
+      if (!d.files.length) items.push({ key: 'nofiles', label: 'This mod has no files to download.', info: true })
+      return { id, title: d.name, items, image: d.image }
     }
     case 'add-ask': {
       const q = x.addAsk?.[0]

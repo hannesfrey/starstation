@@ -29,6 +29,8 @@ export function gameVars(g: Game, extra: Record<string, string> = {}): Record<st
     gamedir: path.dirname(g.path),
     basename,
     serial: g.serial ?? '',
+    titleid: g.serial ?? '',
+    romname: g.romName ?? '',
     ...extra
   })
 }
@@ -46,7 +48,7 @@ export function fillStrict(template: string, v: Record<string, string>): string 
       return ''
     }
     // game names may contain glob characters: only '*' written in the preset is a wildcard
-    const plain = ['basename', 'serial'].includes(key) ? val.replace(/\*/g, '_') : val
+    const plain = ['basename', 'serial', 'titleid', 'romname'].includes(key) ? val.replace(/\*/g, '_') : val
     return fwd ? plain.replace(/\\/g, '/') : plain
   })
   return ok ? path.normalize(out) : null

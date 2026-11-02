@@ -267,5 +267,83 @@
         ]
       }
     }
-  ]
+  ],
+  "mods": {
+    "targets": [
+      {
+        "id": "textures",
+        "label": "Texture pack",
+        "dir": "{emu}/textures/{serial}",
+        "match": "\\.(png|dds|jpg|jpeg|webp)$",
+        "anchor": "^replacements$",
+        "into": "replacements",
+        "enabled": {
+          "steps": [
+            {
+              "type": "ini",
+              "file": "{emu}/inis/PCSX2.ini",
+              "set": {
+                "EmuCore/GS": {
+                  "LoadTextureReplacements": "true"
+                }
+              }
+            }
+          ]
+        },
+        "disabled": {
+          "steps": [
+            {
+              "type": "ini",
+              "file": "{emu}/inis/PCSX2.ini",
+              "set": {
+                "EmuCore/GS": {
+                  "LoadTextureReplacements": "false"
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "id": "patches",
+        "label": "Patch (.pnach)",
+        "dir": "{emu}/patches",
+        "match": "\\.pnach$",
+        "flatten": true
+      },
+      {
+        "id": "cheats",
+        "label": "Cheat (.pnach)",
+        "dir": "{emu}/cheats",
+        "match": "\\.pnach$",
+        "flatten": true,
+        "enabled": {
+          "steps": [
+            {
+              "type": "ini",
+              "file": "{emu}/inis/PCSX2.ini",
+              "set": {
+                "EmuCore": {
+                  "EnableCheats": "true"
+                }
+              }
+            }
+          ]
+        },
+        "disabled": {
+          "steps": [
+            {
+              "type": "ini",
+              "file": "{emu}/inis/PCSX2.ini",
+              "set": {
+                "EmuCore": {
+                  "EnableCheats": "false"
+                }
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
 }
