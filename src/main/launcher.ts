@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import type { BrowserWindow } from 'electron'
 import { getConsole, getEmulator, emulatorDir, emulatorExe, fill } from './presets'
 import { gameVars, keepPreviousResume, resumeLaunch } from './gamedata'
+import { applyGameOptions, optionVars } from './gameoptions'
 import { applyConsoleConfig } from './emuconfig'
 import { biosStatus } from './bios'
 import { getGame, updateStats, view } from './library/library'
@@ -72,8 +73,12 @@ export async function launch(gameId: string, mode: LaunchMode = 'fresh', extraAr
   const game = getGame(gameId)
   const c = game ? getConsole(game.console) : undefined
   const rl = game ? resumeLaunch(game, mode) : { args: [], at: 0, vars: {} }
-  if (c) applyConsoleConfig(c, rl.vars)
-  const cmd = buildCommand(gameId, extraArgs, rl.args, rl.at)
+  // per-game options (graphics level, CRT filter, patches) first fill placeholders, then add their own steps/args
+  const ov = game && c ? optionVars(c, game) : {}
+  if (c) applyConsoleConfig(c, { ...rl.vars, ...ov })
+  const optionArgs = game && c ? applyGameOptions(c, game, { ...rl.vars, ...ov }) : []
+  const at = rl.args.length ? rl.at : (c?.launch.insertAt ?? 0)
+  const cmd = buildCommand(gameId, extraArgs, [...optionArgs, ...rl.args], at)
   if ('ok' in cmd) {
     log.warn(`launch refused for ${gameId}: ${cmd.error}`)
     return cmd

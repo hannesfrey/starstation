@@ -80,5 +80,125 @@
       "shared": true
     }
   ],
-  "notes": "No quick resume: Dolphin cannot save a state automatically when it closes."
+  "notes": "No quick resume: Dolphin cannot save a state automatically when it closes.",
+  "controls": [
+    {
+      "type": "ini",
+      "file": "{emu}/User/Config/GCPadNew.ini",
+      "set": {
+        "GCPad1": {
+          "Device": "XInput/0/Gamepad",
+          "Buttons/A": "`Button A`",
+          "Buttons/B": "`Button X`",
+          "Buttons/X": "`Button B`",
+          "Buttons/Y": "`Button Y`",
+          "Buttons/Z": "`Shoulder R`",
+          "Buttons/Start": "`Start`",
+          "Main Stick/Up": "`Left Y+`",
+          "Main Stick/Down": "`Left Y-`",
+          "Main Stick/Left": "`Left X-`",
+          "Main Stick/Right": "`Left X+`",
+          "C-Stick/Up": "`Right Y+`",
+          "C-Stick/Down": "`Right Y-`",
+          "C-Stick/Left": "`Right X-`",
+          "C-Stick/Right": "`Right X+`",
+          "Triggers/L": "`Trigger L`",
+          "Triggers/R": "`Trigger R`",
+          "Triggers/L-Analog": "`Trigger L`",
+          "Triggers/R-Analog": "`Trigger R`",
+          "D-Pad/Up": "`Pad N`",
+          "D-Pad/Down": "`Pad S`",
+          "D-Pad/Left": "`Pad W`",
+          "D-Pad/Right": "`Pad E`",
+          "Rumble/Motor": "`Motor L` | `Motor R`"
+        }
+      }
+    },
+    {
+      "type": "ini",
+      "file": "{emu}/User/Config/Hotkeys.ini",
+      "set": {
+        "Hotkeys": {
+          "Device": "DInput/0/Keyboard Mouse",
+          "General/Take Screenshot": "F12",
+          "General/Stop": "ESCAPE",
+          "General/Toggle Pause": "F10",
+          "General/Toggle Fullscreen": "@(Alt+RETURN)"
+        }
+      }
+    }
+  ],
+  "graphics": {
+    "original": {
+      "steps": [
+        {
+          "type": "ini",
+          "file": "{emu}/User/Config/GFX.ini",
+          "set": {
+            "Settings": {
+              "InternalResolution": "1"
+            }
+          }
+        }
+      ]
+    },
+    "enhanced": {
+      "steps": [
+        {
+          "type": "ini",
+          "file": "{emu}/User/Config/GFX.ini",
+          "set": {
+            "Settings": {
+              "InternalResolution": "3"
+            }
+          }
+        }
+      ]
+    },
+    "max": {
+      "steps": [
+        {
+          "type": "ini",
+          "file": "{emu}/User/Config/GFX.ini",
+          "set": {
+            "Settings": {
+              "InternalResolution": "6"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "patches": [
+    {
+      "id": "widescreen",
+      "label": "Widescreen hack",
+      "on": {
+        "steps": [
+          {
+            "type": "ini",
+            "file": "{emu}/User/Config/GFX.ini",
+            "set": {
+              "Settings": {
+                "wideScreenHack": "True"
+              }
+            }
+          }
+        ]
+      },
+      "off": {
+        "steps": [
+          {
+            "type": "ini",
+            "file": "{emu}/User/Config/GFX.ini",
+            "set": {
+              "Settings": {
+                "wideScreenHack": "False"
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
 }

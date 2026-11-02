@@ -49,6 +49,7 @@ export interface ConsoleInfo {
   statusText: string
   netplay: boolean
   quickResume: boolean
+  shaderHint: boolean
   custom: boolean
 }
 
@@ -176,6 +177,8 @@ export interface StarstationApi {
   backupNow(gameId: string): Promise<BackupInfo | null>
   restoreBackup(gameId: string, backupId: string): Promise<{ ok: boolean; error?: string }>
   restorePreviousResume(gameId: string): Promise<{ ok: boolean; error?: string }>
+  setGameOption(gameId: string, key: 'graphics' | 'crt' | 'patch', value: string | boolean, patchId?: string): Promise<GameOptions | null>
+  reportPads(ids: string[]): Promise<void>
   deleteGame(gameId: string, withSaves: boolean): Promise<{ ok: boolean; error?: string }>
   collectionCreate(name: string, firstGame?: string): Promise<Collection[]>
   collectionRename(id: string, name: string): Promise<Collection[]>
@@ -214,8 +217,18 @@ export interface ResumeInfo {
   warning?: string
 }
 
+/** Per-game choices from the Triangle menu. */
+export interface GameOptions {
+  graphics: GraphicsLevel
+  crt: boolean
+  patches: Record<string, boolean>
+}
+
 /** Loaded when the Triangle menu opens. */
 export interface GameDetails {
+  options: GameOptions
+  /** What this console offers. */
+  available: { graphics: boolean; crt: boolean; patches: { id: string; label: string }[] }
   resume: ResumeInfo | null
   backups: BackupInfo[]
   /** Save data that belongs only to this game (deleted with it if asked). */

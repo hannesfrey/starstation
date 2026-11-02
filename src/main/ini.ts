@@ -4,7 +4,7 @@
  */
 export function setIniValues(
   text: string,
-  set: Record<string, Record<string, string>>,
+  set: Record<string, Record<string, string | string[]>>,
   spacing = ' = '
 ): string {
   const eol = text.includes('\r\n') ? '\r\n' : '\n'
@@ -31,6 +31,26 @@ export function setIniValues(
     }
     for (const [key, value] of Object.entries(entries)) {
       const re = new RegExp(`^\\s*${escapeRe(key)}\\s*=`)
+      if (Array.isArray(value)) {
+        // a list: the key appears once per value (e.g. two buttons for one hotkey)
+        const want = value.filter((x) => x !== '').map((x) => `${key}${spacing}${x}`)
+        let first = -1
+        for (let i = end - 1; i > start; i--) {
+          if (re.test(lines[i])) {
+            first = i
+            lines.splice(i, 1)
+            end--
+          }
+        }
+        let at = first
+        if (at < 0) {
+          at = end
+          while (at - 1 > start && lines[at - 1].trim() === '') at--
+        }
+        lines.splice(at, 0, ...want)
+        end += want.length
+        continue
+      }
       let found = false
       for (let i = start + 1; i < end; i++) {
         if (re.test(lines[i])) {
@@ -77,7 +97,8 @@ export function setKvValues(text: string, set: Record<string, string>, sep: stri
     const re = new RegExp(`^\\s*${escapeRe(key)}\\s*${escapeRe(keySep)}`)
     const i = lines.findIndex((l) => re.test(l))
     const line = `${key}${sep}${value}`
-    if (i >= 0) lines[i] = line
+    // keep the indentation (YAML files like RPCS3's config.yml are nested)
+    if (i >= 0) lines[i] = (/^\s*/.exec(lines[i])?.[0] ?? '') + line
     else lines.push(line)
   }
   return lines.join(eol) + eol

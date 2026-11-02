@@ -55,11 +55,75 @@
     }
   ],
   "quickResume": false,
-  "notes": "No quick resume: Azahar cannot save a state automatically when it closes.",
+  "notes": "No quick resume: Azahar cannot save a state automatically when it closes. Controller: map it once in Azahar (Emulation → Configure → Controls); Azahar needs the controller's ID, which Starstation can't know beforehand.",
   "backup": [
     {
       "path": "{saves}/sdmc/Nintendo 3DS",
       "shared": true
     }
-  ]
+  ],
+  "controls": [
+    {
+      "type": "ini",
+      "file": "{emu}/user/config/qt-config.ini",
+      "set": {
+        "UI": {
+          "Shortcuts\\Main%20Window\\Capture%20Screenshot\\KeySeq\\default": "false",
+          "Shortcuts\\Main%20Window\\Capture%20Screenshot\\KeySeq": "F12"
+        }
+      },
+      "spacing": "=",
+      "ifExists": true
+    }
+  ],
+  "graphics": {
+    "original": {
+      "steps": [
+        {
+          "type": "ini",
+          "file": "{emu}/user/config/qt-config.ini",
+          "set": {
+            "Renderer": {
+              "resolution_factor\\default": "false",
+              "resolution_factor": "1"
+            }
+          },
+          "spacing": "=",
+          "ifExists": true
+        }
+      ]
+    },
+    "enhanced": {
+      "steps": [
+        {
+          "type": "ini",
+          "file": "{emu}/user/config/qt-config.ini",
+          "set": {
+            "Renderer": {
+              "resolution_factor\\default": "false",
+              "resolution_factor": "3"
+            }
+          },
+          "spacing": "=",
+          "ifExists": true
+        }
+      ]
+    },
+    "max": {
+      "steps": [
+        {
+          "type": "ini",
+          "file": "{emu}/user/config/qt-config.ini",
+          "set": {
+            "Renderer": {
+              "resolution_factor\\default": "false",
+              "resolution_factor": "5"
+            }
+          },
+          "spacing": "=",
+          "ifExists": true
+        }
+      ]
+    }
+  }
 }

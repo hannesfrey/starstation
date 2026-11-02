@@ -57,5 +57,52 @@
       "path": "{saves}/content",
       "shared": true
     }
-  ]
+  ],
+  "graphics": {
+    "original": {
+      "steps": [
+        {
+          "type": "ini",
+          "file": "{emu}/xenia-canary.config.toml",
+          "set": {
+            "GPU": {
+              "draw_resolution_scale_x": "1",
+              "draw_resolution_scale_y": "1"
+            }
+          },
+          "ifExists": true
+        }
+      ]
+    },
+    "enhanced": {
+      "steps": [
+        {
+          "type": "ini",
+          "file": "{emu}/xenia-canary.config.toml",
+          "set": {
+            "GPU": {
+              "draw_resolution_scale_x": "2",
+              "draw_resolution_scale_y": "2"
+            }
+          },
+          "ifExists": true
+        }
+      ]
+    },
+    "max": {
+      "steps": [
+        {
+          "type": "ini",
+          "file": "{emu}/xenia-canary.config.toml",
+          "set": {
+            "GPU": {
+              "draw_resolution_scale_x": "3",
+              "draw_resolution_scale_y": "3"
+            }
+          },
+          "ifExists": true
+        }
+      ]
+    }
+  }
 }

@@ -56,16 +56,15 @@ export function App() {
   // ---- load + subscribe ----
   useEffect(() => {
     // Updates can arrive before the first state does; keep them and apply on top.
+    // (decided right away, not inside a React updater: updaters run later and could miss the first state)
     const early: Partial<AppState> = {}
-    const apply = (patch: Partial<AppState>) =>
-      setState((s) => {
-        if (!s) {
-          Object.assign(early, patch)
-          return s
-        }
-        return { ...s, ...patch }
-      })
+    let loaded = false
+    const apply = (patch: Partial<AppState>) => {
+      if (!loaded) Object.assign(early, patch)
+      else setState((s) => (s ? { ...s, ...patch } : s))
+    }
     api.getState().then((s) => {
+      loaded = true
       setState({ ...s, ...early })
       if (!s.settings.bootAnimation) setBooting(false)
     })
@@ -85,7 +84,12 @@ export function App() {
       })
     ]
     input.start()
+    const sendPads = () => {
+      const ids = [...(navigator.getGamepads ? navigator.getGamepads() : [])].filter((p): p is Gamepad => !!p && p.connected).map((p) => p.id)
+      void api.reportPads(ids)
+    }
     const offPad = input.onPad((e) => {
+      sendPads()
       setPad(e.type === 'connected' ? e.kind : null)
       setNotices((l) => [
         ...l,
@@ -123,9 +127,20 @@ export function App() {
     return d
   }, [])
 
+  const stateRef = useRef<AppState | null>(null)
+  stateRef.current = state
   const launchMode = useCallback(async (g: Game, mode: 'fresh' | 'resume') => {
     sfx.launch()
     setPanels([])
+    const s = stateRef.current
+    const c = s?.consoles.find((x) => x.id === g.console)
+    if (c?.shaderHint && !s?.library.stats[g.id]?.playCount) {
+      setNotices((l) => [
+        ...l,
+        { id: localNoticeId++, kind: 'info', title: 'First start', detail: 'The first minutes may stutter while the emulator prepares its shaders. It gets smooth after that.' }
+      ])
+      await new Promise((r) => setTimeout(r, 3500))
+    }
     const r = await api.launch(g.id, mode)
     if (!r.ok) {
       sfx.error()
@@ -227,6 +242,11 @@ export function App() {
     (g: Game, id: string) => void api.restoreBackup(g.id, id).then(() => loadDetails(g.id)),
     [loadDetails]
   )
+  const setGameOption = useCallback((g: Game, key: 'graphics' | 'crt' | 'patch', value: string | boolean, patchId?: string) => {
+    void api.setGameOption(g.id, key, value, patchId).then((options) => {
+      if (options) setExtra((x) => (x.details[g.id] ? { ...x, details: { ...x.details, [g.id]: { ...x.details[g.id], options } } } : x))
+    })
+  }, [])
   const restorePreviousResume = useCallback((g: Game) => void api.restorePreviousResume(g.id).then(() => loadDetails(g.id)), [loadDetails])
   const deleteGame = useCallback((g: Game, withSaves: boolean) => void api.deleteGame(g.id, withSaves), [])
   const addGamesDialog = useCallback(() => void api.addGamesDialog().then(handleAdd), [handleAdd])
@@ -422,6 +442,7 @@ export function App() {
         backupNow,
         restoreBackup,
         restorePreviousResume,
+        setGameOption,
         deleteGame,
         addGamesDialog,
         addGameAs
@@ -447,6 +468,7 @@ export function App() {
     backupNow,
     restoreBackup,
     restorePreviousResume,
+    setGameOption,
     deleteGame,
     addGamesDialog,
     addGameAs,

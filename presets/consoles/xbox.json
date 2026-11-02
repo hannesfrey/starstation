@@ -102,5 +102,46 @@
     }
   ],
   "quickResume": false,
-  "notes": "No quick resume (xemu has no save-on-exit). Saves live inside the hard-disk image, so they are not backed up per game."
+  "notes": "No quick resume (xemu has no save-on-exit). Saves live inside the hard-disk image, so they are not backed up per game.",
+  "graphics": {
+    "original": {
+      "steps": [
+        {
+          "type": "ini",
+          "file": "{emu}/xemu.toml",
+          "set": {
+            "display.quality": {
+              "surface_scale": "1"
+            }
+          }
+        }
+      ]
+    },
+    "enhanced": {
+      "steps": [
+        {
+          "type": "ini",
+          "file": "{emu}/xemu.toml",
+          "set": {
+            "display.quality": {
+              "surface_scale": "2"
+            }
+          }
+        }
+      ]
+    },
+    "max": {
+      "steps": [
+        {
+          "type": "ini",
+          "file": "{emu}/xemu.toml",
+          "set": {
+            "display.quality": {
+              "surface_scale": "3"
+            }
+          }
+        }
+      ]
+    }
+  }
 }

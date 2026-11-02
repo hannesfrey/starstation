@@ -28,6 +28,7 @@ export function consoleInfos(): ConsoleInfo[] {
       statusText,
       netplay: !!c.netplay,
       quickResume: c.quickResume,
+      shaderHint: !!c.shaderHint,
       custom: !!c.custom
     }
   })

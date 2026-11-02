@@ -15,6 +15,8 @@ import { loadLibrary, rescan, view, toggleFavorite, getGame, forgetGame, updateS
 import { backupGame, gameFiles, listBackups, noteResumeVersion, ownSaves, previousResume, pruneBackups, restoreBackup, restorePreviousResume, resumeInfo, saveEntries } from './gamedata'
 import { createCollection, deleteCollection, listCollections, removeGameFromCollections, renameCollection, toggleInCollection } from './collections'
 import { addGames } from './addgames'
+import { availableOptions, gameOptions, setGameOption } from './gameoptions'
+import { reportPads } from './controllers'
 import { consoleInfos } from './consoles'
 import { launch, setLauncherWindow, runningGame, stopRunning, onBeforeLaunch, onAfterExit } from './launcher'
 import { attachWindow, notify, send } from './notify'
@@ -250,7 +252,7 @@ function registerIpc(): void {
   ipcMain.handle('game-details', (_e, id: string): GameDetails | null => {
     const g = getGame(id)
     if (!g) return null
-    return { resume: resumeInfo(g), backups: listBackups(g), ownSaves: ownSaves(g).length, canBackup: !!getConsole(g.console)?.backup?.length, previousResume: previousResume(g)?.savedAt ?? null }
+    return { options: gameOptions(g), available: availableOptions(g), resume: resumeInfo(g), backups: listBackups(g), ownSaves: ownSaves(g).length, canBackup: !!getConsole(g.console)?.backup?.length, previousResume: previousResume(g)?.savedAt ?? null }
   })
   ipcMain.handle('backup-now', async (_e, id: string) => {
     const g = getGame(id)
@@ -285,6 +287,11 @@ function registerIpc(): void {
       return { ok: false, error: (e as Error).message }
     }
   })
+  ipcMain.handle('game-option-set', (_e, id: string, key: 'graphics' | 'crt' | 'patch', value: string | boolean, patchId?: string) => {
+    const g = getGame(id)
+    return g ? setGameOption(g, key, value, patchId) : null
+  })
+  ipcMain.handle('report-pads', (_e, ids: string[]) => reportPads(Array.isArray(ids) ? ids.map(String) : []))
   ipcMain.handle('delete-game', (_e, id: string, withSaves: boolean) => deleteGame(id, !!withSaves))
   ipcMain.handle('collection-create', (_e, name: string, first?: string) => pushCollections(createCollection(name, first)))
   ipcMain.handle('collection-rename', (_e, id: string, name: string) => pushCollections(renameCollection(id, name)))

@@ -313,7 +313,7 @@ export function resumeLaunch(g: Game, mode: 'resume' | 'fresh'): { args: string[
   const state = resumeStatePath(g)
   if (!state) return { args: [], at: 0, vars: { resume: 'false' } }
   const v = { ...gameVars(g), state }
-  return { args: c.resume.args.map((a) => fillStrict(a, v) ?? a), at: c.resume.at ?? 0, vars: { resume: 'true', state } }
+  return { args: c.resume.args.map((a) => fillStrict(a, v) ?? a), at: c.resume.at ?? c.launch.insertAt ?? 0, vars: { resume: 'true', state } }
 }
 
 /** After the emulator closed: remember which version wrote the resume state. */

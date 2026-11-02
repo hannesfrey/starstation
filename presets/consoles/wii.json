@@ -78,5 +78,128 @@
       "shared": true
     }
   ],
-  "notes": "No quick resume: Dolphin cannot save a state automatically when it closes."
+  "notes": "No quick resume: Dolphin cannot save a state automatically when it closes.",
+  "controls": [
+    {
+      "type": "ini",
+      "file": "{emu}/User/Config/WiimoteNew.ini",
+      "set": {
+        "Wiimote1": {
+          "Device": "XInput/0/Gamepad",
+          "Buttons/A": "`Button A`",
+          "Buttons/B": "`Trigger R`",
+          "Buttons/1": "`Button X`",
+          "Buttons/2": "`Button Y`",
+          "Buttons/-": "`Back`",
+          "Buttons/+": "`Start`",
+          "Buttons/Home": "`Guide`",
+          "D-Pad/Up": "`Pad N`",
+          "D-Pad/Down": "`Pad S`",
+          "D-Pad/Left": "`Pad W`",
+          "D-Pad/Right": "`Pad E`",
+          "IR/Up": "`Right Y+`",
+          "IR/Down": "`Right Y-`",
+          "IR/Left": "`Right X-`",
+          "IR/Right": "`Right X+`",
+          "Shake/X": "`Thumb R`",
+          "Shake/Y": "`Thumb R`",
+          "Shake/Z": "`Thumb R`",
+          "Extension": "Nunchuk",
+          "Nunchuk/Buttons/C": "`Shoulder L`",
+          "Nunchuk/Buttons/Z": "`Trigger L`",
+          "Nunchuk/Stick/Up": "`Left Y+`",
+          "Nunchuk/Stick/Down": "`Left Y-`",
+          "Nunchuk/Stick/Left": "`Left X-`",
+          "Nunchuk/Stick/Right": "`Left X+`",
+          "Rumble/Motor": "`Motor L` | `Motor R`"
+        }
+      }
+    },
+    {
+      "type": "ini",
+      "file": "{emu}/User/Config/Hotkeys.ini",
+      "set": {
+        "Hotkeys": {
+          "Device": "DInput/0/Keyboard Mouse",
+          "General/Take Screenshot": "F12",
+          "General/Stop": "ESCAPE",
+          "General/Toggle Pause": "F10",
+          "General/Toggle Fullscreen": "@(Alt+RETURN)"
+        }
+      }
+    }
+  ],
+  "graphics": {
+    "original": {
+      "steps": [
+        {
+          "type": "ini",
+          "file": "{emu}/User/Config/GFX.ini",
+          "set": {
+            "Settings": {
+              "InternalResolution": "1"
+            }
+          }
+        }
+      ]
+    },
+    "enhanced": {
+      "steps": [
+        {
+          "type": "ini",
+          "file": "{emu}/User/Config/GFX.ini",
+          "set": {
+            "Settings": {
+              "InternalResolution": "3"
+            }
+          }
+        }
+      ]
+    },
+    "max": {
+      "steps": [
+        {
+          "type": "ini",
+          "file": "{emu}/User/Config/GFX.ini",
+          "set": {
+            "Settings": {
+              "InternalResolution": "6"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "patches": [
+    {
+      "id": "widescreen",
+      "label": "Widescreen hack",
+      "on": {
+        "steps": [
+          {
+            "type": "ini",
+            "file": "{emu}/User/Config/GFX.ini",
+            "set": {
+              "Settings": {
+                "wideScreenHack": "True"
+              }
+            }
+          }
+        ]
+      },
+      "off": {
+        "steps": [
+          {
+            "type": "ini",
+            "file": "{emu}/User/Config/GFX.ini",
+            "set": {
+              "Settings": {
+                "wideScreenHack": "False"
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
 }

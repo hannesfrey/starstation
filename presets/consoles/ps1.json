@@ -112,5 +112,136 @@
     "args": [
       "-resume"
     ]
-  }
+  },
+  "controls": [
+    {
+      "type": "ini",
+      "file": "{emu}/settings.ini",
+      "set": {
+        "InputSources": {
+          "XInput": "true",
+          "SDL": "true"
+        },
+        "Pad1": {
+          "Type": "AnalogController",
+          "Up": "{pad}/DPadUp",
+          "Right": "{pad}/DPadRight",
+          "Down": "{pad}/DPadDown",
+          "Left": "{pad}/DPadLeft",
+          "Triangle": "{pad}/Y",
+          "Circle": "{pad}/B",
+          "Cross": "{pad}/A",
+          "Square": "{pad}/X",
+          "Select": "{pad}/Back",
+          "Start": "{pad}/Start",
+          "L1": "{pad}/LeftShoulder",
+          "L2": "{pad}/+LeftTrigger",
+          "R1": "{pad}/RightShoulder",
+          "R2": "{pad}/+RightTrigger",
+          "L3": "{pad}/LeftStick",
+          "R3": "{pad}/RightStick",
+          "LUp": "{pad}/-LeftY",
+          "LRight": "{pad}/+LeftX",
+          "LDown": "{pad}/+LeftY",
+          "LLeft": "{pad}/-LeftX",
+          "RUp": "{pad}/-RightY",
+          "RRight": "{pad}/+RightX",
+          "RDown": "{pad}/+RightY",
+          "RLeft": "{pad}/-RightX",
+          "Analog": "{pad}/Guide",
+          "LargeMotor": "{pad}/LargeMotor",
+          "SmallMotor": "{pad}/SmallMotor"
+        },
+        "Hotkeys": {
+          "Screenshot": [
+            "Keyboard/F12",
+            "{padshot}",
+            "{padshare}"
+          ]
+        }
+      }
+    }
+  ],
+  "graphics": {
+    "original": {
+      "steps": [
+        {
+          "type": "ini",
+          "file": "{emu}/settings.ini",
+          "set": {
+            "GPU": {
+              "ResolutionScale": "1",
+              "PGXPEnable": "false"
+            }
+          }
+        }
+      ]
+    },
+    "enhanced": {
+      "steps": [
+        {
+          "type": "ini",
+          "file": "{emu}/settings.ini",
+          "set": {
+            "GPU": {
+              "ResolutionScale": "4",
+              "PGXPEnable": "true"
+            }
+          }
+        }
+      ]
+    },
+    "max": {
+      "steps": [
+        {
+          "type": "ini",
+          "file": "{emu}/settings.ini",
+          "set": {
+            "GPU": {
+              "ResolutionScale": "8",
+              "PGXPEnable": "true"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "patches": [
+    {
+      "id": "widescreen",
+      "label": "Widescreen (16:9)",
+      "on": {
+        "steps": [
+          {
+            "type": "ini",
+            "file": "{emu}/settings.ini",
+            "set": {
+              "GPU": {
+                "WidescreenHack": "true"
+              },
+              "Display": {
+                "AspectRatio": "16:9"
+              }
+            }
+          }
+        ]
+      },
+      "off": {
+        "steps": [
+          {
+            "type": "ini",
+            "file": "{emu}/settings.ini",
+            "set": {
+              "GPU": {
+                "WidescreenHack": "false"
+              },
+              "Display": {
+                "AspectRatio": "Auto (Game Native)"
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
 }

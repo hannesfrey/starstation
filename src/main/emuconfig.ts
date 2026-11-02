@@ -57,13 +57,14 @@ export function applyStep(step: ConfigStep, v: Record<string, string>): void {
     case 'ini': {
       const p = fill(step.file, v)
       if (step.ifExists && !fs.existsSync(p)) return
-      const set: Record<string, Record<string, string>> = {}
+      const set: Record<string, Record<string, string | string[]>> = {}
+      const one = (val: string | number | boolean) => {
+        const filled = typeof val === 'string' ? fill(val, v) : str(val)
+        return step.quote && typeof val === 'string' ? `'${filled}'` : filled
+      }
       for (const [sec, entries] of Object.entries(step.set)) {
         set[sec] = {}
-        for (const [k, val] of Object.entries(entries)) {
-          const filled = typeof val === 'string' ? fill(val, v) : str(val)
-          set[sec][k] = step.quote && typeof val === 'string' ? `'${filled}'` : filled
-        }
+        for (const [k, val] of Object.entries(entries)) set[sec][k] = Array.isArray(val) ? val.map((x) => fill(x, v)) : one(val)
       }
       const before = fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : ''
       const after = setIniValues(before, set, step.spacing ?? ' = ')
@@ -94,7 +95,7 @@ export function applyConsoleConfig(c: ConsolePreset, extra: Record<string, strin
   const v = vars(c, extra)
   for (const d of [dir('bios', c.id), dir('games', c.id), dir('saves', c.id), dir('media', 'screenshots', c.id)])
     fs.mkdirSync(d, { recursive: true })
-  for (const step of [...e.portable, ...c.config]) {
+  for (const step of [...e.portable, ...c.config, ...(c.controls ?? [])]) {
     try {
       applyStep(step, v)
     } catch (err) {

@@ -94,5 +94,55 @@
     {
       "path": "{saves}/savedata/{serial}*"
     }
-  ]
+  ],
+  "controls": [
+    {
+      "type": "write",
+      "ifMissing": true,
+      "file": "{emu}/config/input_configs/global/Default.yml",
+      "lines": [
+        "Player 1 Input:",
+        "  Handler: XInput",
+        "  Device: \"XInput Pad #1\""
+      ]
+    }
+  ],
+  "graphics": {
+    "original": {
+      "steps": [
+        {
+          "type": "kv",
+          "file": "{emu}/config/config.yml",
+          "sep": ": ",
+          "set": {
+            "Resolution Scale": "100"
+          }
+        }
+      ]
+    },
+    "enhanced": {
+      "steps": [
+        {
+          "type": "kv",
+          "file": "{emu}/config/config.yml",
+          "sep": ": ",
+          "set": {
+            "Resolution Scale": "150"
+          }
+        }
+      ]
+    },
+    "max": {
+      "steps": [
+        {
+          "type": "kv",
+          "file": "{emu}/config/config.yml",
+          "sep": ": ",
+          "set": {
+            "Resolution Scale": "200"
+          }
+        }
+      ]
+    }
+  }
 }

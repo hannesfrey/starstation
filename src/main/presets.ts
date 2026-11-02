@@ -4,6 +4,7 @@ import { presetsDir, dir } from './paths'
 import { readJson } from './store'
 import { logger } from './log'
 import type { ConsoleIcon } from '../shared/types'
+import { padVars } from './controllers'
 
 const log = logger('presets')
 
@@ -16,7 +17,7 @@ export type ConfigStep =
       spacing?: string
       /** Quote string values (TOML). */
       quote?: boolean
-      set: Record<string, Record<string, string | number | boolean>>
+      set: Record<string, Record<string, string | number | boolean | string[]>>
       /** Only touch the file if it already exists. */
       ifExists?: boolean
     }
@@ -64,7 +65,8 @@ export interface ConsolePreset {
   emulator: string
   /** RetroArch core, if the emulator is RetroArch. */
   core?: string
-  launch: { args: string[]; cwd?: string }
+  /** insertAt: where resume / option arguments go in args (default 0 = first). */
+  launch: { args: string[]; cwd?: string; insertAt?: number }
   extensions: string[]
   games?: {
     /** Folder-based games (PS3 dumps): a folder counts as one game if it contains this relative path. */
@@ -101,11 +103,26 @@ export interface ConsolePreset {
   backup?: { path: string; shared?: boolean }[]
   /** Quick resume: the resume state the emulator writes on close ({state} = its path in args). */
   resume?: { state: string; args: string[]; /** Position in the launch args (default 0 = first). */ at?: number }
+  /** Starstation's controller mapping + screenshot button for this emulator ({pad} = XInput-0 / SDL-0 …). */
+  controls?: ConfigStep[]
+  /** Graphics levels: values for placeholders and/or config steps. */
+  graphics?: Record<'original' | 'enhanced' | 'max', GameOption>
+  /** CRT filter (RetroArch). */
+  crt?: { on: GameOption; off: GameOption }
+  /** Toggles such as widescreen patches. */
+  patches?: { id: string; label: string; default?: boolean; on: GameOption; off: GameOption }[]
   quickResume: boolean
   shaderHint?: boolean
   netplay?: boolean
   notes?: string
   custom?: boolean
+}
+
+/** One per-game option value: placeholder values, config steps and extra launch arguments. */
+export interface GameOption {
+  vars?: Record<string, string>
+  steps?: ConfigStep[]
+  args?: string[]
 }
 
 export interface EmulatorPreset {
@@ -189,6 +206,11 @@ export function vars(c: ConsolePreset, extra: Record<string, string> = {}): Reco
     console: c.id,
     core: c.core ?? '',
     resume: 'false',
+    // per-game option placeholders (filled for real at launch)
+    raint: 'false',
+    crt: 'false',
+    n64res: '640x480',
+    ...padVars(),
     ...extra
   }
 }
@@ -198,7 +220,8 @@ export function fill(template: string, v: Record<string, string>): string {
   return template.replace(/\{([a-z]+)(:\/)?\}/g, (m, key: string, fwd?: string) => {
     if (!(key in v)) return m
     if (!v[key]) return ''
-    const val = /[\\/]/.test(v[key]) ? path.normalize(v[key]).replace(/[\\/]+$/, '') : v[key]
+    // only real paths are normalized (bindings like "SDL-0/Touchpad" keep their slash)
+    const val = path.isAbsolute(v[key]) ? path.normalize(v[key]).replace(/[\\/]+$/, '') : v[key]
     return fwd ? val.replace(/\\/g, '/') : val
   })
 }

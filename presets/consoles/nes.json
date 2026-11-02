@@ -67,7 +67,16 @@
         "video_fullscreen = \"true\"",
         "pause_nonactive = \"false\"",
         "savestate_auto_save = \"true\"",
-        "savestate_auto_load = \"{resume}\""
+        "savestate_auto_load = \"{resume}\"",
+        "input_joypad_driver = \"{rajoypad}\"",
+        "input_autodetect_enable = \"true\"",
+        "input_player1_joypad_index = \"0\"",
+        "input_screenshot = \"f12\"",
+        "config_save_on_exit = \"false\"",
+        "video_driver = \"d3d11\"",
+        "video_scale_integer = \"{raint}\"",
+        "video_smooth = \"false\"",
+        "video_shader_enable = \"{crt}\""
       ]
     },
     {
@@ -85,5 +94,38 @@
   "resume": {
     "state": "{saves}/states/{basename}.state.auto",
     "args": []
+  },
+  "graphics": {
+    "original": {
+      "vars": {
+        "raint": "true"
+      }
+    },
+    "enhanced": {
+      "vars": {
+        "raint": "false"
+      }
+    },
+    "max": {
+      "vars": {
+        "raint": "false"
+      }
+    }
+  },
+  "crt": {
+    "on": {
+      "vars": {
+        "crt": "true"
+      },
+      "args": [
+        "--set-shader",
+        "{emu}/shaders/shaders_slang/crt/crt-geom.slangp"
+      ]
+    },
+    "off": {
+      "vars": {
+        "crt": "false"
+      }
+    }
   }
 }

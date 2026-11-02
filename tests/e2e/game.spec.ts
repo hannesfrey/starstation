@@ -206,3 +206,66 @@ test('add games tells disc images apart by their contents', async () => {
   expect(fs.existsSync(path.join(files, 'games', 'xbox', 'Box Game.iso'))).toBe(true)
   await app.close()
 })
+
+test('per-game graphics, CRT filter and patches; controller mapping follows the connected pad', async () => {
+  const files = makeFiles('options')
+  const level = (n: string) => ({ steps: [{ type: 'ini', file: '{emu}/gfx.ini', set: { GS: { scale: n } } }] })
+  const presets = makePresets(files, 1500, {
+    extra: {
+      shaderHint: true,
+      controls: [{ type: 'ini', file: '{emu}/controls.ini', set: { Pad1: { Cross: '{pad}/A' }, Hotkeys: { Screenshot: ['Keyboard/F12', '{padshot}', '{padshare}'] } } }],
+      graphics: { original: level('1'), enhanced: level('3'), max: level('6') },
+      crt: { on: { args: ['--crt'] }, off: {} },
+      patches: [
+        {
+          id: 'wide',
+          label: 'Widescreen patch',
+          on: { steps: [{ type: 'ini', file: '{emu}/gfx.ini', set: { Patches: { wide: 'true' } } }] },
+          off: { steps: [{ type: 'ini', file: '{emu}/gfx.ini', set: { Patches: { wide: 'false' } } }] }
+        }
+      ]
+    }
+  })
+  writeSettings(files, { bootAnimation: false })
+  fs.mkdirSync(path.join(files, 'games', 'testcon'), { recursive: true })
+  fs.writeFileSync(path.join(files, 'games', 'testcon', 'Alpha.tst'), 'a')
+  const emu = path.join(files, '_fakeemu')
+  const { app, page } = await launchApp(files, presets)
+  await expect(page.getByTestId('game-info')).toContainText('Alpha')
+
+  // Triangle menu shows the options with their defaults; ✕ cycles / toggles them
+  await page.keyboard.press(' ')
+  await expect(page.getByTestId('pitem-graphics')).toContainText('Enhanced')
+  await page.getByTestId('pitem-graphics').dblclick()
+  await expect(page.getByTestId('pitem-graphics')).toContainText('Max')
+  await expect(page.getByTestId('pitem-crt')).toContainText('Off')
+  await page.getByTestId('pitem-crt').dblclick()
+  await expect(page.getByTestId('pitem-crt')).toContainText('On')
+  await page.getByTestId('pitem-patch-wide').dblclick()
+  await expect(page.getByTestId('pitem-patch-wide')).toContainText('On')
+
+  // first start of a console with a shader hint: the notice shows, then the game starts
+  await page.getByTestId('pitem-play').dblclick()
+  await expect(page.getByTestId('notices')).toContainText('may stutter')
+  await expect(page.getByTestId('running')).toBeVisible({ timeout: 10_000 })
+  await waitIdle(page)
+  const gfx = fs.readFileSync(path.join(emu, 'gfx.ini'), 'utf8')
+  expect(gfx).toContain('scale = 6')
+  expect(gfx).toContain('wide = true')
+  expect(JSON.parse(fs.readFileSync(path.join(emu, 'launched.json'), 'utf8'))).toContain('--crt')
+  let controls = fs.readFileSync(path.join(emu, 'controls.ini'), 'utf8')
+  expect(controls).toContain('Cross = XInput-0/A')
+  expect(controls.match(/^Screenshot = /gm)).toHaveLength(1)
+
+  // a DualShock 4 without XInput driver: bindings switch to SDL, touchpad + share take screenshots too
+  await api(page, 'reportPads', ['Wireless Controller (STANDARD GAMEPAD Vendor: 054c Product: 09cc)', 'G29 Driving Force Racing Wheel'])
+  await api(page, 'setGameOption', 'testcon:alpha.tst', 'crt', false)
+  expect((await api<{ ok: boolean }>(page, 'launch', 'testcon:alpha.tst', 'fresh')).ok).toBe(true)
+  await waitIdle(page)
+  controls = fs.readFileSync(path.join(emu, 'controls.ini'), 'utf8')
+  expect(controls).toContain('Cross = SDL-0/A')
+  expect(controls).toContain('Screenshot = SDL-0/Touchpad')
+  expect(controls).toContain('Screenshot = SDL-0/Misc1')
+  expect(JSON.parse(fs.readFileSync(path.join(emu, 'launched.json'), 'utf8'))).not.toContain('--crt')
+  await app.close()
+})

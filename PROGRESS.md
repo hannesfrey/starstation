@@ -4,8 +4,8 @@ Read SPEC.md first. This file tracks where the build stands and every small deci
 
 ## Current state
 
-- **Phase:** Building. Steps 1–6 done. **Playable milestone reached 2026-11-02:** Hannes's setup is imported and Midnight Club 3 boots from Starstation (PS2).
-- **Next step:** Step 7 — Controllers & graphics
+- **Phase:** Building. Steps 1–7 done. **Playable milestone reached 2026-11-02:** Hannes's setup is imported and Midnight Club 3 boots from Starstation (PS2).
+- **Next step:** Step 8 — Mods
 
 ## How to work on it
 
@@ -116,6 +116,22 @@ Flags checked on 2026-11-02 against current sources: Azahar `-f <file>` (citra_q
 - **Add games** (spec 7): Settings → Library → Add games… or drag files onto the window. Console detected by extension, then by contents when several consoles share it: GameCube/Wii disc magic, ISO9660 `SYSTEM.CNF` BOOT2/BOOT (PS2/PS1), `PS3_GAME/PARAM.SFO`, XDVDFS (Xbox vs 360 by `default.xbe/.xex`, XGD1/2/3 offsets). Still ambiguous (.chd, .zip, …) → "Which console is this for?". Files are moved (with .cue tracks / .m3u discs); existing files are never overwritten.
 - Real tests 2026-11-02 (Hannes OK'd visible tests): PS2 fresh → closed normally (CloseMainWindow) → resume state written, memory cards backed up; PS2 resume → `-statefile …resume.p2s`, PCSX2 loaded the state and continued in the intro where it was closed. `scripts/real-launch.mjs` gained `--resume` and `--close <process>`.
 - Tests: `tests/e2e/game.spec.ts` (resume + backups + restore + keep 5 + previous resume; search, on-screen keys, collections, delete, add games incl. ambiguous .chd and no overwrite; disc sniffing for GC/Wii/Xbox).
+
+### Step 7 — Controllers & graphics (done 2026-11-02, tag `step-07-controls`)
+
+- **Unified mapping** (`controls` in the preset, applied before every launch). Player 1 = first controller, Western layout (✕/A = confirm, bottom button). The menu reports connected pads (`report-pads` → `config\controllers.json`): any XInput pad → XInput bindings (`XInput-0/…`), otherwise SDL (`SDL-0/…`); wheels/pedals are ignored. Placeholders `{pad}`, `{padshot}`, `{padshare}`, `{rajoypad}`.
+  - PCSX2 `[Pad1]` DualShock2 and DuckStation `[Pad1]` AnalogController (same binding names, checked in both sources: `DPadUp`, `+LeftTrigger`, `-LeftY`, `LargeMotor` …), `[InputSources] XInput/SDL = true`.
+  - RetroArch: `input_joypad_driver = xinput|sdl2`, autoconfig on, player 1 = pad 0.
+  - Dolphin: `GCPadNew.ini [GCPad1]` and `WiimoteNew.ini [Wiimote1]` with `XInput/0/Gamepad` (names from Dolphin's XInput.cpp). GameCube buttons by position (A bottom, B left, X right, Y top). Wii Remote: A/B(R2)/1/2/−/+/Home, pointer on the right stick, shake on R3, Nunchuk on the left stick + L1/L2.
+  - RPCS3: Hannes's `Default.yml` already used XInput; written only if missing. xemu auto-binds the first pad; Xenia uses XInput natively.
+  - **Azahar (3DS) is not mapped automatically**: its SDL bindings need the controller's GUID. Noted in the preset; map once in Azahar.
+- **Screenshot button**: each emulator's own screenshot hotkey is set to **F12** (PCSX2/DuckStation also bind the touchpad and Share button when an SDL pad is used; XInput can't see those buttons, so the DS3 via SCP has no controller screenshot button). Emulators already save into `media\screenshots\<console>`. Verified for real: F12 in PCSX2 → `media\screenshots\ps2\Midnight Club 3 …png`. Choice: Starstation does not grab F12 itself, because a global shortcut would take the key away from the emulator. Dolphin `Hotkeys.ini` is written with screenshot + Stop (Esc), Pause (F10) and fullscreen (Alt+Enter), because writing that file replaces Dolphin's default hotkeys.
+- **Graphics levels** (`graphics` in the preset; Triangle menu per game, default in Settings → General): PCSX2 upscale 1×/3×/6×; DuckStation scale 1×/4×/8× (+PGXP from Enhanced); Dolphin internal resolution 1×/3×/6×; RPCS3 resolution scale 100/150/200 %; Azahar 1×/3×/5×; xemu surface scale 1/2/3; Xenia draw resolution scale 1/2/3; N64 (Mupen64Plus-Next GLideN64) 640×480 / 1440×1080 / 2880×2160; NES/SNES Original = integer scaling, Enhanced/Max = fill the screen height.
+- **CRT filter** (RetroArch consoles): `--set-shader shaders/shaders_slang/crt/crt-geom.slangp` + `video_shader_enable`; `video_driver = d3d11` (slang shaders); `config_save_on_exit = false` so one console's settings never leak into RetroArch's main config.
+- **Patches** as per-game toggles: PS2 widescreen + no-interlacing (`[EmuCore] EnableWideScreenPatches / EnableNoInterlacingPatches`; apply when PCSX2 has a patch for the game), PS1 widescreen (`WidescreenHack` + 16:9), GameCube/Wii widescreen hack (`GFX.ini wideScreenHack`).
+- **Shader hint**: first start of a PS3 / Xbox 360 game shows "The first minutes may stutter…" for 3.5 s before launching.
+- Fixes found while testing: placeholders only normalize real absolute paths (bindings like `SDL-0/Touchpad` keep their slash); YAML keys keep their indentation (RPCS3 `config.yml`); INI keys can have several values (bind lists); `launch.insertAt` says where resume/option arguments go; the menu no longer misses a library update that arrives during startup (could leave it on Settings).
+- Tests: `tests/unit/ini.test.ts`; e2e "per-game graphics, CRT filter and patches; controller mapping follows the connected pad" (XInput → SDL switch, touchpad/share screenshot lines, shader hint notice).
 
 ### Small technical choices (steps 2–3)
 

@@ -1,4 +1,4 @@
-import type { AddGamesResult, AppState, EmulatorInfo, Game, GameDetails, ImportProgressInfo, ImportResultInfo, ImportSourceInfo, Settings } from '../../../shared/types'
+import type { AddGamesResult, AppState, EmulatorInfo, Game, GameDetails, GraphicsLevel, ImportProgressInfo, ImportResultInfo, ImportSourceInfo, Settings } from '../../../shared/types'
 import { formatPlayTime } from './model'
 
 /** Data some panels load on demand. */
@@ -48,12 +48,16 @@ export interface PanelHandlers {
   backupNow: (g: Game) => void
   restoreBackup: (g: Game, backupId: string) => void
   restorePreviousResume: (g: Game) => void
+  setGameOption: (g: Game, key: 'graphics' | 'crt' | 'patch', value: string | boolean, patchId?: string) => void
   deleteGame: (g: Game, withSaves: boolean) => void
   addGamesDialog: () => void
   addGameAs: (path: string, consoleId: string) => void
 }
 
 const onOff = (b: boolean) => (b ? 'On' : 'Off')
+const LEVELS: GraphicsLevel[] = ['original', 'enhanced', 'max']
+export const LEVEL_LABEL: Record<GraphicsLevel, string> = { original: 'Original', enhanced: 'Enhanced', max: 'Max' }
+const nextLevel = (l: GraphicsLevel) => LEVELS[(LEVELS.indexOf(l) + 1) % LEVELS.length]
 
 export function formatDate(t: number): string {
   const d = new Date(t)
@@ -179,6 +183,13 @@ export function buildPanel(id: string, arg: string | undefined, state: AppState,
             )
           },
           {
+            key: 'gfx',
+            label: 'Graphics for games',
+            value: LEVEL_LABEL[s.graphicsDefault],
+            run: () => (h.setSetting('graphicsDefault', nextLevel(s.graphicsDefault)), 'keep')
+          },
+          { key: 'crt', label: 'CRT filter for retro games', value: onOff(s.crtDefault), run: () => (h.setSetting('crtDefault', !s.crtDefault), 'keep') },
+          {
             key: 'login',
             label: 'Start with Windows',
             value: onOff(s.startWithWindows),
@@ -240,6 +251,21 @@ export function buildPanel(id: string, arg: string | undefined, state: AppState,
         { key: 'fav', label: st?.favorite ? 'Remove from Favorites' : 'Add to Favorites', run: () => (h.toggleFavorite(g), 'keep') },
         { key: 'collect', label: 'Add to collection…', run: () => (h.openPanel('add-to-collection', g.id), 'keep') }
       )
+      if (d?.available.graphics)
+        items.push({
+          key: 'graphics',
+          label: 'Graphics',
+          value: LEVEL_LABEL[d.options.graphics],
+          run: () => (h.setGameOption(g, 'graphics', nextLevel(d.options.graphics)), 'keep')
+        })
+      if (d?.available.crt) items.push({ key: 'crt', label: 'CRT filter', value: onOff(d.options.crt), run: () => (h.setGameOption(g, 'crt', !d.options.crt), 'keep') })
+      for (const p of d?.available.patches ?? [])
+        items.push({
+          key: `patch-${p.id}`,
+          label: p.label,
+          value: onOff(!!d?.options.patches[p.id]),
+          run: () => (h.setGameOption(g, 'patch', !d?.options.patches[p.id], p.id), 'keep')
+        })
       if (d?.canBackup ?? true)
         items.push({
           key: 'backups',

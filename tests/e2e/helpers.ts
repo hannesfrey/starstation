@@ -17,7 +17,7 @@ export function makeFiles(name: string): string {
  * Presets = the real ones + a "testcon" console whose emulator is a tiny Node script
  * that records its arguments and exits after `ms`.
  */
-export function makePresets(files: string, ms = 1500, opts: { quickResume?: boolean } = {}): string {
+export function makePresets(files: string, ms = 1500, opts: { quickResume?: boolean; extra?: Record<string, unknown> } = {}): string {
   const dst = path.join(files, '_presets')
   fs.cpSync(path.join(SOURCE, 'presets'), dst, { recursive: true })
   const emuDir = path.join(files, '_fakeemu')
@@ -47,12 +47,14 @@ export function makePresets(files: string, ms = 1500, opts: { quickResume?: bool
       order: 5,
       icon: 'cartridge',
       emulator: 'fakeemu',
-      launch: { args: ['{emu}/fake-emu.js', '{launch}'] },
+      // node needs the script first, so extra arguments go after it
+      launch: { args: ['{emu}/fake-emu.js', '{launch}'], insertAt: 1 },
       extensions: ['.tst'],
       config: [],
       backup: [{ path: '{saves}/{basename}.sav' }],
-      resume: { state: '{saves}/states/{basename}.state', args: ['--resume', '{state}'], at: 1 },
-      quickResume: !!opts.quickResume
+      resume: { state: '{saves}/states/{basename}.state', args: ['--resume', '{state}'] },
+      quickResume: !!opts.quickResume,
+      ...(opts.extra ?? {})
     })
   )
   return dst

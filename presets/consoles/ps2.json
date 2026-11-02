@@ -115,5 +115,157 @@
       "-statefile",
       "{state}"
     ]
-  }
+  },
+  "controls": [
+    {
+      "type": "ini",
+      "file": "{emu}/inis/PCSX2.ini",
+      "set": {
+        "InputSources": {
+          "XInput": "true",
+          "SDL": "true"
+        },
+        "Pad1": {
+          "Type": "DualShock2",
+          "Up": "{pad}/DPadUp",
+          "Right": "{pad}/DPadRight",
+          "Down": "{pad}/DPadDown",
+          "Left": "{pad}/DPadLeft",
+          "Triangle": "{pad}/Y",
+          "Circle": "{pad}/B",
+          "Cross": "{pad}/A",
+          "Square": "{pad}/X",
+          "Select": "{pad}/Back",
+          "Start": "{pad}/Start",
+          "L1": "{pad}/LeftShoulder",
+          "L2": "{pad}/+LeftTrigger",
+          "R1": "{pad}/RightShoulder",
+          "R2": "{pad}/+RightTrigger",
+          "L3": "{pad}/LeftStick",
+          "R3": "{pad}/RightStick",
+          "LUp": "{pad}/-LeftY",
+          "LRight": "{pad}/+LeftX",
+          "LDown": "{pad}/+LeftY",
+          "LLeft": "{pad}/-LeftX",
+          "RUp": "{pad}/-RightY",
+          "RRight": "{pad}/+RightX",
+          "RDown": "{pad}/+RightY",
+          "RLeft": "{pad}/-RightX",
+          "Analog": "{pad}/Guide",
+          "LargeMotor": "{pad}/LargeMotor",
+          "SmallMotor": "{pad}/SmallMotor"
+        },
+        "Hotkeys": {
+          "Screenshot": [
+            "Keyboard/F12",
+            "{padshot}",
+            "{padshare}"
+          ]
+        }
+      }
+    }
+  ],
+  "graphics": {
+    "original": {
+      "steps": [
+        {
+          "type": "ini",
+          "file": "{emu}/inis/PCSX2.ini",
+          "set": {
+            "EmuCore/GS": {
+              "upscale_multiplier": "1"
+            }
+          }
+        }
+      ]
+    },
+    "enhanced": {
+      "steps": [
+        {
+          "type": "ini",
+          "file": "{emu}/inis/PCSX2.ini",
+          "set": {
+            "EmuCore/GS": {
+              "upscale_multiplier": "3"
+            }
+          }
+        }
+      ]
+    },
+    "max": {
+      "steps": [
+        {
+          "type": "ini",
+          "file": "{emu}/inis/PCSX2.ini",
+          "set": {
+            "EmuCore/GS": {
+              "upscale_multiplier": "6"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "patches": [
+    {
+      "id": "widescreen",
+      "label": "Widescreen patch",
+      "on": {
+        "steps": [
+          {
+            "type": "ini",
+            "file": "{emu}/inis/PCSX2.ini",
+            "set": {
+              "EmuCore": {
+                "EnableWideScreenPatches": "true"
+              }
+            }
+          }
+        ]
+      },
+      "off": {
+        "steps": [
+          {
+            "type": "ini",
+            "file": "{emu}/inis/PCSX2.ini",
+            "set": {
+              "EmuCore": {
+                "EnableWideScreenPatches": "false"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "nointerlace",
+      "label": "No-interlacing patch",
+      "on": {
+        "steps": [
+          {
+            "type": "ini",
+            "file": "{emu}/inis/PCSX2.ini",
+            "set": {
+              "EmuCore": {
+                "EnableNoInterlacingPatches": "true"
+              }
+            }
+          }
+        ]
+      },
+      "off": {
+        "steps": [
+          {
+            "type": "ini",
+            "file": "{emu}/inis/PCSX2.ini",
+            "set": {
+              "EmuCore": {
+                "EnableNoInterlacingPatches": "false"
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
 }
