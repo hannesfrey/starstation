@@ -1,0 +1,26 @@
+import type { Panel } from './panels'
+
+export function PanelView({ panel, index, onSelect, onRun }: { panel: Panel; index: number; onSelect: (i: number) => void; onRun: () => void }) {
+  return (
+    <div className="panel" data-testid={`panel-${panel.id}`}>
+      <div className="panel-title">{panel.title}</div>
+      <div className="panel-items">
+        {panel.items.map((it, i) => (
+          <div
+            key={it.key}
+            data-testid={`pitem-${it.key}`}
+            className={`panel-item ${i === index ? 'active' : ''} ${it.info ? 'info' : ''} ${it.disabled ? 'disabled' : ''}`}
+            onClick={() => onSelect(i)}
+            onDoubleClick={() => {
+              onSelect(i)
+              onRun()
+            }}
+          >
+            <span className="panel-label">{it.label}</span>
+            {it.value !== undefined && <span className="panel-value">{it.value}</span>}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}

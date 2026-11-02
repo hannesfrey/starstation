@@ -1,0 +1,465 @@
+:root {
+  --cat-x: 20vw;
+  --cat-y: 26vh;
+  --text: #f4f7ff;
+  --text-dim: rgba(244, 247, 255, 0.62);
+  --glow: 0 0 18px rgba(255, 255, 255, 0.45);
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  font-family: 'Segoe UI Variable Display', 'Segoe UI', system-ui, sans-serif;
+  color: var(--text);
+  user-select: none;
+}
+
+* {
+  box-sizing: border-box;
+}
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #05070d;
+  cursor: default;
+}
+
+.app {
+  position: fixed;
+  inset: 0;
+}
+
+.bg-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.game-bg {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  opacity: 0;
+  animation: bgIn 0.9s 0.25s var(--ease) forwards;
+  pointer-events: none;
+}
+.game-bg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(0, 0, 0, 0.82) 0%, rgba(0, 0, 0, 0.35) 55%, rgba(0, 0, 0, 0.6) 100%);
+}
+@keyframes bgIn {
+  to {
+    opacity: 0.55;
+  }
+}
+
+/* ---------- boot ---------- */
+.boot {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(ellipse at center, #0b1530 0%, #02040a 70%);
+  z-index: 50;
+  transition: opacity 0.35s ease;
+}
+.boot.out {
+  opacity: 0;
+}
+.boot-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  animation: bootIn 2.6s var(--ease) both;
+}
+.boot-title {
+  font-size: 30px;
+  letter-spacing: 0.6em;
+  margin-right: -0.6em;
+  font-weight: 300;
+  text-shadow: var(--glow);
+}
+@keyframes bootIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.85);
+    filter: blur(8px);
+  }
+  35% {
+    opacity: 1;
+    transform: scale(1);
+    filter: blur(0);
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.9;
+  }
+}
+.logo {
+  filter: drop-shadow(0 0 24px rgba(160, 200, 255, 0.7));
+}
+
+/* ---------- top bar ---------- */
+.topbar {
+  position: absolute;
+  top: 3.2vh;
+  right: 4vw;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 19px;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+  z-index: 10;
+}
+.topbar .date {
+  color: var(--text-dim);
+}
+.battery-body {
+  display: inline-block;
+  width: 30px;
+  height: 14px;
+  border: 1.5px solid var(--text);
+  border-radius: 3px;
+  padding: 1.5px;
+  position: relative;
+  vertical-align: middle;
+}
+.battery-body::after {
+  content: '';
+  position: absolute;
+  right: -4px;
+  top: 3px;
+  width: 2px;
+  height: 5px;
+  background: var(--text);
+  border-radius: 1px;
+}
+.battery-fill {
+  display: block;
+  height: 100%;
+  background: var(--text);
+  border-radius: 1px;
+}
+
+/* ---------- XMB ---------- */
+.xmb {
+  position: absolute;
+  inset: 0;
+}
+.xmb-cats {
+  position: absolute;
+  left: var(--cat-x);
+  top: var(--cat-y);
+}
+.xmb-cat {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 9vw;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transform-origin: center;
+  transition:
+    transform 0.32s var(--ease),
+    opacity 0.32s;
+  color: rgba(255, 255, 255, 0.72);
+  cursor: pointer;
+  translate: -50% -50%;
+}
+.xmb-cat .icon {
+  transition:
+    width 0.25s var(--ease),
+    height 0.25s var(--ease);
+}
+.xmb-cat.active {
+  color: #fff;
+}
+.xmb-cat.active .icon {
+  filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.75));
+}
+.xmb-cat-label {
+  margin-top: 6px;
+  font-size: 17px;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.2s;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.6);
+}
+.xmb-cat.active .xmb-cat-label {
+  opacity: 1;
+}
+
+.xmb-items {
+  position: absolute;
+  left: calc(var(--cat-x) - 4.5vw + 1vw);
+  top: calc(var(--cat-y) + 8vh);
+  width: 56vw;
+}
+.xmb-item {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 8vh;
+  display: flex;
+  align-items: center;
+  gap: 1.6vw;
+  transition:
+    transform 0.28s var(--ease),
+    opacity 0.28s;
+  opacity: 0.72;
+  cursor: pointer;
+  width: 100%;
+}
+.xmb-item.above {
+  opacity: 0.5;
+}
+.xmb-item.active {
+  opacity: 1;
+}
+.xmb-item-icon {
+  width: 7vw;
+  height: 7vw;
+  max-width: 96px;
+  max-height: 96px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  transition: scale 0.25s var(--ease);
+  scale: 0.72;
+}
+.xmb-item.active .xmb-item-icon {
+  scale: 1;
+  filter: drop-shadow(0 0 12px rgba(255, 255, 255, 0.5));
+}
+.xmb-item-icon img {
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 4px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+}
+.xmb-item-label {
+  font-size: 20px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 44vw;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.6);
+}
+.xmb-item.active .xmb-item-label {
+  font-size: 23px;
+  text-shadow: var(--glow);
+}
+.xmb-item-sub {
+  font-size: 15px;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+.xmb-empty {
+  color: var(--text-dim);
+  font-size: 18px;
+  padding-left: 1vw;
+}
+
+.game-info {
+  position: absolute;
+  right: 5vw;
+  bottom: 14vh;
+  max-width: 30vw;
+  text-align: right;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.7);
+  animation: fadeIn 0.4s var(--ease);
+}
+.game-info-title {
+  font-size: 24px;
+  font-weight: 300;
+}
+.game-info-facts,
+.game-info-play,
+.game-info-fav {
+  font-size: 16px;
+  color: var(--text-dim);
+  margin-top: 4px;
+}
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+/* ---------- options panel ---------- */
+.panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 34vw;
+  min-width: 380px;
+  background: linear-gradient(90deg, rgba(5, 8, 16, 0.55), rgba(5, 8, 16, 0.92) 30%);
+  backdrop-filter: blur(6px);
+  padding: 14vh 3vw 0 4vw;
+  animation: panelIn 0.25s var(--ease);
+  z-index: 20;
+}
+@keyframes panelIn {
+  from {
+    transform: translateX(8vw);
+    opacity: 0;
+  }
+}
+.panel-title {
+  font-size: 22px;
+  font-weight: 300;
+  margin-bottom: 3vh;
+  color: var(--text-dim);
+}
+.panel-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  font-size: 19px;
+  padding: 1.25vh 1vw;
+  border-radius: 4px;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+.panel-item.active {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.25);
+  box-shadow: 0 0 16px rgba(255, 255, 255, 0.12);
+}
+.panel-item.info {
+  cursor: default;
+  color: var(--text-dim);
+  font-size: 16px;
+  word-break: break-word;
+}
+.panel-item.disabled {
+  opacity: 0.4;
+}
+.panel-value {
+  color: var(--text-dim);
+}
+
+/* ---------- hints ---------- */
+.hints {
+  position: absolute;
+  right: 4vw;
+  bottom: 4vh;
+  display: flex;
+  gap: 22px;
+  font-size: 16px;
+  color: var(--text-dim);
+  z-index: 25;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+}
+.hint {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.glyph {
+  display: inline-grid;
+  place-items: center;
+  font-weight: 600;
+  border: 1.5px solid currentColor;
+  color: var(--text);
+  line-height: 1;
+}
+.glyph.round {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  font-size: 13px;
+}
+.glyph.pill {
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+}
+
+/* ---------- notices ---------- */
+.notices {
+  position: absolute;
+  top: 9vh;
+  right: 3vw;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 40;
+  width: 360px;
+}
+.notice {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 16px;
+  background: rgba(8, 12, 22, 0.86);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  animation: noticeIn 0.3s var(--ease);
+}
+.notice.error {
+  border-color: rgba(255, 120, 120, 0.6);
+}
+.notice-title {
+  font-size: 16px;
+}
+.notice-detail {
+  font-size: 13px;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+@keyframes noticeIn {
+  from {
+    transform: translateX(30px);
+    opacity: 0;
+  }
+}
+
+/* ---------- running / screensaver ---------- */
+.running-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.7);
+  z-index: 30;
+  color: var(--text-dim);
+  font-size: 18px;
+}
+.running-title {
+  font-size: 32px;
+  color: var(--text);
+  font-weight: 300;
+}
+.running-hint {
+  font-size: 14px;
+  margin-top: 10px;
+}
+.screensaver {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 45;
+  animation: fadeIn 2s;
+}
+.app.idle .xmb,
+.app.idle .topbar,
+.app.idle .game-bg {
+  opacity: 0.08;
+  transition: opacity 2s;
+}

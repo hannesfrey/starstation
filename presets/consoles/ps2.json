@@ -1,0 +1,35 @@
+{
+  "id": "ps2",
+  "name": "PlayStation 2",
+  "short": "PS2",
+  "order": 100,
+  "icon": "disc",
+  "emulator": "pcsx2",
+  "launch": { "args": ["-batch", "-fullscreen", "--", "{launch}"] },
+  "extensions": [".iso", ".chd", ".cso", ".zso", ".gz", ".m3u", ".elf"],
+  "games": { "multiDisc": "m3u" },
+  "bios": {
+    "hint": "A PS2 BIOS dump (4 MB .bin, e.g. SCPH-70004).",
+    "files": [{ "label": "PS2 BIOS (any region)", "match": "\\.(bin|rom0)$", "size": [4194304], "required": true }],
+    "select": { "file": "{emu}/inis/PCSX2.ini", "section": "Filenames", "key": "BIOS", "prefer": "70004|7000[0-9]|EUR|USA" }
+  },
+  "gameId": { "method": "ps2-serial", "titleDb": { "type": "yaml-serial", "file": "{emu}/resources/GameIndex.yaml" } },
+  "saves": { "dir": "{saves}" },
+  "config": [
+    {
+      "type": "ini",
+      "file": "{emu}/inis/PCSX2.ini",
+      "set": {
+        "UI": { "SettingsVersion": "1", "SetupWizardIncomplete": "false", "StartFullscreen": "true", "ConfirmShutdown": "false" },
+        "Folders": {
+          "Bios": "{bios}",
+          "MemoryCards": "{saves}/memcards",
+          "Savestates": "{saves}/sstates",
+          "Snapshots": "{screenshots}"
+        },
+        "GameList": { "RecursivePaths": "{games}" }
+      }
+    }
+  ],
+  "quickResume": true
+}

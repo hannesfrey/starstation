@@ -4,8 +4,15 @@ Read SPEC.md first. This file tracks where the build stands and every small deci
 
 ## Current state
 
-- **Phase:** Start-of-run checklist done except secrets.json (optional, not blocking)
-- **Next step:** Step 1 — Explore
+- **Phase:** Building. Steps 1–3 done (step 3's real-emulator launch check happens in step 4 once emulators are imported).
+- **Next step:** Step 4 — Import from `Desktop\Emulator` + emulator manager → playable milestone
+
+## How to work on it
+
+- Open a PowerShell, `. .\env.ps1` (portable Node/gh, caches in `tools\`).
+- `npm run dev` (hot reload), `npx electron-vite build`, `npx tsc --noEmit -p tsconfig.json`
+- Tests: `npx vitest run` (unit), `npx playwright test` (drives the real Electron app with a throw-away Files folder and a fake emulator; see `tests/e2e/helpers.ts`). `SCREENSHOTS=1 npx playwright test screens` writes screenshots to `tools/cache/screens`.
+- Env overrides: `STARSTATION_FILES` (Files folder), `STARSTATION_PRESETS` (preset folder), `STARSTATION_LOG_STDOUT=1`.
 
 ## Start-of-run checklist
 
@@ -45,3 +52,37 @@ Source setup = `C:\Users\Hannes\Desktop\Emulator` (portable, built earlier; EmuD
 - **OneDrive**: signed in, Desktop not redirected → no warning.
 - **Disk**: 458 GB free on C:.
 - **Other tools in Emulator folder** (not imported, stay usable): ES-DE 3.5.0, Steam ROM Manager 2.6.0 (Steam shortcuts point into `Desktop\Emulator`).
+
+### Step 2 — Foundation (done 2026-11-02, tag `step-02-foundation`)
+
+Electron 45 + React 19 + TypeScript 7 + electron-vite 6 (Vite 8). Main process in `src/main`, preload `src/preload`, renderer `src/renderer`, shared types `src/shared/types.ts`.
+
+- XMB: category row (Settings · Photo · Collections · consoles by preset `order`), items above/below the row like the PS3, selected item enlarged, game info panel (year · genre · players · play time), background artwork fade-in (PS3 PIC1 etc.).
+- Background: canvas wave ribbons on a gradient; colour per month (own palette, `Background.tsx`), darker at night.
+- Boot animation ~3 s, original star logo + synthesized chime, skippable by any key/button/click; can be turned off in General.
+- Sounds: all synthesized with Web Audio (`sound.ts`) — no sound files. Paused while a game runs. Music setting exists (off); the music itself comes in step 9.
+- Controls (`input.ts`): keyboard per spec table, Gamepad API standard mapping, mouse wheel/click/double-click/right-click. L1/R1 jump between consoles, Start → Settings, Select/F → favorite. Wheels/pedals/flight sticks are filtered by name and never move the menu. Input is ignored while a game runs or the window isn't focused.
+- Notifications top-right (own timer each), clock top-right, controller connect/disconnect notices, battery icon placeholder (real level in step 9).
+- Screensaver: dims after N minutes idle (setting, default 5).
+- Options panel (right side) used for Settings pages, △ game menu and error messages.
+- Electron's own data (`userData`, caches, crash dumps, temp) is redirected into `Files\config\electron` — nothing in %APPDATA%. Logs: `Files\config\logs\starstation-YYYY-MM-DD.log` (14 days kept).
+
+### Step 3 — Library & launching (done 2026-11-02, tag `step-03-library`)
+
+- Presets are JSON data: `presets/consoles/<id>.json` (one per console) + `presets/emulators/<id>.json` (shared by consoles, e.g. RetroArch). Placeholders: `{emu} {bios} {games} {saves} {media} {screenshots} {config} {launch} {game} {core}`; `{name:/}` gives forward slashes. Config step types: `ini`, `kv`, `touch`, `mkdir`, `write`, `link` (junction). Steps are re-applied before every launch, so paths stay right even if the folder moves.
+- PS1 (DuckStation), PS2 (PCSX2), PS3 (RPCS3) presets written.
+- Scanning `Files\games\<console>` (depth 4); files referenced by .cue/.m3u are hidden; PS3 folder dumps (PS3_GAME/PARAM.SFO), ISOs, and installed PKG games (`emulators\rpcs3\dev_hdd0\game`, category HG; GD = update data is skipped, and an installed copy with the same serial as a disc game is hidden).
+- Titles: PS1/PS2 serial from SYSTEM.CNF (own ISO9660 reader handles .iso and raw .bin/.cue), looked up in DuckStation `gamedb.yaml` (also gives year/genre/players) and PCSX2 `GameIndex.yaml`. PS3 title/ID/ICON0/PIC1 from PARAM.SFO (folders, installed, and inside ISOs — extracted to `media\artwork\ps3\<ID>`). Fallback: cleaned file name (tags removed, "Zelda, The" → "The Zelda"). CHD/CSO can't be read without a decompressor → file name.
+- Cache `config\library\library.json` (unchanged files keep their cached identity); stats separate in `config\library\stats.json` (play time, play count, last played, favorite) — kept separate so packages can exclude them.
+- Launch: preset command line, cwd = emulator folder, TEMP inside Files. Starstation waits for the process to exit, adds play time, and comes back to the front. Clear errors with a fix button: emulator missing → Install, BIOS missing → Open BIOS folder, PS3 firmware missing → Install PS3 firmware, file gone → Rescan; "closed right away" notice if the emulator exits within 4 s with an error code.
+- Tests: 11 unit tests (SFO, ISO9660 incl. the real Midnight Club 3 ISO → SLES-53717, serials, title cleaning, ini/kv editing, title DB) and 3 Playwright tests (boot/skip, scan + launch + return + play time + favorite, settings toggle + △ menu + launch error with fix).
+
+### Small technical choices (steps 2–3)
+
+- Console column layout: Recently played ▸ and Favorites ▸ folders appear at the top when they have entries, then all games A–Z directly in the column (fewer clicks than an "All games" folder). Search comes with step 6.
+- The selection is remembered per list by item key, so it doesn't jump when "Recently played" appears above it.
+- PS3: `dev_hdd0` stays inside `emulators\rpcs3\dev_hdd0` (RPCS3 can only move the whole virtual disk); `saves\ps3\savedata` is a junction to `dev_hdd0\home\00000001\savedata`. `/games/` is remapped to `games\ps3`.
+- PCSX2 needs a named BIOS file: if none (or a missing one) is set in `PCSX2.ini`, Starstation picks one, preferring SCPH-70004 / EUR / USA.
+- `--` is passed before the game path for DuckStation and PCSX2 so file names starting with `-` can't be read as options.
+- Local images are served through a `starstation-media://` protocol that only allows files inside `Files\`.
+- Editing pitfall: Windows PowerShell 5.1 reads UTF-8 as ANSI — edit source with the Edit tool or `-Encoding UTF8`.

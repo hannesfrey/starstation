@@ -1,0 +1,36 @@
+{
+  "id": "ps3",
+  "name": "PlayStation 3",
+  "short": "PS3",
+  "order": 110,
+  "icon": "disc",
+  "emulator": "rpcs3",
+  "launch": { "args": ["--no-gui", "--fullscreen", "{launch}"] },
+  "extensions": [".iso"],
+  "games": { "folderMarker": "PS3_GAME/PARAM.SFO", "installedDir": "{emu}/dev_hdd0/game" },
+  "bios": {
+    "hint": "RPCS3 needs the official PS3 system software (PS3UPDAT.PUP) from playstation.com, installed once.",
+    "url": "https://www.playstation.com/en-us/support/hardware/ps3/system-software/",
+    "files": [
+      {
+        "label": "PS3 firmware",
+        "match": "",
+        "path": "{emu}/dev_flash/vsh/module/vsh.self",
+        "required": true,
+        "fix": { "label": "Install PS3 firmware", "command": "install-ps3-firmware" }
+      }
+    ]
+  },
+  "gameId": { "method": "ps3-sfo" },
+  "saves": { "dir": "{saves}", "note": "PS3 saves stay inside RPCS3's virtual hard disk; saves\\ps3\\savedata is a link to them." },
+  "config": [
+    { "type": "mkdir", "path": "{emu}/dev_hdd0/home/00000001/savedata" },
+    { "type": "link", "path": "{saves}/savedata", "target": "{emu}/dev_hdd0/home/00000001/savedata" },
+    { "type": "kv", "file": "{emu}/config/vfs.yml", "sep": ": ", "set": { "/dev_hdd0/": "{emu:/}/dev_hdd0/", "/games/": "{games:/}/" } },
+    { "type": "mkdir", "path": "{emu}/screenshots" },
+    { "type": "link", "path": "{screenshots}/rpcs3", "target": "{emu}/screenshots" }
+  ],
+  "quickResume": false,
+  "shaderHint": true,
+  "notes": "Games can be folder dumps (with PS3_GAME), ISOs, or PKG games installed into RPCS3."
+}

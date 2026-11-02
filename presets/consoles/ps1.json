@@ -1,0 +1,32 @@
+{
+  "id": "ps1",
+  "name": "PlayStation",
+  "short": "PS1",
+  "order": 90,
+  "icon": "disc-mini",
+  "emulator": "duckstation",
+  "launch": { "args": ["-batch", "-fullscreen", "--", "{launch}"] },
+  "extensions": [".cue", ".chd", ".pbp", ".m3u", ".iso", ".ecm", ".mds", ".img"],
+  "games": { "multiDisc": "m3u" },
+  "bios": {
+    "hint": "Any PS1 BIOS dump (512 KB, e.g. SCPH-1001 / SCPH-5502 / SCPH-7502). DuckStation picks the right region automatically.",
+    "files": [{ "label": "PS1 BIOS (any region)", "match": "\\.(bin|rom|mbx)$", "size": [524288], "required": true }]
+  },
+  "gameId": { "method": "ps1-serial", "titleDb": { "type": "yaml-serial", "file": "{emu}/resources/gamedb.yaml" } },
+  "saves": { "dir": "{saves}" },
+  "config": [
+    {
+      "type": "ini",
+      "file": "{emu}/settings.ini",
+      "set": {
+        "Main": { "SetupWizardIncomplete": "false", "StartFullscreen": "true", "ConfirmPowerOff": "false" },
+        "BIOS": { "SearchDirectory": "{bios}" },
+        "MemoryCards": { "Directory": "{saves}/memcards" },
+        "Folders": { "SaveStates": "{saves}/savestates", "Screenshots": "{screenshots}" },
+        "GameList": { "RecursivePaths": "{games}" }
+      }
+    }
+  ],
+  "quickResume": true,
+  "notes": "Multi-disc games: put the discs and a .m3u playlist in one folder; only the .m3u is listed."
+}

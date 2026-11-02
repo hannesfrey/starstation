@@ -1,0 +1,191 @@
+import type { AppState, ConsoleInfo, Game, GameStats } from '../../../shared/types'
+
+export interface XItem {
+  key: string
+  label: string
+  sub?: string
+  icon: string
+  /** Absolute path of box art / icon image. */
+  art?: string
+  game?: Game
+  kind: 'game' | 'folder' | 'action' | 'info'
+  /** For folders: the items inside. */
+  children?: () => XItem[]
+  /** For actions: what ✕ does. */
+  run?: () => void
+  /** Shown under the item list when a folder is empty. */
+  emptyText?: string
+}
+
+export interface XColumn {
+  id: string
+  label: string
+  icon: string
+  items: XItem[]
+  console?: ConsoleInfo
+  /** Number of games in this console column. */
+  games?: number
+}
+
+export interface ModelHandlers {
+  openPanel: (id: string, arg?: string) => void
+  command: (cmd: string, arg?: string) => void
+  toggleFullscreen: () => void
+  quit: () => void
+}
+
+export function formatPlayTime(sec: number): string {
+  if (sec < 60) return sec > 0 ? 'Played less than a minute' : 'Not played yet'
+  const h = Math.floor(sec / 3600)
+  const m = Math.floor((sec % 3600) / 60)
+  return `Played ${h ? `${h}h ` : ''}${m}m`
+}
+
+export function gameItem(g: Game, s?: GameStats): XItem {
+  return {
+    key: g.id,
+    label: g.title,
+    sub: s && s.playTime > 0 ? formatPlayTime(s.playTime) : 'Not played yet',
+    icon: 'disc',
+    art: g.icon,
+    game: g,
+    kind: 'game'
+  }
+}
+
+const byTitle = (a: Game, b: Game) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base', numeric: true })
+
+export function buildColumns(state: AppState, h: ModelHandlers): XColumn[] {
+  const { library, consoles, settings } = state
+  const stats = library.stats
+  const cols: XColumn[] = []
+
+  // ---- Settings ----
+  cols.push({
+    id: 'settings',
+    label: 'Settings',
+    icon: 'settings',
+    items: [
+      { key: 'general', label: 'General', sub: 'Fullscreen, sounds, empty consoles, button icons', icon: 'settings', kind: 'action', run: () => h.openPanel('general') },
+      {
+        key: 'consoles',
+        label: 'Consoles',
+        sub: `${consoles.filter((c) => c.gameCount > 0).length} with games`,
+        icon: 'controller',
+        kind: 'folder',
+        children: () =>
+          consoles.map((c) => ({
+            key: `console-${c.id}`,
+            label: c.name,
+            sub: c.statusText,
+            icon: c.icon,
+            kind: 'action' as const,
+            run: () => h.openPanel('console', c.id)
+          }))
+      },
+      {
+        key: 'library',
+        label: 'Library',
+        sub: `${library.games.length} games`,
+        icon: 'library',
+        kind: 'action',
+        run: () => h.openPanel('library')
+      },
+      {
+        key: 'display',
+        label: 'Fullscreen',
+        sub: 'Switch between window and fullscreen',
+        icon: 'display',
+        kind: 'action',
+        run: () => h.toggleFullscreen()
+      },
+      {
+        key: 'about',
+        label: 'About Starstation',
+        sub: `Version ${state.info.version}`,
+        icon: 'about',
+        kind: 'action',
+        run: () => h.openPanel('about')
+      },
+      { key: 'quit', label: 'Quit Starstation', icon: 'power', kind: 'action', run: () => h.quit() }
+    ]
+  })
+
+  // ---- Photo ----
+  cols.push({
+    id: 'photo',
+    label: 'Photo',
+    icon: 'photo',
+    items: [
+      {
+        key: 'screenshots-folder',
+        label: 'Screenshots folder',
+        sub: 'Open the folder with all screenshots',
+        icon: 'folder',
+        kind: 'action',
+        run: () => h.command('open-folder', 'screenshots')
+      }
+    ]
+  })
+
+  // ---- Collections ----
+  const favs = library.games.filter((g) => stats[g.id]?.favorite).sort(byTitle)
+  cols.push({
+    id: 'collections',
+    label: 'Collections',
+    icon: 'collections',
+    items: [
+      {
+        key: 'col-favorites',
+        label: 'Favorites',
+        sub: `${favs.length} games`,
+        icon: 'favorite',
+        kind: 'folder',
+        children: () => favs.map((g) => gameItem(g, stats[g.id])),
+        emptyText: 'Press SELECT on a game to add it to Favorites.'
+      }
+    ]
+  })
+
+  // ---- Consoles ----
+  for (const c of consoles) {
+    const games = library.games.filter((g) => g.console === c.id).sort(byTitle)
+    if (games.length === 0 && !settings.showEmptyConsoles) continue
+    const items: XItem[] = []
+    const recent = games
+      .filter((g) => stats[g.id]?.lastPlayed)
+      .sort((a, b) => (stats[b.id]!.lastPlayed ?? 0) - (stats[a.id]!.lastPlayed ?? 0))
+      .slice(0, 10)
+    const cFavs = games.filter((g) => stats[g.id]?.favorite)
+    if (recent.length)
+      items.push({
+        key: `${c.id}-recent`,
+        label: 'Recently played',
+        sub: recent[0].title,
+        icon: 'recent',
+        kind: 'folder',
+        children: () => recent.map((g) => gameItem(g, stats[g.id]))
+      })
+    if (cFavs.length)
+      items.push({
+        key: `${c.id}-favorites`,
+        label: 'Favorites',
+        sub: `${cFavs.length} games`,
+        icon: 'favorite',
+        kind: 'folder',
+        children: () => cFavs.map((g) => gameItem(g, stats[g.id]))
+      })
+    for (const g of games) items.push({ ...gameItem(g, stats[g.id]), icon: c.icon })
+    if (!games.length)
+      items.push({
+        key: `${c.id}-empty`,
+        label: 'No games yet',
+        sub: `Put ${c.short} games in Files\\games\\${c.id}`,
+        icon: 'empty',
+        kind: 'action',
+        run: () => h.command('open-folder', `games:${c.id}`)
+      })
+    cols.push({ id: c.id, label: c.short, icon: c.icon, items, console: c, games: games.length })
+  }
+  return cols
+}

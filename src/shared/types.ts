@@ -1,0 +1,142 @@
+// Types shared by the main process, preload and renderer.
+
+export type ButtonIcons = 'auto' | 'playstation' | 'xbox'
+export type GraphicsLevel = 'original' | 'enhanced' | 'max'
+
+export interface Settings {
+  startFullscreen: boolean
+  startWithWindows: boolean
+  sounds: boolean
+  music: boolean
+  screensaverMinutes: number
+  showEmptyConsoles: boolean
+  buttonIcons: ButtonIcons
+  graphicsDefault: GraphicsLevel
+  crtDefault: boolean
+  netplayNickname: string
+  /** Seconds the boot animation lasts (0 = skip). */
+  bootAnimation: boolean
+}
+
+export const DEFAULT_SETTINGS: Settings = {
+  startFullscreen: false,
+  startWithWindows: false,
+  sounds: true,
+  music: false,
+  screensaverMinutes: 5,
+  showEmptyConsoles: false,
+  buttonIcons: 'auto',
+  graphicsDefault: 'enhanced',
+  crtDefault: false,
+  netplayNickname: 'Player',
+  bootAnimation: true
+}
+
+export type ConsoleIcon = 'cartridge' | 'cartridge-wide' | 'cartridge-n64' | 'disc' | 'disc-mini' | 'handheld' | 'box' | 'box-360' | 'remote'
+
+/** Console preset as the renderer sees it (subset of the preset data file). */
+export interface ConsoleInfo {
+  id: string
+  name: string
+  short: string
+  order: number
+  icon: ConsoleIcon
+  emulatorId: string
+  emulatorName: string
+  extensions: string[]
+  gameCount: number
+  status: ConsoleStatus
+  statusText: string
+  netplay: boolean
+  quickResume: boolean
+  custom: boolean
+}
+
+export type ConsoleStatus = 'ready' | 'missing-emulator' | 'missing-bios' | 'no-games'
+
+export interface Game {
+  /** Stable id: console + path relative to Files\games (lowercase). */
+  id: string
+  console: string
+  /** Absolute path to the file or folder that is launched / identifies the game. */
+  path: string
+  /** File passed to the emulator (may differ from path, e.g. PS3 EBOOT.BIN). */
+  launchPath: string
+  kind: 'file' | 'folder' | 'installed'
+  title: string
+  serial?: string
+  /** Absolute paths to local images (file:// served via starstation-media://). */
+  icon?: string
+  background?: string
+  year?: string
+  genre?: string
+  players?: number
+  size: number
+  addedAt: number
+  discs?: number
+}
+
+export interface GameStats {
+  playTime: number
+  playCount: number
+  lastPlayed?: number
+  favorite?: boolean
+}
+
+export interface LibraryView {
+  games: Game[]
+  stats: Record<string, GameStats>
+}
+
+export interface Notice {
+  id: number
+  kind: 'info' | 'success' | 'warning' | 'error' | 'controller' | 'achievement' | 'update' | 'save' | 'mod'
+  title: string
+  detail?: string
+  /** Optional fix action shown with the notice, e.g. "Open BIOS folder". */
+  action?: { label: string; command: string; arg?: string }
+}
+
+export interface LaunchResult {
+  ok: boolean
+  error?: string
+  fix?: { label: string; command: string; arg?: string }
+}
+
+export interface RunningGame {
+  gameId: string
+  title: string
+  startedAt: number
+}
+
+export interface AppInfo {
+  version: string
+  filesDir: string
+  isPackaged: boolean
+}
+
+export interface AppState {
+  info: AppInfo
+  settings: Settings
+  consoles: ConsoleInfo[]
+  library: LibraryView
+  running: RunningGame | null
+}
+
+/** API exposed by the preload script as window.starstation. */
+export interface StarstationApi {
+  getState(): Promise<AppState>
+  setSetting<K extends keyof Settings>(key: K, value: Settings[K]): Promise<Settings>
+  rescan(): Promise<LibraryView>
+  launch(gameId: string): Promise<LaunchResult>
+  toggleFavorite(gameId: string): Promise<GameStats>
+  openFolder(kind: string, arg?: string): Promise<void>
+  runCommand(command: string, arg?: string): Promise<void>
+  toggleFullscreen(): Promise<boolean>
+  quit(): Promise<void>
+  mediaUrl(absPath: string): string
+  on(channel: 'notice', cb: (n: Notice) => void): () => void
+  on(channel: 'library', cb: (l: LibraryView) => void): () => void
+  on(channel: 'consoles', cb: (c: ConsoleInfo[]) => void): () => void
+  on(channel: 'running', cb: (r: RunningGame | null) => void): () => void
+}
