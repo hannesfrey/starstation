@@ -32,4 +32,16 @@ Read SPEC.md first. This file tracks where the build stands and every small deci
 
 ## Step log
 
-(none yet)
+### Step 1 — Explore (done 2026-11-02)
+
+Source setup = `C:\Users\Hannes\Desktop\Emulator` (portable, built earlier; EmuDeck itself was uninstalled — no `C:\Emulation`, no `%APPDATA%\EmuDeck`).
+
+- **Emulators** (`Emulator\Emulators\`, all portable): duckstation (latest), PCSX2-Qt v2.8.2 (`portable.ini`, `inis\PCSX2.ini`), RPCS3 v0.0.43-20551 (firmware 4.93 in `dev_flash`, `config\vfs.yml` remaps dev_hdd0 + games), RetroArch 1.22.2 (21 cores incl. mesen, snes9x, mupen64plus_next, gambatte, mgba, genesis_plus_gx), Dolphin 2609a (`portable.txt`), PrimeHack 1.0.9, Cemu 2.6, azahar 2126.2 (`user\`), melonDS 1.1, Ryujinx 1.3.3, Vita3K, xemu 0.8.139 (`xemu.toml`), xenia_canary 02d2cb5 (`portable.txt`), shadPS4 0.21.0, ScummVM 2026.4.0, Supermodel. Full list with sha256s: `Emulator\Downloads\download-log.txt`.
+- **BIOS** (`Emulator\Emulation\bios\`, flat): PS2 Europe set — SCPH-30003/30004R/39004/50004/70004 (+ NVM/MEC/ROM1/ROM2/EROM), SCPH-77004 (ROM0/ROM1/DIFF/INF/NVM). PCSX2 default = SCPH-70004_BIOS_V12_EUR_200.BIN. No PS1, Xbox (MCPX/BIOS/HDD), 3DS or other BIOS yet.
+- **Saves**: `Emulation\saves\pcsx2\memcards\Mcd001.ps2, Mcd002.ps2`; savestates `SLES-53717 (208183AF).01.p2s` + `.resume.p2s` (Midnight Club 3). DuckStation/RetroArch save folders exist but are empty. RPCS3 `dev_hdd0` is empty apart from a `TEST12345` test folder created during setup (do not import).
+- **Games**: PS2 only — `Midnight Club 3 - DUB Edition Remix (Europe, Australia) (En,Fr,De,Es,It).iso` (8.1 GB) plus the same game as `.7z` (3.0 GB archive) and `Vimm's Lair.txt`. Import moves the .iso; the .7z is a duplicate archive and is left in place (not a playable format), and the .txt is ignored. ps3\ has only ES-DE's `shortcuts\` folder.
+- **PS3 game formats to support**: folder dumps (`<Game>\PS3_GAME\USRDIR\EBOOT.BIN`), ISO, and installed PKG games in `dev_hdd0\game\<TITLEID>\` (PARAM.SFO + ICON0.PNG/PIC1.PNG).
+- **Controllers**: DS3 via SCP (XInput "Xbox 360 Controller for Windows", VID_045E PID_028E) + Logitech G29 (SDL/DirectInput, must be ignored for menu navigation and never be "Pad 1").
+- **OneDrive**: signed in, Desktop not redirected → no warning.
+- **Disk**: 458 GB free on C:.
+- **Other tools in Emulator folder** (not imported, stay usable): ES-DE 3.5.0, Steam ROM Manager 2.6.0 (Steam shortcuts point into `Desktop\Emulator`).
