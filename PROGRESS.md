@@ -4,15 +4,15 @@ Read SPEC.md first. This file tracks where the build stands and every small deci
 
 ## Current state
 
-- **Phase:** Start-of-run checklist (waiting on Hannes: GitHub login + secrets.json)
+- **Phase:** Start-of-run checklist done except secrets.json (optional, not blocking)
 - **Next step:** Step 1 — Explore
 
 ## Start-of-run checklist
 
-- [ ] GitHub login — Hannes double-clicks `source\github-login.cmd` (portable gh, token stored in `tools\gh-config`)
-- [ ] Create repo `starstation` (public) — done by Claude after login
-- [ ] ScreenScraper credentials → `Files\config\secrets.json` (filled in by Hannes)
-- [ ] RetroAchievements credentials → `Files\config\secrets.json` (filled in by Hannes)
+- [x] GitHub login — account `hannesfrey` (id 339208969); token in `tools\gh-config\hosts.yml` (plain text, git-ignored)
+- [x] Create repo `hannesfrey/starstation` (public)
+- [ ] ScreenScraper credentials → `Files\config\secrets.json` (Hannes fills in; not blocking)
+- [ ] RetroAchievements credentials → `Files\config\secrets.json` (Hannes fills in; not blocking)
 - [x] Controller detected: DualShock 3 via SCP driver (appears as "Xbox 360 Controller for Windows", XInput) + Logitech G29 wheel
 - [x] OneDrive check: OneDrive Personal is signed in, but Desktop is NOT redirected/synced — no warning needed
 
@@ -25,6 +25,7 @@ Read SPEC.md first. This file tracks where the build stands and every small deci
 
 ## Small technical choices
 
+- Git identity is repo-local: `hannesfrey <339208969+hannesfrey@users.noreply.github.com>` (GitHub no-reply address, so no personal email is published). The credential helper is repo-local too and calls the portable gh with `GH_CONFIG_DIR` set. No global `~/.gitconfig` exists: `gh auth setup-git` created one, so it was deleted and removed from `github-login.cmd`.
 - gh uses `--insecure-storage` so the token lives in `tools\gh-config` instead of Windows Credential Manager (keeps it portable). `tools\` is git-ignored.
 - The controller is a DS3 through SCP, which reports as Xbox 360. Plan: button icons follow the detected type, with a Settings override "Button icons: PlayStation / Xbox / Auto" so Hannes can force PlayStation icons.
 - The G29 wheel is also a gamepad to the Gamepad API — menu navigation must ignore wheel/pedal axes (filter by `mapping === "standard"` / known IDs).
