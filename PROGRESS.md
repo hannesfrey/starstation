@@ -4,8 +4,8 @@ Read SPEC.md first. This file tracks where the build stands and every small deci
 
 ## Current state
 
-- **Phase:** Building. Steps 1–3 done (step 3's real-emulator launch check happens in step 4 once emulators are imported).
-- **Next step:** Step 4 — Import from `Desktop\Emulator` + emulator manager → playable milestone
+- **Phase:** Building. Steps 1–5 done. **Playable milestone reached 2026-11-02:** Hannes's setup is imported and Midnight Club 3 boots from Starstation (PS2).
+- **Next step:** Step 6 — Game experience
 
 ## How to work on it
 
@@ -78,7 +78,7 @@ Electron 45 + React 19 + TypeScript 7 + electron-vite 6 (Vite 8). Main process i
 - Launch: preset command line, cwd = emulator folder, TEMP inside Files. Starstation waits for the process to exit, adds play time, and comes back to the front. Clear errors with a fix button: emulator missing → Install, BIOS missing → Open BIOS folder, PS3 firmware missing → Install PS3 firmware, file gone → Rescan; "closed right away" notice if the emulator exits within 4 s with an error code.
 - Tests: 11 unit tests (SFO, ISO9660 incl. the real Midnight Club 3 ISO → SLES-53717, serials, title cleaning, ini/kv editing, title DB) and 3 Playwright tests (boot/skip, scan + launch + return + play time + favorite, settings toggle + △ menu + launch error with fix).
 
-### Step 4 — Import + emulator manager (code done 2026-11-02; Hannes's real import pending)
+### Step 4 — Import + emulator manager (done 2026-11-02, tag `step-04-import`)
 
 - `src/main/importer.ts`: finds `Desktop\Emulator` (portable layout) and real EmuDeck setups (`<drive>:\Emulation` + `%APPDATA%\EmuDeck\Emulators`). Plan per console preset (`import.roms/saves/storage` in the preset JSON + emulator `importNames`): copy emulators used by presets, BIOS files matching preset rules (+ companion files with the same name stem, e.g. PS2 .NVM/.MEC/.ROM1), saves, emulator storage (PS3 dev_hdd0) → verify everything (size for all, SHA-1 for files < 64 MB) → only then move games (same drive = rename; other drive = copy + verify + remove). Existing files are never overwritten (conflicts kept and reported), empty folders skipped, archives/notes (.7z, .txt) stay in the source. Versions of imported emulators come from `Downloads\download-log.txt`. History in `config\imports.json`.
 - Safety: hidden test runs (`STARSTATION_HEADLESS=1`) never look at the real PC; tests use `STARSTATION_IMPORT_SOURCE` with a fake setup.
@@ -86,7 +86,9 @@ Electron 45 + React 19 + TypeScript 7 + electron-vite 6 (Vite 8). Main process i
 - `scripts/fetch-bin.mjs`: fetches `7zr.exe` from 7-zip.org pinned by SHA-256; falls back to a local copy with the same hash (7-zip.org DNS failed on 2026-11-02, so Hannes's verified copy from `Desktop\Emulator\Tools\7zip` was used).
 - PS3 firmware: "Install PS3 firmware" asks for PS3UPDAT.PUP (button opens Sony's official page) and runs `rpcs3 --installfw`.
 - Tests: import e2e (copy/verify/move, config rewrite, PS3 saves link), "headless never sees the real PC", and a network test (`NETWORK=1`) that really installs PCSX2 from GitHub — passed.
-- **Pending:** Hannes's real import. On 2026-11-02 PCSX2 from `Desktop\Emulator` was still open (since 2026-11-01 19:29, no game), so the import waits until Hannes closes it — don't kill his processes.
+- **Real import done 2026-11-02** (Hannes closed PCSX2 and OK'd visible tests): `node scripts/real-import.mjs --run` → 38 items copied + verified (8 emulators 1.9 GB, BIOS files, PS2 memcards/savestates, RPCS3 storage), 1 game moved (Midnight Club 3, SLES-53717). Stays in `Desktop\Emulator`: the .7z duplicate, Vimm's Lair.txt, `SCPH-70004_BIOS_V12_PAL_200.MEC` (stray file with a different name stem; PCSX2 doesn't need .MEC) and emulators no preset uses (Cemu, PPSSPP, Ryujinx, …).
+- Real launch: `node scripts/real-launch.mjs ps2 25 shot.png` → PCSX2 found BIOS v02.00 EUR, serial SLES-53717, ELF running, Rockstar intro on screen, DS3 opened as XInput player 1. PCSX2.ini folders point to `Files\bios\ps2`, `saves\ps2\memcards|sstates`, `media\screenshots\ps2`.
+- Hannes's settings: `buttonIcons: playstation`. Shortcut `Desktop\Starstation\Starstation.lnk` → dev build (`electron.exe source`) until the installer exists (step 12).
 
 ### Step 5 — Remaining presets (data done 2026-11-02, tag `step-05-presets`; real launch checks pending)
 
@@ -99,7 +101,7 @@ Flags checked on 2026-11-02 against current sources: Azahar `-f <file>` (citra_q
 - Xbox 360 on Xenia Canary: .iso/.xex/.zar and folder games with `default.xex` (new generic `games.folderLaunch`), `content` linked into saves, shader hint, no quick resume.
 - Download sources: GitHub releases for Azahar/xemu/Xenia (like PCSX2/RPCS3/DuckStation), fixed official URLs for RetroArch 1.22.2 (buildbot) and Dolphin 2609a (dl.dolphin-emu.org) with their download pages noted.
 - Test: all 11 presets load in spec order and show as XMB columns.
-- **Pending:** real install tests for the other emulators (`NETWORK=1`, large downloads — postponed while Hannes was streaming) and real game launches per preset (visible — ask Hannes first; only PS2 has a game so far).
+- **Pending:** real install tests for the other emulators (`NETWORK=1`, large downloads — postponed while Hannes was streaming) and real game launches per preset (Hannes OK'd visible tests on 2026-11-02; PS2 verified; the other consoles have no games yet — verify when Hannes adds some).
 
 ### Small technical choices (steps 2–3)
 
