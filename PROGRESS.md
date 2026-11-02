@@ -4,8 +4,8 @@ Read SPEC.md first. This file tracks where the build stands and every small deci
 
 ## Current state
 
-- **Phase:** Building. Steps 1–11 done. **Playable milestone reached 2026-11-02:** Hannes's setup is imported and Midnight Club 3 boots from Starstation (PS2).
-- **Next step:** Step 12 — Release (started 2026-11-02, see "Step 12 — in progress" below)
+- **Phase:** All 12 steps done; v1.0.0 released 2026-11-02. **Playable milestone reached 2026-11-02:** Hannes's setup is imported and Midnight Club 3 boots from Starstation (PS2).
+- **Next step:** Hannes tests with the checklist at the end of this file; fixes and new presets go into 1.0.x releases (`npm run release` needs GH_TOKEN; create/push the tag first).
 
 ## How to work on it
 
@@ -193,19 +193,32 @@ Settings column now: General · Graphics · Consoles (+ Add a console) · Contro
 - Install location itself is chosen by the installer (step 12); the wizard shows where Files is.
 - Tests: `packages.spec.ts` (save to folder contents + never-included files; croc send/receive between two hidden app instances via a local relay; merge keeps the receiver's files and settings; mod re-enabled on the receiver's paths; download cleaned up; folder receive into an empty PC takes the package settings), `wizard.spec.ts` (full Start-fresh path, back step, no wizard on next start; existing setup → Continue). Test helper `makeFiles` marks setup done unless `{ wizard: true }`.
 
-### Step 12 — Release (in progress)
+### Step 12 — Release (done 2026-11-02, tags `step-12-release`, `v1.0.0`)
 
-Done so far:
-- Original app icon: `scripts/make-icon.cjs` (run hidden: `node_modules\electron\dist\electron.exe scripts/make-icon.cjs`) → `build/icon.ico` (16–256 px) + `build/icon.png` (white four-point star + orbit on a midnight-blue tile).
+- **Installer** (electron-builder NSIS, x64, per user, unsigned): `Starstation-Setup-1.0.0.exe`. Default folder `Desktop\Starstation` (preInit, kept on reinstall); whatever folder is picked, the program goes into `<folder>\Starstation\Files\app` (custom page after the folder page), so the uninstaller's `RMDir /r $INSTDIR` can only ever remove the program. Shortcut `<folder>\Starstation\Starstation.lnk`; no desktop/start-menu shortcuts. The packaged app treats the parent of `Files\app` as Files; if the program is ever found elsewhere it uses a separate "Starstation Files" folder next to it, never a random parent.
+- electron-builder copies the installer into `%LOCALAPPDATA%\starstation-updater` for smaller updates; the installer now deletes that copy (everything stays in Starstation's folder; updates download in full).
+- **Auto-updates** (electron-updater, GitHub provider): checked 8 s after start, downloaded in the background, installed when Starstation closes → active on next start, with a notification. Settings → About → Check for updates. Starstation sets `LOCALAPPDATA` to `Files\config\electron\local` for itself (updater cache); emulators still get the real one.
+- **Tested hidden on 2026-11-02:** silent install into `tools\cache\install-test\Starstation\Files\app` → shortcut + layout correct, packaged app finds its Files, 11 presets, bundled 7zr/croc, data folders; silent uninstall → `Files\app`, shortcut and registry entries gone, a game in `Files\games` and all other Files folders kept; reinstall → shortcut back, game found, wizard offers "Continue where you left off"; nothing left in AppData/LocalAppData/registry after the final uninstall. Update check of the packaged build against the real release → "up to date (1.0.0)".
+- **First GitHub release:** https://github.com/hannesfrey/starstation/releases/tag/v1.0.0 (installer, blockmap, latest.yml). The first publish attempt failed half way (GitHub needs the tag first); the release was completed with gh and `latest.yml` regenerated from the uploaded installer (sha512 + size checked).
+- After the release: `checkNow` reports the check result even without the update events (only mattered in hidden runs) — in the source, ships with the next version.
+- Original app icon: `scripts/make-icon.cjs` → `build/icon.ico` / `icon.png`; README for the repo.
 
-Plan for the rest (next session):
-1. **electron-builder config** in package.json `build`: appId `io.github.hannesfrey.starstation`, NSIS x64, `oneClick: false`, `perMachine: false`, `createDesktopShortcut: false`, `createStartMenuShortcut: false`, `include: build/installer.nsh`, icon `build/icon.ico`, extraResources `presets` → `presets`, `resources/bin` → `bin`, `build/icon.ico` → `icon.ico`; publish github `hannesfrey/starstation`; artifact `Starstation-Setup-${version}.exe`.
-2. **Layout safety (important):** the uninstaller runs `RMDir /r $INSTDIR`, so games and saves must never be inside INSTDIR. INSTDIR must be `<folder>\Starstation\Files\app` (the app finds Files as the parent of its exe folder). The template's `instFilesPre` only appends `\Starstation` when the name is missing, so `installer.nsh` must: `preInit` → default InstallLocation `$DESKTOP\Starstation\Files\app` (only if not set yet, so reinstalls keep it); enforce the `\Files\app` suffix (either no directory page, or a custom `.onVerifyInstDir` / fix-up before install files); `customInstall` → `CreateShortCut "<Starstation folder>\Starstation.lnk"` (two `${GetParent}`); `customUnInstall` → delete that shortcut. Also guard in `paths.ts`: when packaged and the exe folder isn't `...\Files\app`, refuse to treat a non-"Files" parent as the data folder.
-3. **Auto-updates:** electron-updater with the GitHub provider: check at startup (packaged only), download in the background, install on quit, notify "Update ready — active on next start"; Settings → About → Check for updates. Its download cache defaults to %LOCALAPPDATA%; redirect it into `Files\config\electron` (e.g. set LOCALAPPDATA for the main process only, and pass the original to emulators).
-4. Window icon + Steam shortcut icon from `icon.ico` (resources path when packaged, `build/` in dev).
-5. **Test hidden:** silent install (`/S /D=…`) into `tools\cache\install-test\Starstation\Files\app`, start the packaged exe with `STARSTATION_HEADLESS=1` via Playwright, check that Files is the parent, then silently uninstall and check that only `Files\app` and the shortcut are gone and a marker in `Files\games` stays; reinstall continues. (Writes and then removes an HKCU uninstall entry: fine under "test all you need", report it.)
-6. Version 1.0.0, `npm run release` with `GH_TOKEN` from the portable gh → first GitHub release; check that `latest.yml` is uploaded.
-7. Replace the dev shortcut in `Desktop\Starstation` only after asking Hannes; final report with a test checklist (things not tested for real: other consoles' launches without games, RetroAchievements/ScreenScraper without credentials, Steam add on the real Steam, netplay with real players).
+## Final report — test checklist for Hannes
+
+Done and tested by Claude (hidden + muted automated tests, 16 e2e + unit; real checks on this PC): import of Desktop\Emulator, PS2 launch/resume/screenshot with real PCSX2, real artwork, real health check, installer install/uninstall/reinstall in a test folder, update feed.
+
+Please try (things only Hannes can judge or that need his accounts/hardware):
+1. **Install for real:** run the installer from the release (More info → Run anyway). Choose the Desktop folder; it installs into the existing `Desktop\Starstation\Files\app` next to your games and replaces the dev shortcut. *(Not done yet — Claude asked first.)*
+2. **First start:** the wizard shows "Continue where you left off" → choose it.
+3. **Controller:** move through the menu with the DS3 (the G29 must not move it), Settings → Controllers → Test buttons.
+4. **Midnight Club 3:** ✕ → Resume / Start fresh, play, close the game (window ✕ or PCSX2 menu) → back in the menu with play time; F12 screenshot → Photo column.
+5. **Look & sound:** boot animation, menu sounds, Settings → General → Background music on/off, screensaver after 5 min.
+6. **Add a game:** drag a game file onto the window (e.g. a PS1 or NES game) → it is moved into the right folder and appears; emulator not installed yet → Settings → Emulators → Install.
+7. **RetroAchievements / ScreenScraper:** fill in `Files\config\secrets.json` (Settings → RetroAchievements → Open secrets.json), then Log in. Not tested with a real account yet.
+8. **Steam:** Settings → Steam → Add Starstation to Steam (close Steam first). Not run on the real Steam yet.
+9. **Packages:** Settings → Packages → Send by code to another PC (e.g. a sibling's), receive there.
+10. **Not covered without games:** real launches for NES/SNES/N64 (RetroArch cores install on first use), GameCube/Wii, 3DS, PS1, PS3 (needs PS3UPDAT.PUP from Sony), Xbox (needs BIOS/HDD image), Xbox 360; online play with real players; GameBanana installs of real mods.
+
 
 ### Small technical choices (steps 2–3)
 

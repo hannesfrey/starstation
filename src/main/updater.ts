@@ -38,7 +38,11 @@ export function startUpdater(notify: (n: Omit<Notice, 'id'>) => void): void {
 export async function checkNow(): Promise<typeof state> {
   if (!app.isPackaged) return { status: 'dev' }
   try {
-    await autoUpdater.checkForUpdates()
+    const r = await autoUpdater.checkForUpdates()
+    const latest = r?.updateInfo.version
+    // the events above also set this; the answer itself is enough when they aren't registered
+    if (latest && state.status !== 'downloading' && state.status !== 'ready')
+      state = latest === app.getVersion() ? { status: 'latest', version: latest } : { status: 'downloading', version: latest }
   } catch (e) {
     state = { status: 'error', error: (e as Error).message }
   }
