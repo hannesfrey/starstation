@@ -130,6 +130,7 @@ export function buildColumns(state: AppState, h: ModelHandlers, shots: Screensho
       { key: 'ra', label: 'RetroAchievements', sub: 'Log in once for all emulators', icon: 'trophy', kind: 'action', run: () => h.openPanel('retroachievements') },
       { key: 'netplay', label: 'Netplay', sub: `Play online as "${settings.netplayNickname}"`, icon: 'network', kind: 'action', run: () => h.openPanel('netplay-settings') },
       { key: 'steam', label: 'Steam', sub: 'Add Starstation to Steam for Big Picture mode', icon: 'steam', kind: 'action', run: () => h.openPanel('steam') },
+      { key: 'packages', label: 'Packages', sub: 'Send or receive a whole setup', icon: 'package', kind: 'action', run: () => h.openPanel('packages') },
       { key: 'diagnostics', label: 'Diagnostics', sub: 'Export a report with logs and settings', icon: 'info', kind: 'action', run: () => h.openPanel('diagnostics') },
       {
         key: 'display',

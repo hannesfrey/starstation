@@ -5,6 +5,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import crypto from 'node:crypto'
+import { execFileSync } from 'node:child_process'
 
 const bin = path.resolve(import.meta.dirname, '..', 'resources', 'bin')
 fs.mkdirSync(bin, { recursive: true })
@@ -16,6 +17,15 @@ const files = [
     url: 'https://www.7-zip.org/a/7zr.exe',
     sha256: '256feca8e274e5da655e2a284fabafd9f554365eb164862089dacd4e8276d282',
     local: [path.join(os.homedir(), 'Desktop', 'Emulator', 'Tools', '7zip', '7zr.exe')]
+  },
+  {
+    // croc v11.6.3 (MIT) for sending packages by code — https://github.com/schollz/croc/releases
+    // the zip is pinned (sha256 from the release's checksums.txt); croc.exe + LICENSE are taken out of it
+    name: 'croc_v11.6.3_Windows-64bit.zip',
+    url: 'https://github.com/schollz/croc/releases/download/v11.6.3/croc_v11.6.3_Windows-64bit.zip',
+    sha256: '47b6c51aa4b4ae0370296926a33a0818338448ada38eb76519ad067932c61330',
+    local: [path.resolve(import.meta.dirname, '..', 'tools', 'cache', 'croc-dl', 'croc.zip')],
+    unzip: { 'croc.exe': 'croc.exe', LICENSE: 'croc-LICENSE.txt' }
   }
 ]
 
@@ -23,6 +33,10 @@ const sha = (buf) => crypto.createHash('sha256').update(buf).digest('hex')
 
 for (const f of files) {
   const dst = path.join(bin, f.name)
+  if (f.unzip && Object.values(f.unzip).every((n) => fs.existsSync(path.join(bin, n)))) {
+    console.log(`${f.name}: unpacked files present`)
+    continue
+  }
   if (fs.existsSync(dst) && sha(fs.readFileSync(dst)) === f.sha256) {
     console.log(`${f.name}: present, verified`)
     continue
@@ -40,4 +54,11 @@ for (const f of files) {
   if (sha(buf) !== f.sha256) throw new Error(`${f.name}: sha256 mismatch (${sha(buf)}) — the official file may have been updated; check and re-pin`)
   fs.writeFileSync(dst, buf)
   console.log(`${f.name}: ${buf.length} bytes, sha256 verified`)
+  if (f.unzip) {
+    const tmp = fs.mkdtempSync(path.join(bin, '.unzip-'))
+    execFileSync(path.join(process.env.SystemRoot ?? 'C:\Windows', 'System32', 'tar.exe'), ['-xf', dst, '-C', tmp])
+    for (const [from, to] of Object.entries(f.unzip)) fs.copyFileSync(path.join(tmp, from), path.join(bin, to))
+    fs.rmSync(tmp, { recursive: true, force: true })
+    fs.rmSync(dst)
+  }
 }

@@ -24,6 +24,14 @@ const api = {
   pickExe: () => ipcRenderer.invoke('pick-exe'),
   clearLibraryCache: () => ipcRenderer.invoke('library-clear-cache'),
   licenses: () => ipcRenderer.invoke('licenses'),
+  packageSize: (choice: unknown) => ipcRenderer.invoke('package-size', choice),
+  packageSend: (choice: unknown) => ipcRenderer.invoke('package-send', choice),
+  packageSaveToFolder: (choice: unknown) => ipcRenderer.invoke('package-save-folder', choice),
+  packageReceive: (code: string, useSettings: boolean) => ipcRenderer.invoke('package-receive', code, useSettings),
+  packageReceiveFolder: (useSettings: boolean, folder?: string) => ipcRenderer.invoke('package-receive-folder', useSettings, folder),
+  packageCancel: () => ipcRenderer.invoke('package-cancel'),
+  setupStatus: () => ipcRenderer.invoke('setup-status'),
+  setupDone: () => ipcRenderer.invoke('setup-done'),
   gameDetails: (gameId: string) => ipcRenderer.invoke('game-details', gameId),
   backupNow: (gameId: string) => ipcRenderer.invoke('backup-now', gameId),
   restoreBackup: (gameId: string, backupId: string) => ipcRenderer.invoke('backup-restore', gameId, backupId),
@@ -58,7 +66,7 @@ const api = {
   quit: () => ipcRenderer.invoke('quit'),
   mediaUrl: (absPath: string) => `starstation-media://local/${encodeURIComponent(absPath)}`,
   on: (channel: string, cb: (payload: unknown) => void) => {
-    const allowed = ['notice', 'library', 'consoles', 'collections', 'screenshots', 'battery', 'running', 'navigate', 'import-progress', 'emulator-progress']
+    const allowed = ['notice', 'library', 'consoles', 'collections', 'screenshots', 'battery', 'package-progress', 'running', 'navigate', 'import-progress', 'emulator-progress']
     if (!allowed.includes(channel)) throw new Error(`Unknown channel ${channel}`)
     const h = (_e: unknown, payload: unknown) => cb(payload)
     ipcRenderer.on(channel, h)

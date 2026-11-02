@@ -716,3 +716,18 @@ body,
 .entry.over {
   z-index: 26;
 }
+
+/* ---------- first-start wizard ---------- */
+.panel.wizard {
+  left: 0;
+  width: auto;
+  padding: 18vh 22vw 0;
+  background: radial-gradient(ellipse at 50% 30%, rgba(8, 12, 24, 0.7), rgba(4, 6, 12, 0.96));
+}
+.panel.wizard .panel-title {
+  font-size: 2rem;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--text);
+  margin-bottom: 3vh;
+}

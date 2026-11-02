@@ -314,6 +314,18 @@ export async function deleteMod(g: Game, id: string): Promise<void> {
   await fsp.rm(path.join(modsRoot(g), id), { recursive: true, force: true })
 }
 
+/** Mods that arrived in a package and were on at the sender: switch them on here (this PC's paths). */
+export async function enablePending(g: Game): Promise<number> {
+  const st = load(g)
+  const pending = st.mods.filter((m) => (m as ModEntry & { pendingOn?: boolean }).pendingOn)
+  if (!pending.length) return 0
+  for (const m of pending) delete (m as ModEntry & { pendingOn?: boolean }).pendingOn
+  save(g, st)
+  let n = 0
+  for (const m of pending) if ((await setModEnabled(g, m.id, true, 'other')).ok) n++
+  return n
+}
+
 export function hasEnabledMods(g: Game): boolean {
   return load(g).mods.some((m) => m.enabled)
 }

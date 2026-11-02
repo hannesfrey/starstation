@@ -18,6 +18,8 @@ export interface Settings {
   netplayRelay: string
   /** Seconds the boot animation lasts (0 = skip). */
   bootAnimation: boolean
+  /** Download missing artwork in the background. */
+  artworkAuto: boolean
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -32,7 +34,8 @@ export const DEFAULT_SETTINGS: Settings = {
   crtDefault: false,
   netplayNickname: 'Player',
   netplayRelay: 'madrid',
-  bootAnimation: true
+  bootAnimation: true,
+  artworkAuto: true
 }
 
 export type ConsoleIcon = 'cartridge' | 'cartridge-wide' | 'cartridge-n64' | 'disc' | 'disc-mini' | 'handheld' | 'box' | 'box-360' | 'remote'
@@ -192,6 +195,14 @@ export interface StarstationApi {
   pickExe(): Promise<string | null>
   clearLibraryCache(): Promise<void>
   licenses(): Promise<{ id: string; name: string; license: string; file?: string }[]>
+  packageSize(choice: PackageChoice): Promise<number>
+  packageSend(choice: PackageChoice): Promise<{ ok: boolean; error?: string }>
+  packageSaveToFolder(choice: PackageChoice): Promise<{ ok: boolean; error?: string; folder?: string } | null>
+  packageReceive(code: string, useSettings: boolean): Promise<{ ok: boolean; error?: string; added?: number; kept?: number }>
+  packageReceiveFolder(useSettings: boolean, folder?: string): Promise<{ ok: boolean; error?: string; added?: number; kept?: number } | null>
+  packageCancel(): Promise<void>
+  setupStatus(): Promise<{ done: boolean; existing: boolean; filesDir: string }>
+  setupDone(): Promise<void>
   gameDetails(gameId: string): Promise<GameDetails | null>
   backupNow(gameId: string): Promise<BackupInfo | null>
   restoreBackup(gameId: string, backupId: string): Promise<{ ok: boolean; error?: string }>
@@ -235,6 +246,7 @@ export interface StarstationApi {
   on(channel: 'collections', cb: (c: Collection[]) => void): () => void
   on(channel: 'screenshots', cb: (s: Screenshot[]) => void): () => void
   on(channel: 'battery', cb: (b: BatteryInfo | null) => void): () => void
+  on(channel: 'package-progress', cb: (p: PackageProgress) => void): () => void
 }
 
 export interface BackupInfo {
@@ -375,6 +387,35 @@ export interface CustomConsoleForm {
   exe: string
   args: string
   extensions: string
+}
+
+/** What goes into a package. games = 'all' or a list of console ids. */
+export interface PackageChoice {
+  emulators: boolean
+  bios: boolean
+  games: 'all' | string[]
+  mods: boolean
+  settings: boolean
+  saves: boolean
+}
+
+export interface PackageManifest {
+  format: number
+  app: 'Starstation'
+  version: string
+  createdAt: string
+  includes: PackageChoice
+  emulators: string[]
+  games: number
+  bytes?: number
+}
+
+export interface PackageProgress {
+  phase: 'packing' | 'waiting' | 'sending' | 'receiving' | 'unpacking' | 'done' | 'error'
+  /** 0..1 */
+  pct: number
+  code?: string
+  detail?: string
 }
 
 export interface Collection {

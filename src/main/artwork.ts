@@ -4,7 +4,7 @@ import path from 'node:path'
 import { net } from 'electron'
 import { dir } from './paths'
 import { readJson, writeJson } from './store'
-import { getSecrets } from './settings'
+import { getSecrets, getSettings } from './settings'
 import { artKey } from './library/library'
 import { logger } from './log'
 import type { Game } from '../shared/types'
@@ -164,6 +164,7 @@ let busy = false
 /** Fetch artwork for games that have none, a few at a time, in the background. */
 export function queueArtwork(games: Game[], onChange: () => void): void {
   if (process.env.STARSTATION_HEADLESS === '1' && !process.env.STARSTATION_ARTWORK_BASE) return // hidden tests stay offline
+  if (!getSettings().artworkAuto) return // "download artwork later" in the setup wizard
   const known = new Set(queue.map((g) => g.id))
   queue.push(...games.filter((g) => !known.has(g.id) && (!g.icon || !g.background)))
   if (busy) return

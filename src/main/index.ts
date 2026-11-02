@@ -31,10 +31,13 @@ import { listRooms, netplayArgs, netplayVars } from './netplay'
 import { addToSteam, steamStatus } from './steam'
 import { customConsoleForm, removeCustomConsole, saveCustomConsole } from './customconsole'
 import { allEmulators } from './presets'
+import { cancelTransfer, packageSize, receiveByCode, receiveFromFolder, sendByCode, buildPackage } from './packages'
+import { enablePending } from './mods'
+import { readJson } from './store'
 import { consoleInfos } from './consoles'
 import { launch, setLauncherWindow, runningGame, stopRunning, onBeforeLaunch, onAfterExit } from './launcher'
 import { attachWindow, notify, send } from './notify'
-import type { AddGamesResult, AppState, CustomConsoleForm, EmulatorInfo, GameDetails, NetplayRoom, Settings } from '../shared/types'
+import type { AddGamesResult, AppState, CustomConsoleForm, EmulatorInfo, GameDetails, NetplayRoom, PackageChoice, PackageProgress, Settings } from '../shared/types'
 
 // ---- before ready: keep everything inside Files\ ----
 redirectElectronPaths()
@@ -331,6 +334,77 @@ function registerIpc(): void {
     loadLibrary()
     scanAndArt()
   })
+  // ---- packages ----
+  const pkgProgress = (p: PackageProgress) => send('package-progress', p)
+  const afterReceive = async (r: { ok: boolean; added?: number; kept?: number; error?: string }) => {
+    if (!r.ok) {
+      pkgProgress({ phase: 'error', pct: 0, detail: r.error })
+      return r
+    }
+    loadPresets()
+    for (const c of allConsoles()) if (getEmulator(c.emulator)) applyConsoleConfig(c)
+    const lib = rescan()
+    for (const g of lib.games) await enablePending(getGame(g.id)!).catch((e) => log.warn('mod re-enable failed', e))
+    send('library', view())
+    send('consoles', consoleInfos())
+    send('collections', listCollections())
+    notify({ kind: 'success', title: 'Package received', detail: `${r.added ?? 0} file(s) added${r.kept ? `, ${r.kept} already here and kept` : ''}.` })
+    return r
+  }
+  ipcMain.handle('package-size', (_e, c: PackageChoice) => packageSize(c))
+  ipcMain.handle('package-send', async (_e, c: PackageChoice) => {
+    const r = await sendByCode(c, () => undefined, pkgProgress).catch((e) => ({ ok: false, error: (e as Error).message }))
+    if (!r.ok) pkgProgress({ phase: 'error', pct: 0, detail: r.error })
+    else notify({ kind: 'success', title: 'Package sent' })
+    return r
+  })
+  ipcMain.handle('package-save-folder', async (_e, c: PackageChoice) => {
+    let base = dir('backups', 'packages')
+    if (!HEADLESS) {
+      const pick = await dialog.showOpenDialog(win!, { title: 'Choose where to save the package (e.g. a USB drive)', properties: ['openDirectory', 'createDirectory'] })
+      if (pick.canceled || !pick.filePaths[0]) return null
+      base = pick.filePaths[0]
+    }
+    const folder = path.join(base, `Starstation package ${new Date().toISOString().slice(0, 10)}`)
+    try {
+      await buildPackage(c, folder, false, pkgProgress)
+      pkgProgress({ phase: 'done', pct: 1, detail: folder })
+      notify({ kind: 'success', title: 'Package saved', detail: folder, action: { label: 'Open folder', command: 'open-path', arg: folder } })
+      return { ok: true, folder }
+    } catch (e) {
+      pkgProgress({ phase: 'error', pct: 0, detail: (e as Error).message })
+      return { ok: false, error: (e as Error).message }
+    }
+  })
+  ipcMain.handle('package-receive', async (_e, code: string, useSettings: boolean) =>
+    afterReceive(await receiveByCode(String(code), { useSettings: !!useSettings }, pkgProgress).catch((e) => ({ ok: false, error: (e as Error).message })))
+  )
+  ipcMain.handle('package-receive-folder', async (_e, useSettings: boolean, folder?: string) => {
+    let f = folder
+    if (!f || !HEADLESS) {
+      if (HEADLESS) return null
+      const pick = await dialog.showOpenDialog(win!, { title: 'Choose the package folder', properties: ['openDirectory'] })
+      if (pick.canceled || !pick.filePaths[0]) return null
+      f = pick.filePaths[0]
+    }
+    return afterReceive(await receiveFromFolder(f, { useSettings: !!useSettings }, pkgProgress).catch((e) => ({ ok: false, error: (e as Error).message, added: 0, kept: 0 })))
+  })
+  ipcMain.handle('package-cancel', () => cancelTransfer())
+  // ---- first start ----
+  ipcMain.handle('setup-status', () => {
+    const done = !!readJson<{ done?: boolean }>(dir('config', 'setup.json'), {}).done
+    // the first scan may still be running: also look into the games folders themselves
+    const gamesOnDisk = allConsoles().some((c) => {
+      try {
+        return fs.readdirSync(dir('games', c.id)).length > 0
+      } catch {
+        return false
+      }
+    })
+    const existing = gamesOnDisk || view().games.length > 0 || allEmulators().some((e) => !path.isAbsolute(e.folder) && fs.existsSync(emulatorExe(e)))
+    return { done, existing, filesDir: filesDir() }
+  })
+  ipcMain.handle('setup-done', () => writeJson(dir('config', 'setup.json'), { done: true, at: new Date().toISOString() }))
   ipcMain.handle('licenses', () =>
     allEmulators()
       .filter((e) => !path.isAbsolute(e.folder))

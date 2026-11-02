@@ -7,9 +7,11 @@ const ELECTRON = path.join(SOURCE, 'node_modules', 'electron', 'dist', 'electron
 const NODE = path.join(SOURCE, 'tools', 'node', 'node.exe')
 
 /** A fresh, throw-away Files\ folder for one test run. */
-export function makeFiles(name: string): string {
+export function makeFiles(name: string, opts: { wizard?: boolean } = {}): string {
   const d = path.join(SOURCE, 'tools', 'cache', 'e2e', `${name}-${Date.now()}`)
   fs.mkdirSync(path.join(d, 'config'), { recursive: true })
+  // the first-start wizard is tested on its own (wizard.spec.ts)
+  if (opts.wizard !== true) fs.writeFileSync(path.join(d, 'config', 'setup.json'), JSON.stringify({ done: true }))
   return d
 }
 

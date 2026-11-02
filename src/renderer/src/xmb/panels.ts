@@ -1,4 +1,4 @@
-import type { AddGamesResult, AppState, CustomConsoleForm, EmulatorInfo, Game, GameDetails, GbGame, GbMod, GbModDetails, HealthIssue, ModsView, NetplayRoom, GraphicsLevel, ImportProgressInfo, ImportResultInfo, ImportSourceInfo, Settings } from '../../../shared/types'
+import type { AddGamesResult, AppState, CustomConsoleForm, PackageChoice, PackageProgress, EmulatorInfo, Game, GameDetails, GbGame, GbMod, GbModDetails, HealthIssue, ModsView, NetplayRoom, GraphicsLevel, ImportProgressInfo, ImportResultInfo, ImportSourceInfo, Settings } from '../../../shared/types'
 import { formatPlayTime } from './model'
 
 /** Data some panels load on demand. */
@@ -26,6 +26,8 @@ export interface PanelExtra {
   licenses?: { id: string; name: string; license: string; file?: string }[]
   form?: CustomConsoleForm
   pad?: { name: string; api: string } | null
+  pkg: { choice: PackageChoice; size?: number; progress?: PackageProgress; busy: boolean; result?: string; useSettings?: boolean; code?: string }
+  setup?: { done: boolean; existing: boolean; filesDir: string }
 }
 
 export interface PItem {
@@ -88,6 +90,15 @@ export interface PanelHandlers {
   newConsole: () => void
   clearCache: () => void
   testPad: () => void
+  pkgToggle: (key: keyof PackageChoice | `console:${string}`) => void
+  pkgSend: () => void
+  pkgSaveFolder: () => void
+  pkgReceiveCode: (useSettings: boolean) => void
+  pkgReceiveFolder: (useSettings: boolean) => void
+  pkgCancel: () => void
+  installAll: () => void
+  wizardNext: (to?: number) => void
+  wizardFinish: (artwork: boolean) => void
   deleteGame: (g: Game, withSaves: boolean) => void
   addGamesDialog: () => void
   addGameAs: (path: string, consoleId: string) => void
@@ -423,6 +434,162 @@ export function buildPanel(id: string, arg: string | undefined, state: AppState,
           { key: 'msg', label: 'A zip with logs, settings and a summary of this PC. Logins (secrets.json), saves and games are never included.', info: true },
           { key: 'export', label: 'Export report…', run: () => h.exportReport() },
           { key: 'logs', label: 'Open logs folder', run: () => h.command('open-folder', 'logs') }
+        ]
+      }
+    case 'packages':
+      return {
+        id,
+        title: 'Packages',
+        items: [
+          { key: 'msg', label: 'Copy this whole setup to another PC: by code (both PCs online) or with a folder (e.g. a USB drive).', info: true },
+          { key: 'send', label: 'Send package…', run: () => (h.openPanel('pkg-send'), 'keep') },
+          { key: 'receive', label: 'Receive package…', run: () => (h.openPanel('pkg-receive'), 'keep') },
+          { key: 'never', label: 'Never included: favorites, play time, recently played, logins.', info: true }
+        ]
+      }
+    case 'pkg-send': {
+      const c = x.pkg.choice
+      const gamesLabel = c.games === 'all' ? 'All' : `${c.games.length} console${c.games.length === 1 ? '' : 's'}`
+      const size = x.pkg.size === undefined ? '…' : formatSize(x.pkg.size)
+      return {
+        id,
+        title: 'Send package',
+        items: [
+          { key: 'emulators', label: 'Emulators', value: onOff(c.emulators), run: () => (h.pkgToggle('emulators'), 'keep') },
+          { key: 'bios', label: 'BIOS & firmware', value: onOff(c.bios), run: () => (h.pkgToggle('bios'), 'keep') },
+          { key: 'games', label: 'Games', value: gamesLabel, run: () => (h.openPanel('pkg-games'), 'keep') },
+          { key: 'mods', label: 'Mods (with on/off)', value: onOff(c.mods), run: () => (h.pkgToggle('mods'), 'keep') },
+          { key: 'settings', label: 'Settings', value: onOff(c.settings), run: () => (h.pkgToggle('settings'), 'keep') },
+          { key: 'saves', label: 'Saves', value: onOff(c.saves), run: () => (h.pkgToggle('saves'), 'keep') },
+          { key: 'size', label: `Size: ${size}`, info: true },
+          { key: 'code', label: 'Send by code', disabled: x.pkg.busy, run: () => (h.pkgSend(), 'keep') },
+          { key: 'folder', label: 'Save to folder…', disabled: x.pkg.busy, run: () => (h.pkgSaveFolder(), 'keep') }
+        ]
+      }
+    }
+    case 'pkg-games': {
+      const c = x.pkg.choice
+      const items: PItem[] = [{ key: 'all', label: 'All games', value: onOff(c.games === 'all'), run: () => (h.pkgToggle('games'), 'keep') }]
+      for (const con of state.consoles) {
+        const n = state.library.games.filter((g) => g.console === con.id).length
+        if (!n) continue
+        const on = c.games === 'all' || c.games.includes(con.id)
+        items.push({ key: `c-${con.id}`, label: `${con.name} (${n})`, value: onOff(on), run: () => (h.pkgToggle(`console:${con.id}`), 'keep') })
+      }
+      return { id, title: 'Which games?', items }
+    }
+    case 'pkg-receive': {
+      const existing = state.library.games.length > 0
+      const items: PItem[] = []
+      if (existing) {
+        items.push({ key: 'ask', label: 'This PC already has a setup. New games and mods are added; nothing is deleted. Settings:', info: true })
+        items.push({ key: 'set', label: 'Settings from the package', value: x.pkg.useSettings ? 'Use the package\'s' : 'Keep mine', run: () => (h.pkgToggle('useSettings' as keyof PackageChoice), 'keep') })
+      }
+      items.push({ key: 'code', label: 'Enter code…', disabled: x.pkg.busy, run: () => (h.pkgReceiveCode(!existing || !!x.pkg.useSettings), 'keep') })
+      items.push({ key: 'folder', label: 'From a folder…', disabled: x.pkg.busy, run: () => (h.pkgReceiveFolder(!existing || !!x.pkg.useSettings), 'keep') })
+      return { id, title: 'Receive package', items }
+    }
+    case 'pkg-progress': {
+      const p = x.pkg.progress
+      const label = { packing: 'Packing', waiting: 'Waiting for the other PC', sending: 'Sending', receiving: 'Receiving', unpacking: 'Unpacking', done: 'Done', error: 'Stopped' }
+      const items: PItem[] = []
+      const code = p?.code ?? x.pkg.code
+      if (code && p?.phase !== 'done') {
+        items.push({ key: 'code', label: `Code: ${code}`, info: true })
+        items.push({ key: 'how', label: 'On the other PC: Settings → Packages → Receive package → Enter code.', info: true })
+      }
+      if (p) items.push({ key: 'phase', label: `${label[p.phase]}${p.phase === 'done' || p.phase === 'error' ? '' : ` · ${Math.round(p.pct * 100)}%`}`, info: true })
+      if (p?.detail) items.push({ key: 'detail', label: p.detail, info: true })
+      if (x.pkg.result) items.push({ key: 'result', label: x.pkg.result, info: true })
+      items.push(x.pkg.busy ? { key: 'cancel', label: 'Cancel', run: () => (h.pkgCancel(), 'keep') } : { key: 'ok', label: 'OK' })
+      return { id, title: 'Package', items }
+    }
+    // ---------------- first-start wizard ----------------
+    case 'wiz-welcome':
+      return {
+        id,
+        title: 'Welcome to Starstation',
+        items: [
+          { key: 'msg', label: 'All your consoles in one menu. Let\'s set up this PC — it takes a few minutes.', info: true },
+          { key: 'start', label: 'Start', run: () => (h.wizardNext(1), 'keep') }
+        ]
+      }
+    case 'wiz-location': {
+      const st = x.setup
+      return {
+        id,
+        title: 'Where everything lives',
+        items: [
+          { key: 'where', label: `Starstation keeps emulators, games, saves and settings in ${st?.filesDir ?? 'Files'}.`, info: true },
+          ...(st?.existing
+            ? [
+                { key: 'found', label: 'There is already a Starstation setup here.', info: true },
+                { key: 'continue', label: 'Continue where you left off', run: () => (h.wizardFinish(true), 'keep' as const) },
+                { key: 'again', label: 'Run the setup anyway', run: () => (h.wizardNext(2), 'keep' as const) }
+              ]
+            : [{ key: 'next', label: 'Next', run: () => (h.wizardNext(2), 'keep' as const) }])
+        ]
+      }
+    }
+    case 'wiz-start':
+      return {
+        id,
+        title: 'How do you want to start?',
+        items: [
+          { key: 'receive', label: 'Receive a package', value: 'from another PC', run: () => (h.openPanel('pkg-receive'), 'keep') },
+          { key: 'import', label: 'Import from EmuDeck', value: 'copies, deletes nothing', run: () => (h.openPanel('import'), 'keep') },
+          { key: 'fresh', label: 'Start fresh', run: () => (h.wizardNext(3), 'keep') },
+          { key: 'next', label: 'Next', run: () => (h.wizardNext(3), 'keep') }
+        ]
+      }
+    case 'wiz-emulators': {
+      const list = x.emulators ?? []
+      const missing = list.filter((e) => !e.installed && e.canInstall)
+      return {
+        id,
+        title: 'Emulators',
+        items: [
+          { key: 'msg', label: 'Downloaded from their official releases into Files\\emulators, set up in portable mode.', info: true },
+          ...list.map((e) => ({ key: `e-${e.id}`, label: `${e.name} · ${e.consoles.join(', ')}`, value: x.emuProgress[e.id] || (e.installed ? `Ready ${e.version ?? ''}` : e.page ? 'Download by hand' : 'Not installed'), info: true })),
+          ...(missing.length ? [{ key: 'all', label: `Download all missing (${missing.length})`, run: () => (h.installAll(), 'keep' as const) }] : []),
+          { key: 'next', label: 'Next', run: () => (h.wizardNext(4), 'keep') }
+        ]
+      }
+    }
+    case 'wiz-bios': {
+      const items: PItem[] = [{ key: 'msg', label: 'Some consoles need files from your own console. Starstation checks them:', info: true }]
+      for (const c of state.consoles) {
+        const needs = c.status === 'missing-bios'
+        items.push({
+          key: `b-${c.id}`,
+          label: `${c.short}: ${needs ? c.statusText.split(' · ').pop() : 'OK'}`,
+          value: needs ? (c.id === 'ps3' ? 'Install firmware' : 'Open BIOS folder') : undefined,
+          info: !needs,
+          run: needs ? () => (c.id === 'ps3' ? h.command('install-ps3-firmware') : h.command('open-folder', `bios:${c.id}`), 'keep' as const) : undefined
+        })
+      }
+      items.push({ key: 'next', label: 'Next', run: () => (h.wizardNext(5), 'keep') })
+      return { id, title: 'BIOS & firmware', items }
+    }
+    case 'wiz-controller':
+      return {
+        id,
+        title: 'Controller',
+        items: [
+          { key: 'pad', label: x.pad ? `Found: ${x.pad.name}` : 'Plug in a controller (or use the keyboard: arrows, Enter, Esc).', info: true },
+          { key: 'map', label: 'Starstation writes one mapping into every emulator — nothing to set up per emulator.', info: true },
+          { key: 'test', label: 'Test buttons', run: () => (h.testPad(), 'keep') },
+          { key: 'next', label: 'Next', run: () => (h.wizardNext(6), 'keep') }
+        ]
+      }
+    case 'wiz-artwork':
+      return {
+        id,
+        title: 'Artwork',
+        items: [
+          { key: 'msg', label: 'Box art and screenshots for your games come from libretro (free, no account).', info: true },
+          { key: 'now', label: 'Download artwork now', run: () => (h.wizardFinish(true), 'keep') },
+          { key: 'later', label: 'Later', value: 'Settings → Library', run: () => (h.wizardFinish(false), 'keep') }
         ]
       }
     case 'licenses':

@@ -46,7 +46,17 @@ export function App() {
   const [errorPanel, setErrorPanel] = useState<{ title: string; result: LaunchResult; index: number } | null>(null)
   const [pad, setPad] = useState<PadKind | null>(null)
   const [idle, setIdle] = useState(false)
-  const [extra, setExtra] = useState<PanelExtra>({ emuProgress: {}, importing: false, details: {}, mods: {}, gb: { page: 1, more: false, detail: {} } })
+  const [extra, setExtra] = useState<PanelExtra>({
+    emuProgress: {},
+    importing: false,
+    details: {},
+    mods: {},
+    gb: { page: 1, more: false, detail: {} },
+    // everything except saves is ticked by default (spec 12)
+    pkg: { choice: { emulators: true, bios: true, games: 'all', mods: true, settings: true, saves: false }, busy: false }
+  })
+  /** First-start wizard: step + selected row (null = not shown). */
+  const [wizard, setWizard] = useState<{ step: number; index: number } | null>(null)
   const [entry, setEntry] = useState<EntryState | null>(null)
   const [shots, setShots] = useState<Screenshot[]>([])
   const [photo, setPhoto] = useState<number | null>(null)
@@ -78,12 +88,23 @@ export function App() {
       setState({ ...s, ...early })
       if (!s.settings.bootAnimation) setBooting(false)
     })
+    // first start on this PC: the setup wizard comes before the boot animation
+    void api.setupStatus().then((setup) => {
+      setExtra((x) => ({ ...x, setup }))
+      if (!setup.done) {
+        setBooting(false)
+        setWizard({ step: 0, index: 0 })
+      }
+    })
     const offs = [
       api.on('library', (library) => apply({ library })),
       api.on('consoles', (consoles) => apply({ consoles })),
       api.on('collections', (collections) => apply({ collections })),
       api.on('screenshots', (s) => setShots(s)),
       api.on('battery', (b) => setBattery(b)),
+      api.on('package-progress', (p) =>
+        setExtra((x) => ({ ...x, pkg: { ...x.pkg, progress: p, busy: p.phase !== 'done' && p.phase !== 'error' ? x.pkg.busy : false } }))
+      ),
       api.on('running', (running) => apply({ running })),
       api.on('import-progress', (p) => setExtra((x) => ({ ...x, importProgress: p }))),
       api.on('emulator-progress', ({ id, text }) => setExtra((x) => ({ ...x, emuProgress: { ...x.emuProgress, [id]: text } }))),
@@ -457,6 +478,99 @@ export function App() {
   const testPad = useCallback(() => setPadTest(true), [])
   newConsoleRef.current = newConsole
 
+  // ---- packages + wizard (step 11) ----
+  const pkgRef = useRef(extra.pkg)
+  pkgRef.current = extra.pkg
+  const refreshPkgSize = (choice: PanelExtra['pkg']['choice']) => {
+    setExtra((x) => ({ ...x, pkg: { ...x.pkg, size: undefined } }))
+    void api.packageSize(choice).then((size) => setExtra((x) => ({ ...x, pkg: { ...x.pkg, size } })))
+  }
+  const pkgToggle = useCallback(
+    (key: string) => {
+      const p = pkgRef.current
+      if (key === 'useSettings') {
+        setExtra((x) => ({ ...x, pkg: { ...x.pkg, useSettings: !x.pkg.useSettings } }))
+        return
+      }
+      const c = { ...p.choice }
+      const withGames = (state?.consoles ?? []).filter((con) => state?.library.games.some((g) => g.console === con.id)).map((con) => con.id)
+      if (key === 'games') c.games = c.games === 'all' ? [] : 'all'
+      else if (key.startsWith('console:')) {
+        const id = key.slice(8)
+        const cur = c.games === 'all' ? withGames : c.games
+        const next = cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]
+        c.games = next.length === withGames.length ? 'all' : next
+      } else if (key in c) (c as unknown as Record<string, boolean>)[key] = !(c as unknown as Record<string, boolean>)[key]
+      setExtra((x) => ({ ...x, pkg: { ...x.pkg, choice: c } }))
+      refreshPkgSize(c)
+    },
+    [state?.consoles, state?.library.games]
+  )
+  const startPkg = (code?: string) => {
+    setExtra((x) => ({ ...x, pkg: { ...x.pkg, busy: true, result: undefined, progress: undefined, code } }))
+    setPanels((p) => [...p.filter((q) => q.id !== 'pkg-progress'), { id: 'pkg-progress', index: 0 }])
+  }
+  const endPkg = (r: { ok: boolean; error?: string; added?: number; kept?: number; folder?: string } | null) =>
+    setExtra((x) => ({
+      ...x,
+      pkg: {
+        ...x.pkg,
+        busy: false,
+        result: !r ? 'Cancelled.' : r.ok ? (r.added !== undefined ? `Done: ${r.added} file(s) added, ${r.kept ?? 0} kept.` : r.folder ? `Saved in ${r.folder}` : 'Done.') : (r.error ?? 'Stopped.')
+      }
+    }))
+  const pkgSend = useCallback(() => {
+    startPkg()
+    void api.packageSend(pkgRef.current.choice).then(endPkg)
+  }, [])
+  const pkgSaveFolder = useCallback(() => {
+    startPkg()
+    void api.packageSaveToFolder(pkgRef.current.choice).then(endPkg)
+  }, [])
+  const receiveSettingsRef = useRef(true)
+  const pkgReceiveCode = useCallback((useSettings: boolean) => {
+    receiveSettingsRef.current = useSettings
+    setEntry({ kind: 'field', title: 'Package code', value: '', row: 0, col: 0, focus: 'keys', result: 0, target: 'pkgcode', overPanel: true })
+  }, [])
+  const pkgReceiveFolder = useCallback((useSettings: boolean) => {
+    startPkg()
+    void api.packageReceiveFolder(useSettings).then(endPkg)
+  }, [])
+  const pkgCancel = useCallback(() => void api.packageCancel(), [])
+  const installAll = useCallback(() => {
+    void (async () => {
+      const list = (await api.emulators()).filter((e) => !e.installed && e.canInstall)
+      for (const e of list) await api.installEmulator(e.id)
+      setExtra({ ...extraRef.current, emulators: await api.emulators() })
+    })()
+  }, [])
+  const extraRef = useRef(extra)
+  extraRef.current = extra
+  const WIZ_STEPS = ['wiz-welcome', 'wiz-location', 'wiz-start', 'wiz-emulators', 'wiz-bios', 'wiz-controller', 'wiz-artwork']
+  const wizardNext = useCallback((to?: number) => {
+    setWizard((w) => {
+      const step = to ?? (w ? w.step + 1 : 0)
+      if (WIZ_STEPS[step] === 'wiz-emulators') void api.emulators().then((emulators) => setExtra((x) => ({ ...x, emulators })))
+      if (WIZ_STEPS[step] === 'wiz-controller') {
+        const p = [...(navigator.getGamepads ? navigator.getGamepads() : [])].find((x): x is Gamepad => !!x && x.connected && isMenuPad(x))
+        setExtra((x) => ({ ...x, pad: p ? { name: padName(p.id), api: /xinput/i.test(p.id) ? 'XInput' : 'SDL' } : null }))
+      }
+      return { step, index: 0 }
+    })
+    setPanels([])
+  }, [])
+  const wizardFinish = useCallback(
+    (artwork: boolean) => {
+      setSetting('artworkAuto', artwork)
+      void api.setupDone()
+      if (artwork) void api.runCommand('rescan')
+      setWizard(null)
+      setPanels([])
+      if (state?.settings.bootAnimation) setBooting(true)
+    },
+    [setSetting, state?.settings.bootAnimation]
+  )
+
   const refreshArtwork = useCallback(
     (g: Game) => {
       notify({ kind: 'info', title: 'Looking for artwork…', detail: g.title })
@@ -513,6 +627,12 @@ export function App() {
     sfx.confirm()
     if (entry.kind === 'field') {
       const field = entry.target as 'name' | 'short' | 'args' | 'extensions' | 'nickname'
+      if ((entry.target as string) === 'pkgcode') {
+        setEntry(null)
+        startPkg()
+        void api.packageReceive(value, receiveSettingsRef.current).then(endPkg)
+        return
+      }
       if (field === 'nickname') setSetting('netplayNickname', value.slice(0, 30))
       else if (formRef.current) setForm({ ...formRef.current, [field]: entry.value.trim() })
       setEntry(null)
@@ -652,10 +772,11 @@ export function App() {
         ]
       }
     }
-    if (!activePanelRef || !state) return null
+    const ref = activePanelRef ?? (wizard ? { id: WIZ_STEPS[wizard.step], arg: undefined, index: wizard.index } : null)
+    if (!ref || !state) return null
     return buildPanel(
-      activePanelRef.id,
-      activePanelRef.arg,
+      ref.id,
+      ref.arg,
       state,
       {
         setSetting,
@@ -698,6 +819,15 @@ export function App() {
         newConsole,
         clearCache,
         testPad,
+        pkgToggle,
+        pkgSend,
+        pkgSaveFolder,
+        pkgReceiveCode,
+        pkgReceiveFolder,
+        pkgCancel,
+        installAll,
+        wizardNext,
+        wizardFinish,
         deleteGame,
         addGamesDialog,
         addGameAs
@@ -706,6 +836,7 @@ export function App() {
     )
   }, [
     activePanelRef,
+    wizard,
     errorPanel,
     state,
     setSetting,
@@ -748,6 +879,15 @@ export function App() {
     newConsole,
     clearCache,
     testPad,
+    pkgToggle,
+    pkgSend,
+    pkgSaveFolder,
+    pkgReceiveCode,
+    pkgReceiveFolder,
+    pkgCancel,
+    installAll,
+    wizardNext,
+    wizardFinish,
     deleteGame,
     addGamesDialog,
     addGameAs,
@@ -759,11 +899,13 @@ export function App() {
     if (activePanelRef && state && !activePanel) setPanels((p) => p.slice(0, -1))
   }, [activePanelRef, activePanel, state])
 
+  const wizardShown = !!wizard && !activePanelRef && !errorPanel
   const panelIndex = activePanel
-    ? firstSelectable(activePanel, Math.min(errorPanel ? errorPanel.index : (activePanelRef?.index ?? 0), activePanel.items.length - 1), 1)
+    ? firstSelectable(activePanel, Math.min(errorPanel ? errorPanel.index : wizardShown ? wizard!.index : (activePanelRef?.index ?? 0), activePanel.items.length - 1), 1)
     : 0
   const setPanelIndex = (i: number) => {
     if (errorPanel) setErrorPanel({ ...errorPanel, index: i })
+    else if (wizardShown) setWizard((w) => (w ? { ...w, index: i } : w))
     else setPanels((p) => p.map((x, k) => (k === p.length - 1 ? { ...x, index: i } : x)))
   }
 
@@ -904,11 +1046,18 @@ export function App() {
         sfx.confirm()
         const res = it.run?.()
         Promise.resolve(res).then((r) => {
-          if (r === 'keep') return
+          if (r === 'keep' || wizardShown) return
           if (errorPanel) setErrorPanel(null)
           else setPanels([])
         })
       } else if (a === 'back' || a === 'options' || a === 'left') {
+        if (wizardShown) {
+          if (wizard!.step > 0) {
+            sfx.back()
+            setWizard({ step: wizard!.step - 1, index: 0 })
+          }
+          return
+        }
         sfx.back()
         if (errorPanel) setErrorPanel(null)
         else setPanels((p) => p.slice(0, -1))
@@ -1108,6 +1257,7 @@ export function App() {
           {padTest && <PadTest />}
           {activePanel && (
             <PanelView
+              wizard={wizardShown}
               panel={activePanel}
               index={panelIndex}
               onSelect={setPanelIndex}

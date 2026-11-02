@@ -4,8 +4,8 @@ Read SPEC.md first. This file tracks where the build stands and every small deci
 
 ## Current state
 
-- **Phase:** Building. Steps 1–10 done. **Playable milestone reached 2026-11-02:** Hannes's setup is imported and Midnight Club 3 boots from Starstation (PS2).
-- **Next step:** Step 11 — Setup wizard & packages
+- **Phase:** Building. Steps 1–11 done. **Playable milestone reached 2026-11-02:** Hannes's setup is imported and Midnight Club 3 boots from Starstation (PS2).
+- **Next step:** Step 12 — Release
 
 ## How to work on it
 
@@ -180,6 +180,18 @@ Settings column now: General · Graphics · Consoles (+ Add a console) · Contro
 - **About**: + Licenses of the emulators (from the preset + the emulator's LICENSE file). Check for updates comes with step 12.
 - Fixes: the menu could start on Settings when the first library update arrived between two renders (auto-column now stops only after a console with games was shown); keyboards opened from a form sit above the panel (`overPanel`).
 - Tests: `tests/e2e/settings.spec.ts` (health incl. UI, report contents, RA login/token/logout against a fake server, netplay rooms + host/join args against a fake lobby, Steam add/refuse/no duplicate on a fake Steam folder, custom console launch/edit/remove, form field keyboard, all new settings screens, pad test).
+
+### Step 11 — Setup wizard & packages (done 2026-11-02, tag `step-11-packages`)
+
+- **Packages** (Settings → Packages). Send: toggles for emulators, BIOS & firmware, games (all or per console), mods (with on/off), settings, saves — everything except saves on by default; size shown. Transfer **by code** (croc) or **Save to folder** (e.g. USB). Receive: enter code or pick a folder.
+  - Package = folder with `manifest.json` (format 1) + Files-like layout. Settings part: settings.json, controllers.json, collections, per-game options, custom consoles. **Never included:** stats.json (favorites, play time, recently played), secrets.json, logs, caches, artwork.
+  - Sending by code builds a temporary send folder of **hard links** in `config\packages` (no extra space), runs `croc --yes --disable-clipboard send --code <code> <folder>`; codes look like `4821-comet-maple-orbit` (own word list). Receiving: `croc --yes --overwrite --out config\packages\receive-… <code>`, then unpacks and removes the download.
+  - Receiving **adds** only: files that already exist are kept (counted). Order: emulators → BIOS → settings (only if "use the package's", or nothing is set up yet) → custom consoles → apply portable/link config → games → mods → saves. Existing setup: the Receive panel asks "Settings from the package: Use the package's / Keep mine".
+  - Mods: new mods are merged into this PC's `mods.json`; mods that were on at the sender are switched on again here (`enablePending`), placed with this PC's paths.
+  - **croc v11.6.3** (MIT) bundled in `resources\bin` by `scripts/fetch-bin.mjs`: zip pinned by the SHA-256 from the release's checksums.txt (`47b6c51a…`), croc.exe + LICENSE extracted. Default croc relay (croc.schollz.com); tests use a local `croc relay`.
+- **Setup wizard** (first start, when `config\setup.json` is missing): Welcome → Where everything lives (existing Files → "Continue where you left off" / "Run the setup anyway") → How to start (Receive a package · Import from EmuDeck · Start fresh) → Emulators (status, "Download all missing") → BIOS & firmware per console (Open BIOS folder / Install PS3 firmware) → Controller (Test buttons) → Artwork (now / later = `artworkAuto` off) → boot animation → XMB. ○ goes one step back. Hannes's Files has no setup.json yet, so his next start shows the wizard once with "Continue where you left off".
+- Install location itself is chosen by the installer (step 12); the wizard shows where Files is.
+- Tests: `packages.spec.ts` (save to folder contents + never-included files; croc send/receive between two hidden app instances via a local relay; merge keeps the receiver's files and settings; mod re-enabled on the receiver's paths; download cleaned up; folder receive into an empty PC takes the package settings), `wizard.spec.ts` (full Start-fresh path, back step, no wizard on next start; existing setup → Continue). Test helper `makeFiles` marks setup done unless `{ wizard: true }`.
 
 ### Small technical choices (steps 2–3)
 
