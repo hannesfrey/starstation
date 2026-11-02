@@ -41,6 +41,20 @@ export interface BiosFile {
   fix?: { label: string; command: string; arg?: string }
 }
 
+export interface BiosSelect {
+  file: string
+  section: string
+  key: string
+  /** Regex preferring some files over others. */
+  prefer?: string
+  /** Only consider files of this BIOS rule (label). */
+  rule?: string
+  /** Write the full path instead of only the file name. */
+  fullPath?: boolean
+  /** Quote the value (TOML). */
+  quote?: boolean
+}
+
 export interface ConsolePreset {
   id: string
   name: string
@@ -55,6 +69,8 @@ export interface ConsolePreset {
   games?: {
     /** Folder-based games (PS3 dumps): a folder counts as one game if it contains this relative path. */
     folderMarker?: string
+    /** File inside a folder game that is passed to the emulator (relative, '/' separated). */
+    folderLaunch?: string
     /** Also list games installed inside the emulator (PS3 dev_hdd0\game). */
     installedDir?: string
     multiDisc?: 'm3u'
@@ -63,8 +79,8 @@ export interface ConsolePreset {
     files: BiosFile[]
     hint?: string
     url?: string
-    /** Write the chosen BIOS file name into an emulator ini if none (or a missing one) is set. */
-    select?: { file: string; section: string; key: string; prefer?: string }
+    /** Write the chosen BIOS file into an emulator config if none (or a missing one) is set. */
+    select?: BiosSelect | BiosSelect[]
   }
   gameId?: {
     method: 'ps1-serial' | 'ps2-serial' | 'ps3-sfo' | 'gc-header' | 'filename'

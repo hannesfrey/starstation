@@ -1,0 +1,9 @@
+{
+  "id": "xemu",
+  "name": "xemu",
+  "folder": "xemu",
+  "exe": "xemu.exe",
+  "download": { "type": "github", "repo": "xemu-project/xemu", "asset": "^xemu-[\\d.]+-windows-x86_64\\.zip$" },
+  "portable": [{ "type": "touch", "path": "{emu}/xemu.toml" }],
+  "importNames": ["xemu", "Xemu"]
+}

@@ -1,0 +1,45 @@
+{
+  "id": "nes",
+  "name": "Nintendo Entertainment System",
+  "short": "NES",
+  "order": 10,
+  "icon": "cartridge",
+  "emulator": "retroarch",
+  "core": "mesen",
+  "launch": { "args": ["-L", "{emu}/cores/{core}_libretro.dll", "--appendconfig", "{config}/retroarch/{console}.cfg", "-f", "{launch}"] },
+  "extensions": [".nes", ".fds", ".unf", ".unif", ".zip", ".7z"],
+  "bios": {
+    "files": [
+      {
+        "label": "Mesen core",
+        "match": "",
+        "path": "{emu}/cores/{core}_libretro.dll",
+        "required": true,
+        "fix": { "label": "Install the Mesen core", "command": "install-core", "arg": "mesen" }
+      }
+    ]
+  },
+  "gameId": { "method": "filename" },
+  "saves": { "dir": "{saves}" },
+  "import": { "roms": ["nes", "famicom", "fds"] },
+  "config": [
+    {
+      "type": "write",
+      "file": "{config}/retroarch/{console}.cfg",
+      "lines": [
+        "savefile_directory = \"{saves}\"",
+        "savestate_directory = \"{saves}/states\"",
+        "system_directory = \"{bios}\"",
+        "screenshot_directory = \"{screenshots}\"",
+        "sort_savefiles_enable = \"false\"",
+        "sort_savestates_enable = \"false\"",
+        "quit_on_close_content = \"1\"",
+        "video_fullscreen = \"true\"",
+        "pause_nonactive = \"false\""
+      ]
+    },
+    { "type": "mkdir", "path": "{saves}/states" }
+  ],
+  "quickResume": true,
+  "netplay": true
+}

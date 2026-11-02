@@ -88,6 +88,19 @@ Electron 45 + React 19 + TypeScript 7 + electron-vite 6 (Vite 8). Main process i
 - Tests: import e2e (copy/verify/move, config rewrite, PS3 saves link), "headless never sees the real PC", and a network test (`NETWORK=1`) that really installs PCSX2 from GitHub — passed.
 - **Pending:** Hannes's real import. On 2026-11-02 PCSX2 from `Desktop\Emulator` was still open (since 2026-11-01 19:29, no game), so the import waits until Hannes closes it — don't kill his processes.
 
+### Step 5 — Remaining presets (data done 2026-11-02, tag `step-05-presets`; real launch checks pending)
+
+Flags checked on 2026-11-02 against current sources: Azahar `-f <file>` (citra_qt.cpp), xemu `-full-screen -dvd_path <iso>` + `xemu.toml` `[sys.files] bootrom_path/flashrom_path/hdd_path/eeprom_path`, `[general] show_welcome`, `[display.window] fullscreen_on_startup` (config_spec.yml), Xenia Canary `--fullscreen` + `portable.txt`, Dolphin `-b -e`, RetroArch `-L core --appendconfig cfg -f`.
+
+- NES (mesen), SNES (snes9x), N64 (mupen64plus_next) on RetroArch: per-console override file `config\retroarch\<console>.cfg` (saves/states/system/screenshot dirs, `quit_on_close_content`, fullscreen) passed with `--appendconfig`. Missing core = requirement with a fix button "Install the X core" (downloads from buildbot.libretro.com nightly). Netplay flag on.
+- GameCube / Wii on Dolphin: Dolphin.ini fullscreen, no stop confirm, game path, analytics/Discord off; saves via links `saves\gc\GC` → `User\GC`, `saves\wii\Wii` → `User\Wii`; game ID from disc header (.iso/.gcm).
+- 3DS on Azahar: links for `user\sdmc`, `user\nand`, screenshots.
+- Xbox on xemu: three BIOS requirements (MCPX 512 B, flash 256 KB/1 MB, .qcow2 HDD) written into xemu.toml with full paths via `bios.select` (now supports several entries, `rule`, `fullPath`, `quote`).
+- Xbox 360 on Xenia Canary: .iso/.xex/.zar and folder games with `default.xex` (new generic `games.folderLaunch`), `content` linked into saves, shader hint, no quick resume.
+- Download sources: GitHub releases for Azahar/xemu/Xenia (like PCSX2/RPCS3/DuckStation), fixed official URLs for RetroArch 1.22.2 (buildbot) and Dolphin 2609a (dl.dolphin-emu.org) with their download pages noted.
+- Test: all 11 presets load in spec order and show as XMB columns.
+- **Pending:** real install tests for the other emulators (`NETWORK=1`, large downloads — postponed while Hannes was streaming) and real game launches per preset (visible — ask Hannes first; only PS2 has a game so far).
+
 ### Small technical choices (steps 2–3)
 
 - Console column layout: Recently played ▸ and Favorites ▸ folders appear at the top when they have entries, then all games A–Z directly in the column (fewer clicks than an "All games" folder). Search comes with step 6.

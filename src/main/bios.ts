@@ -65,8 +65,8 @@ export function biosStatus(c: ConsolePreset): BiosStatus {
 }
 
 /** BIOS files in the console's BIOS folder matching the first rule group (for emulators that need one picked). */
-export function candidateBios(c: ConsolePreset): string[] {
-  const rules = (c.bios?.files ?? []).filter((r) => !r.path)
+export function candidateBios(c: ConsolePreset, ruleLabel?: string): string[] {
+  const rules = (c.bios?.files ?? []).filter((r) => !r.path && (!ruleLabel || r.label === ruleLabel))
   const files = listBiosFiles(dir('bios', c.id))
   return files.filter((f) => rules.some((r) => matchesBios(r, f.name, f.size))).map((f) => f.name)
 }

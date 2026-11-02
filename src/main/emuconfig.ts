@@ -104,21 +104,25 @@ export function applyConsoleConfig(c: ConsolePreset): void {
   selectBios(c, v)
 }
 
-/** Pick a BIOS file for emulators that need one named in their config (PCSX2). */
+/** Pick BIOS files for emulators that need them named in their config (PCSX2, xemu). */
 function selectBios(c: ConsolePreset, v: Record<string, string>): void {
-  const sel = c.bios?.select
-  if (!sel) return
-  const file = fill(sel.file, v)
-  const text = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : ''
-  const current = getIniValue(text, sel.section, sel.key)
-  const candidates = candidateBios(c)
-  if (!candidates.length) return
-  if (current && candidates.some((n) => n.toLowerCase() === current.toLowerCase())) return
-  const prefer = sel.prefer ? new RegExp(sel.prefer, 'i') : null
-  const pick = (prefer && candidates.find((n) => prefer.test(n))) || [...candidates].sort()[0]
-  fs.mkdirSync(path.dirname(file), { recursive: true })
-  fs.writeFileSync(file, setIniValues(text, { [sel.section]: { [sel.key]: pick } }))
-  log.info(`${c.id}: BIOS set to ${pick}`)
+  const raw = c.bios?.select
+  const list = !raw ? [] : Array.isArray(raw) ? raw : [raw]
+  for (const sel of list) {
+    const file = fill(sel.file, v)
+    const text = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : ''
+    const unquote = (s?: string) => s?.replace(/^['"]|['"]$/g, '')
+    const current = unquote(getIniValue(text, sel.section, sel.key))
+    const candidates = candidateBios(c, sel.rule)
+    if (!candidates.length) continue
+    const asValue = (name: string) => (sel.fullPath ? path.join(v.bios, name) : name)
+    if (current && candidates.some((n) => asValue(n).toLowerCase() === current.toLowerCase())) continue
+    const prefer = sel.prefer ? new RegExp(sel.prefer, 'i') : null
+    const pick = asValue((prefer && candidates.find((n) => prefer.test(n))) || [...candidates].sort()[0])
+    fs.mkdirSync(path.dirname(file), { recursive: true })
+    fs.writeFileSync(file, setIniValues(text, { [sel.section]: { [sel.key]: sel.quote ? `'${pick}'` : pick } }))
+    log.info(`${c.id}: ${sel.key} set to ${pick}`)
+  }
 }
 
 export function emulatorInstalled(c: ConsolePreset): boolean {

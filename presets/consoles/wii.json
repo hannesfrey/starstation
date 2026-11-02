@@ -1,0 +1,29 @@
+{
+  "id": "wii",
+  "name": "Nintendo Wii",
+  "short": "Wii",
+  "order": 50,
+  "icon": "remote",
+  "emulator": "dolphin",
+  "launch": { "args": ["-b", "-e", "{launch}"] },
+  "extensions": [".iso", ".wbfs", ".rvz", ".wia", ".gcz", ".ciso", ".wad"],
+  "gameId": { "method": "gc-header" },
+  "saves": { "dir": "{saves}", "note": "Dolphin keeps saves in its User folder; the saves folder links there." },
+  "import": { "roms": ["wii"] },
+  "config": [
+    {
+      "type": "ini",
+      "file": "{emu}/User/Config/Dolphin.ini",
+      "set": {
+        "Display": { "Fullscreen": "True" },
+        "Interface": { "ConfirmStop": "False", "ShowActiveTitle": "False" },
+        "General": { "ISOPaths": "1", "ISOPath0": "{games}", "UseDiscordPresence": "False" },
+        "Analytics": { "PermissionAsked": "True", "Enabled": "False" }
+      }
+    },
+    { "type": "link", "path": "{saves}/Wii", "target": "{emu}/User/Wii" },
+    { "type": "mkdir", "path": "{emu}/User/ScreenShots" },
+    { "type": "link", "path": "{screenshots}/dolphin", "target": "{emu}/User/ScreenShots" }
+  ],
+  "quickResume": true
+}

@@ -1,0 +1,45 @@
+{
+  "id": "n64",
+  "name": "Nintendo 64",
+  "short": "N64",
+  "order": 30,
+  "icon": "cartridge-n64",
+  "emulator": "retroarch",
+  "core": "mupen64plus_next",
+  "launch": { "args": ["-L", "{emu}/cores/{core}_libretro.dll", "--appendconfig", "{config}/retroarch/{console}.cfg", "-f", "{launch}"] },
+  "extensions": [".z64", ".n64", ".v64", ".zip", ".7z"],
+  "bios": {
+    "files": [
+      {
+        "label": "Mupen64Plus-Next core",
+        "match": "",
+        "path": "{emu}/cores/{core}_libretro.dll",
+        "required": true,
+        "fix": { "label": "Install the Mupen64Plus-Next core", "command": "install-core", "arg": "mupen64plus_next" }
+      }
+    ]
+  },
+  "gameId": { "method": "filename" },
+  "saves": { "dir": "{saves}" },
+  "import": { "roms": ["n64"] },
+  "config": [
+    {
+      "type": "write",
+      "file": "{config}/retroarch/{console}.cfg",
+      "lines": [
+        "savefile_directory = \"{saves}\"",
+        "savestate_directory = \"{saves}/states\"",
+        "system_directory = \"{bios}\"",
+        "screenshot_directory = \"{screenshots}\"",
+        "sort_savefiles_enable = \"false\"",
+        "sort_savestates_enable = \"false\"",
+        "quit_on_close_content = \"1\"",
+        "video_fullscreen = \"true\"",
+        "pause_nonactive = \"false\""
+      ]
+    },
+    { "type": "mkdir", "path": "{saves}/states" }
+  ],
+  "quickResume": true,
+  "netplay": true
+}

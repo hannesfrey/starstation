@@ -7,7 +7,7 @@
   "emulator": "rpcs3",
   "launch": { "args": ["--no-gui", "--fullscreen", "{launch}"] },
   "extensions": [".iso"],
-  "games": { "folderMarker": "PS3_GAME/PARAM.SFO", "installedDir": "{emu}/dev_hdd0/game" },
+  "games": { "folderMarker": "PS3_GAME/PARAM.SFO", "folderLaunch": "PS3_GAME/USRDIR/EBOOT.BIN", "installedDir": "{emu}/dev_hdd0/game" },
   "bios": {
     "hint": "RPCS3 needs the official PS3 system software (PS3UPDAT.PUP) from playstation.com, installed once.",
     "url": "https://www.playstation.com/en-us/support/hardware/ps3/system-software/",

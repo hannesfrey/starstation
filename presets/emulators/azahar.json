@@ -1,0 +1,9 @@
+{
+  "id": "azahar",
+  "name": "Azahar",
+  "folder": "azahar",
+  "exe": "azahar.exe",
+  "download": { "type": "github", "repo": "azahar-emu/azahar", "asset": "^azahar-windows-msvc-[\\d.]+\\.zip$" },
+  "portable": [{ "type": "mkdir", "path": "{emu}/user" }],
+  "importNames": ["azahar", "Azahar"]
+}

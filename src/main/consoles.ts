@@ -12,7 +12,7 @@ export function consoleInfos(): ConsoleInfo[] {
     const bios = biosStatus(c)
     const status = !installed ? 'missing-emulator' : !bios.ok ? 'missing-bios' : count === 0 ? 'no-games' : 'ready'
     const statusText = `${c.short} · ${count} game${count === 1 ? '' : 's'} · ${
-      !installed ? `${e?.name ?? c.emulator} not installed` : !bios.ok ? `BIOS missing (${bios.missing.join(', ')})` : 'Ready'
+      !installed ? `${e?.name ?? c.emulator} not installed` : !bios.ok ? `Needs ${bios.missing.join(', ')}` : 'Ready'
     }`
     return {
       id: c.id,

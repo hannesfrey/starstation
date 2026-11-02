@@ -1,0 +1,45 @@
+{
+  "id": "snes",
+  "name": "Super Nintendo",
+  "short": "SNES",
+  "order": 20,
+  "icon": "cartridge-wide",
+  "emulator": "retroarch",
+  "core": "snes9x",
+  "launch": { "args": ["-L", "{emu}/cores/{core}_libretro.dll", "--appendconfig", "{config}/retroarch/{console}.cfg", "-f", "{launch}"] },
+  "extensions": [".sfc", ".smc", ".fig", ".swc", ".bs", ".zip", ".7z"],
+  "bios": {
+    "files": [
+      {
+        "label": "Snes9x core",
+        "match": "",
+        "path": "{emu}/cores/{core}_libretro.dll",
+        "required": true,
+        "fix": { "label": "Install the Snes9x core", "command": "install-core", "arg": "snes9x" }
+      }
+    ]
+  },
+  "gameId": { "method": "filename" },
+  "saves": { "dir": "{saves}" },
+  "import": { "roms": ["snes", "sfc", "superfamicom"] },
+  "config": [
+    {
+      "type": "write",
+      "file": "{config}/retroarch/{console}.cfg",
+      "lines": [
+        "savefile_directory = \"{saves}\"",
+        "savestate_directory = \"{saves}/states\"",
+        "system_directory = \"{bios}\"",
+        "screenshot_directory = \"{screenshots}\"",
+        "sort_savefiles_enable = \"false\"",
+        "sort_savestates_enable = \"false\"",
+        "quit_on_close_content = \"1\"",
+        "video_fullscreen = \"true\"",
+        "pause_nonactive = \"false\""
+      ]
+    },
+    { "type": "mkdir", "path": "{saves}/states" }
+  ],
+  "quickResume": true,
+  "netplay": true
+}

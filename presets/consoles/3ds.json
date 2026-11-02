@@ -1,0 +1,21 @@
+{
+  "id": "3ds",
+  "name": "Nintendo 3DS",
+  "short": "3DS",
+  "order": 60,
+  "icon": "handheld",
+  "emulator": "azahar",
+  "launch": { "args": ["-f", "{launch}"] },
+  "extensions": [".3ds", ".cci", ".cxi", ".3dsx", ".app", ".elf", ".axf"],
+  "gameId": { "method": "filename" },
+  "saves": { "dir": "{saves}", "note": "Azahar keeps saves on its virtual SD card; the saves folder links there." },
+  "import": { "roms": ["n3ds", "3ds"] },
+  "config": [
+    { "type": "link", "path": "{saves}/sdmc", "target": "{emu}/user/sdmc" },
+    { "type": "link", "path": "{saves}/nand", "target": "{emu}/user/nand" },
+    { "type": "mkdir", "path": "{emu}/user/screenshots" },
+    { "type": "link", "path": "{screenshots}/azahar", "target": "{emu}/user/screenshots" }
+  ],
+  "quickResume": true,
+  "notes": "Two screens: change the layout in Azahar (View → Screen Layout) or with its hotkey (F10)."
+}

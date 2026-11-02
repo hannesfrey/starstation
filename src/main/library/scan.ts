@@ -70,7 +70,7 @@ export function scanConsole(c: ConsolePreset, rootOverride?: string): ScanEntry[
         if (SKIP_DIRS.has(e.name.toLowerCase()) || e.name.startsWith('.')) continue
         if (marker && fs.existsSync(path.join(full, marker))) {
           const st = fs.statSync(full)
-          const launch = c.games?.folderMarker === 'PS3_GAME/PARAM.SFO' ? path.join(full, 'PS3_GAME', 'USRDIR', 'EBOOT.BIN') : full
+          const launch = c.games?.folderLaunch ? path.join(full, ...c.games.folderLaunch.split('/')) : full
           out.push({
             id: gameIdFor(c.id, path.relative(root, full)),
             console: c.id,

@@ -10,7 +10,7 @@ import { allConsoles, emulatorDir, emulatorExe, getConsole, getEmulator, loadPre
 import { applyConsoleConfig } from './emuconfig'
 import { biosStatus } from './bios'
 import { findSources, planImport, runImport, summarize } from './importer'
-import { checkUpdates, emulatorInfos, installEmulator } from './emulators'
+import { checkUpdates, emulatorInfos, installCore, installEmulator } from './emulators'
 import { loadLibrary, rescan, view, toggleFavorite, getGame } from './library/library'
 import { consoleInfos } from './consoles'
 import { launch, setLauncherWindow, runningGame, stopRunning } from './launcher'
@@ -124,6 +124,18 @@ async function runCommand(command: string, arg?: string): Promise<void> {
       return
     case 'install-emulator':
       if (arg) await doInstallEmulator(arg)
+      return
+    case 'install-core':
+      if (!arg) return
+      try {
+        await installCore(arg, (text) => send('emulator-progress', { id: 'retroarch', text }))
+        notify({ kind: 'success', title: 'Core installed', detail: arg })
+        send('consoles', consoleInfos())
+      } catch (e) {
+        notify({ kind: 'error', title: 'Core install failed', detail: (e as Error).message })
+      } finally {
+        send('emulator-progress', { id: 'retroarch', text: '' })
+      }
       return
     case 'install-ps3-firmware':
       await installPs3Firmware()

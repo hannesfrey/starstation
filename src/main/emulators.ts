@@ -142,6 +142,20 @@ async function download(url: string, file: string, onProgress?: (done: number, t
   await new Promise<void>((res, rej) => out.end((err?: Error | null) => (err ? rej(err) : res())))
 }
 
+/** Install a RetroArch core from the official libretro buildbot. */
+export async function installCore(core: string, onProgress?: (text: string) => void): Promise<void> {
+  if (!/^[a-z0-9_]+$/i.test(core)) throw new Error(`Bad core name ${core}`)
+  const ra = getEmulator('retroarch')
+  if (!ra || !fs.existsSync(emulatorExe(ra))) throw new Error('RetroArch is not installed.')
+  const url = `https://buildbot.libretro.com/nightly/windows/x86_64/latest/${core}_libretro.dll.zip`
+  const dl = dir('config', 'downloads', `${core}_libretro.dll.zip`)
+  onProgress?.(`Downloading ${core} core…`)
+  await download(url, dl)
+  await extract(dl, path.join(emulatorDir(ra), 'cores'))
+  await fsp.rm(dl, { force: true })
+  log.info(`installed core ${core}`)
+}
+
 /**
  * Install or update an emulator from its official source. Settings and data inside the emulator
  * folder are kept: new files overwrite program files only (archives don't contain user configs).
