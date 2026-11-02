@@ -179,6 +179,18 @@ function identify(c: ConsolePreset, e: ScanEntry, addedAt?: number): (Game & { m
   return g
 }
 
+/** After artwork was downloaded: pick up new images for games that had none. Returns true if anything changed. */
+export function reattachArtwork(): boolean {
+  let changed = false
+  for (const g of games) {
+    const before = `${g.icon}|${g.background}`
+    attachLocalArtwork(g)
+    if (`${g.icon}|${g.background}` !== before) changed = true
+  }
+  if (changed) writeJson(cacheFile(), { version: CACHE_VERSION, games } satisfies CacheFile)
+  return changed
+}
+
 /** Artwork downloaded earlier (media\artwork\<console>\<id>\icon.png / background.png). */
 function attachLocalArtwork(g: Game): void {
   const key = artKey(g)

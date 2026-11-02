@@ -19,3 +19,14 @@ describe('ini lists and YAML indentation', () => {
     expect(setKvValues(yml, { 'Resolution Scale': '200' }, ': ')).toBe('Video:\n  Renderer: Vulkan\n  Resolution Scale: 200\nAudio:\n  Volume: 100\n')
   })
 })
+
+import { parseBattery } from '../../src/main/formats/xinput'
+describe('controller battery (XInput)', () => {
+  it('reads wired, levels and missing pads', () => {
+    expect(parseBattery('0 1 3\r\n')).toEqual({ level: null, wired: true }) // DS3 via SCP reports wired
+    expect(parseBattery('0 2 1')).toEqual({ level: 30, wired: false })
+    expect(parseBattery('0 2 3')).toEqual({ level: 100, wired: false })
+    expect(parseBattery('1167 0 0')).toBeNull() // no controller
+    expect(parseBattery('')).toBeNull()
+  })
+})

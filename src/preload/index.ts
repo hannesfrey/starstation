@@ -16,6 +16,8 @@ const api = {
   restorePreviousResume: (gameId: string) => ipcRenderer.invoke('resume-restore-previous', gameId),
   setGameOption: (gameId: string, key: string, value: unknown, patchId?: string) => ipcRenderer.invoke('game-option-set', gameId, key, value, patchId),
   reportPads: (ids: string[]) => ipcRenderer.invoke('report-pads', ids),
+  screenshots: () => ipcRenderer.invoke('screenshots'),
+  refreshArtwork: (gameId: string) => ipcRenderer.invoke('refresh-artwork', gameId),
   mods: (gameId: string) => ipcRenderer.invoke('mods', gameId),
   modAddDialog: (gameId: string, folder: boolean) => ipcRenderer.invoke('mod-add-dialog', gameId, folder),
   modAdd: (gameId: string, p: string) => ipcRenderer.invoke('mod-add', gameId, p),
@@ -42,7 +44,7 @@ const api = {
   quit: () => ipcRenderer.invoke('quit'),
   mediaUrl: (absPath: string) => `starstation-media://local/${encodeURIComponent(absPath)}`,
   on: (channel: string, cb: (payload: unknown) => void) => {
-    const allowed = ['notice', 'library', 'consoles', 'collections', 'running', 'navigate', 'import-progress', 'emulator-progress']
+    const allowed = ['notice', 'library', 'consoles', 'collections', 'screenshots', 'battery', 'running', 'navigate', 'import-progress', 'emulator-progress']
     if (!allowed.includes(channel)) throw new Error(`Unknown channel ${channel}`)
     const h = (_e: unknown, payload: unknown) => cb(payload)
     ipcRenderer.on(channel, h)

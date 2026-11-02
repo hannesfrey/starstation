@@ -4,8 +4,8 @@ Read SPEC.md first. This file tracks where the build stands and every small deci
 
 ## Current state
 
-- **Phase:** Building. Steps 1–8 done. **Playable milestone reached 2026-11-02:** Hannes's setup is imported and Midnight Club 3 boots from Starstation (PS2).
-- **Next step:** Step 9 — Artwork & atmosphere
+- **Phase:** Building. Steps 1–9 done. **Playable milestone reached 2026-11-02:** Hannes's setup is imported and Midnight Club 3 boots from Starstation (PS2).
+- **Next step:** Step 10 — Settings complete
 
 ## How to work on it
 
@@ -150,6 +150,19 @@ Flags checked on 2026-11-02 against current sources: Azahar `-f <file>` (citra_q
 - Archives: zip and rar via Windows `tar` (bsdtar), 7z via the bundled `7zr.exe` (Windows tar has no LZMA).
 - Tests: `tests/e2e/mods.spec.ts` — zip pack with wrapper folder, placement by anchor, links on/off, before-mod backup, emulator setting at launch, conflict both ways + file coming back, untouched user file, ask for `.pnach`, delete, and GameBanana against a local fake server (search, list, details, MD5-checked install, `.exe` refused).
 - Packages (export with on/off state) come with step 11.
+
+### Step 9 — Artwork & atmosphere (done 2026-11-02, tag `step-09-artwork`)
+
+- **PS3** keeps using the game's own ICON0/PIC1 (step 3).
+- **libretro thumbnails** for everything else: box art (`Named_Boxarts`) = icon, in-game shot (`Named_Snaps`) = background, saved to `media\artwork\<console>\<game>\`. Names tried: file name (No-Intro/Redump style), then "<title> (USA/Europe/World/Japan…)"; libretro's character rules (`&*/:`<>?\|` → `_`). **Source order: libretro's GitHub repos (`raw.githubusercontent.com/libretro-thumbnails/<System>/master`) first, `thumbnails.libretro.com` second** — on 2026-11-02 thumbnails.libretro.com failed the TLS handshake from Hannes's network while GitHub worked. Only real PNG/JPEG data is saved.
+- Fetched in the background after every scan (3 at a time); the menu updates as pictures arrive. A miss is remembered for a week (`tried.json`); **Triangle → Refresh artwork** tries again right away. Hidden test runs stay offline unless a test gives a fake server.
+- **ScreenScraper** (fallback) is implemented (`api2/jeuInfos.php`, box-2D + ss, system IDs) but only runs when `config\secrets.json` has developer *and* user credentials — still empty, so it is **untested against the real service**.
+- Real check: Midnight Club 3 got its box art and a screenshot from libretro.
+- **Photo column**: all screenshots from `media\screenshots\**` (also through the emulator links), newest first, names cleaned ("Midnight Club 3 - DUB Edition Remix_SLES-53717_2026….png" → "Midnight Club 3 - DUB Edition Remix"); ✕ opens a full-screen viewer, ← → browse, ○ closes. Refreshed after each game session.
+- **Screensaver**: dims the menu after the set idle time while the background keeps its slow wave (step 2), now also pauses the music.
+- **Background music**: original, generated live with Web Audio (slow four-chord pad + soft bell notes, low-pass filtered); off by default (Settings → General); stops while a game runs or the screensaver is on.
+- **Controller battery** (top right): XInput battery of pad 0 read about once a minute through a hidden PowerShell call (`XInputGetBatteryInformation`, `windowsHide`), only while the menu is visible and no game runs. Hannes's DS3 through SCP reports **wired** → a plug icon. Low battery (≤ 30 %) shows in orange.
+- Tests: unit `parseBattery`; e2e `media.spec.ts` (fake libretro server: icon + background in the menu, miss remembered, Refresh artwork; Photo column order, titles, viewer ← →, close).
 
 ### Small technical choices (steps 2–3)
 

@@ -181,6 +181,8 @@ export interface StarstationApi {
   restorePreviousResume(gameId: string): Promise<{ ok: boolean; error?: string }>
   setGameOption(gameId: string, key: 'graphics' | 'crt' | 'patch', value: string | boolean, patchId?: string): Promise<GameOptions | null>
   reportPads(ids: string[]): Promise<void>
+  screenshots(): Promise<Screenshot[]>
+  refreshArtwork(gameId: string): Promise<boolean>
   mods(gameId: string): Promise<ModsView | null>
   modAddDialog(gameId: string, folder: boolean): Promise<ModAddResult | null>
   modAdd(gameId: string, path: string): Promise<ModAddResult>
@@ -214,6 +216,8 @@ export interface StarstationApi {
   on(channel: 'emulator-progress', cb: (p: { id: string; text: string }) => void): () => void
   on(channel: 'navigate', cb: (where: string) => void): () => void
   on(channel: 'collections', cb: (c: Collection[]) => void): () => void
+  on(channel: 'screenshots', cb: (s: Screenshot[]) => void): () => void
+  on(channel: 'battery', cb: (b: BatteryInfo | null) => void): () => void
 }
 
 export interface BackupInfo {
@@ -305,6 +309,19 @@ export interface GbModDetails {
   text: string
   image?: string
   files: GbFile[]
+}
+
+export interface Screenshot {
+  path: string
+  console: string
+  consoleName: string
+  title: string
+  takenAt: number
+}
+
+export interface BatteryInfo {
+  level: number | null
+  wired: boolean
 }
 
 export interface Collection {

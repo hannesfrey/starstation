@@ -1,4 +1,4 @@
-import type { AppState, ConsoleInfo, Game, GameStats } from '../../../shared/types'
+import type { AppState, ConsoleInfo, Game, GameStats, Screenshot } from '../../../shared/types'
 
 export interface XItem {
   key: string
@@ -36,6 +36,7 @@ export interface ModelHandlers {
   quit: () => void
   openSearch: () => void
   newCollection: () => void
+  openPhoto: (index: number) => void
 }
 
 export function formatPlayTime(sec: number): string {
@@ -60,7 +61,7 @@ export function gameItem(g: Game, s?: GameStats, c?: ConsoleInfo): XItem {
 
 const byTitle = (a: Game, b: Game) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base', numeric: true })
 
-export function buildColumns(state: AppState, h: ModelHandlers): XColumn[] {
+export function buildColumns(state: AppState, h: ModelHandlers, shots: Screenshot[] = []): XColumn[] {
   const { library, consoles, settings } = state
   const stats = library.stats
   const cols: XColumn[] = []
@@ -141,11 +142,20 @@ export function buildColumns(state: AppState, h: ModelHandlers): XColumn[] {
       {
         key: 'screenshots-folder',
         label: 'Screenshots folder',
-        sub: 'Open the folder with all screenshots',
+        sub: shots.length ? `${shots.length} screenshot${shots.length === 1 ? '' : 's'} · press F12 in a game to take one` : 'Press F12 in a game to take a screenshot',
         icon: 'folder',
         kind: 'action',
         run: () => h.command('open-folder', 'screenshots')
-      }
+      },
+      ...shots.map((s, i) => ({
+        key: `shot-${s.path}`,
+        label: s.title || 'Screenshot',
+        sub: `${s.consoleName ? s.consoleName + ' · ' : ''}${new Date(s.takenAt).toLocaleDateString()}`,
+        icon: 'photo',
+        art: s.path,
+        kind: 'action' as const,
+        run: () => h.openPhoto(i)
+      }))
     ]
   })
 

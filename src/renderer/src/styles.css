@@ -616,3 +616,41 @@ body,
   border-radius: 8px;
   object-fit: cover;
 }
+
+/* ---------- photo viewer ---------- */
+.photo-viewer {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  background: rgba(2, 3, 8, 0.96);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.25s var(--ease);
+}
+.photo-viewer img {
+  max-width: 92vw;
+  max-height: 82vh;
+  border-radius: 6px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+}
+.photo-caption {
+  margin-top: 2vh;
+  display: flex;
+  gap: 1.2vw;
+  align-items: baseline;
+}
+.photo-title {
+  font-size: 1.3rem;
+}
+.photo-meta {
+  color: var(--text-dim);
+}
+.battery .plug {
+  vertical-align: middle;
+  color: var(--text);
+}
+.battery.low .battery-fill {
+  background: #ff8a6a;
+}

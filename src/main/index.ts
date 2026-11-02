@@ -19,6 +19,10 @@ import { availableOptions, gameOptions, setGameOption } from './gameoptions'
 import { reportPads } from './controllers'
 import { addMod, deleteMod, finishAdd, gamebananaGame, listMods, modSupport, setGamebananaGame, setModEnabled } from './mods'
 import { gbModDetails, installGbMod, listGbMods, searchGames } from './gamebanana'
+import { fetchArtwork, queueArtwork } from './artwork'
+import { listScreenshots } from './screenshots'
+import { readBattery } from './battery'
+import { reattachArtwork } from './library/library'
 import { consoleInfos } from './consoles'
 import { launch, setLauncherWindow, runningGame, stopRunning, onBeforeLaunch, onAfterExit } from './launcher'
 import { attachWindow, notify, send } from './notify'
@@ -133,8 +137,7 @@ async function runCommand(command: string, arg?: string): Promise<void> {
       return
     }
     case 'rescan':
-      send('library', rescan())
-      send('consoles', consoleInfos())
+      scanAndArt()
       return
     case 'install-emulator':
       if (arg) await doInstallEmulator(arg)
@@ -295,6 +298,15 @@ function registerIpc(): void {
     return g ? setGameOption(g, key, value, patchId) : null
   })
   ipcMain.handle('report-pads', (_e, ids: string[]) => reportPads(Array.isArray(ids) ? ids.map(String) : []))
+  ipcMain.handle('screenshots', () => listScreenshots())
+  ipcMain.handle('refresh-artwork', async (_e, id: string) => {
+    const g = getGame(id)
+    if (!g) return false
+    const got = await fetchArtwork(g, true)
+    if (reattachArtwork() || got) send('library', view())
+    if (!got) notify({ kind: 'info', title: 'No new artwork found', detail: g.title })
+    return got
+  })
   // ---- mods ----
   const withGame = <T>(id: string, fn: (g: NonNullable<ReturnType<typeof getGame>>) => T): T | { ok: false; error: string } => {
     const g = getGame(id)
@@ -419,12 +431,37 @@ async function trash(p: string): Promise<void> {
   await shell.trashItem(p)
 }
 
+/** After every scan: fetch missing artwork in the background and show it as it arrives. */
+function scanAndArt(): void {
+  const lib = rescan()
+  send('library', lib)
+  send('consoles', consoleInfos())
+  queueArtwork(lib.games, () => {
+    if (reattachArtwork()) send('library', view())
+  })
+}
+
+/** Battery of controller 1, about once a minute while the menu is shown. */
+function startBatteryPolling(): void {
+  if (HEADLESS) return
+  const tick = async () => {
+    if (!win || win.isDestroyed() || !win.isVisible() || runningGame()) return
+    send('battery', await readBattery())
+  }
+  setTimeout(() => void tick(), 4000)
+  setInterval(() => void tick(), 60_000)
+}
+
 function registerHooks(): void {
   onBeforeLaunch(async (id) => {
     const g = getGame(id)
     if (!g) return
     const b = await backupGame(g, 'launch')
     if (b) await pruneBackups(g)
+  })
+  onAfterExit(() => {
+    // new screenshots from the session show up in the Photo column
+    send('screenshots', listScreenshots())
   })
   onAfterExit((id, _s, _c, startedAt) => {
     const v = noteResumeVersion(id, startedAt)
@@ -464,10 +501,8 @@ app.whenReady().then(() => {
   setLauncherWindow(win)
   // scan after the window is up so startup stays fast (cache is shown first)
   win.webContents.once('did-finish-load', () => {
-    setTimeout(() => {
-      send('library', rescan())
-      send('consoles', consoleInfos())
-    }, 50)
+    setTimeout(() => scanAndArt(), 50)
+    startBatteryPolling()
   })
 })
 

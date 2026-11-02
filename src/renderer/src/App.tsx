@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from './api'
 import { input, BACKSPACE, type Action, type PadKind } from './input'
+import { PhotoViewer } from './components/PhotoViewer'
 import { TextEntry, KEY_ROWS, clampCol, type EntryState, type EntryResult } from './components/TextEntry'
-import { sfx } from './sound'
+import { music, sfx } from './sound'
 import { Background } from './components/Background'
 import { Boot } from './components/Boot'
 import { TopBar } from './components/TopBar'
@@ -12,7 +13,7 @@ import { Xmb } from './xmb/Xmb'
 import { PanelView } from './xmb/PanelView'
 import { buildColumns, type XItem } from './xmb/model'
 import { buildPanel, type Panel, type PanelExtra } from './xmb/panels'
-import type { AddGamesResult, AppState, Game, LaunchResult, ModAddResult, Notice, Settings } from '../../shared/types'
+import type { AddGamesResult, AppState, BatteryInfo, Game, LaunchResult, ModAddResult, Notice, Screenshot, Settings } from '../../shared/types'
 
 const byTitle = (a: Game, b: Game) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base', numeric: true })
 
@@ -45,6 +46,9 @@ export function App() {
   const [idle, setIdle] = useState(false)
   const [extra, setExtra] = useState<PanelExtra>({ emuProgress: {}, importing: false, details: {}, mods: {}, gb: { page: 1, more: false, detail: {} } })
   const [entry, setEntry] = useState<EntryState | null>(null)
+  const [shots, setShots] = useState<Screenshot[]>([])
+  const [photo, setPhoto] = useState<number | null>(null)
+  const [battery, setBattery] = useState<BatteryInfo | null>(null)
   const [dragging, setDragging] = useState(false)
   const lastInput = useRef(Date.now())
   const scanned = useRef(false)
@@ -65,6 +69,7 @@ export function App() {
       if (!loaded) Object.assign(early, patch)
       else setState((s) => (s ? { ...s, ...patch } : s))
     }
+    void api.screenshots().then(setShots)
     api.getState().then((s) => {
       loaded = true
       setState({ ...s, ...early })
@@ -77,6 +82,8 @@ export function App() {
       }),
       api.on('consoles', (consoles) => apply({ consoles })),
       api.on('collections', (collections) => apply({ collections })),
+      api.on('screenshots', (s) => setShots(s)),
+      api.on('battery', (b) => setBattery(b)),
       api.on('running', (running) => apply({ running })),
       api.on('import-progress', (p) => setExtra((x) => ({ ...x, importProgress: p }))),
       api.on('emulator-progress', ({ id, text }) => setExtra((x) => ({ ...x, emuProgress: { ...x.emuProgress, [id]: text } }))),
@@ -114,6 +121,11 @@ export function App() {
     input.setEnabled(!running)
     sfx.paused = !!running
   }, [running])
+  // background music: off by default; quiet while a game runs or the screensaver is on
+  useEffect(() => {
+    if (settings?.music && !running && !idle) music.start()
+    else music.stop()
+  }, [settings?.music, running, idle])
 
   const setSetting = useCallback(<K extends keyof Settings>(k: K, v: Settings[K]) => {
     api.setSetting(k, v).then((settings) => setState((s) => (s ? { ...s, settings } : s)))
@@ -355,6 +367,13 @@ export function App() {
     [onModAdded]
   )
 
+  const refreshArtwork = useCallback(
+    (g: Game) => {
+      notify({ kind: 'info', title: 'Looking for artwork…', detail: g.title })
+      void api.refreshArtwork(g.id)
+    },
+    [notify]
+  )
   const restorePreviousResume = useCallback((g: Game) => void api.restorePreviousResume(g.id).then(() => loadDetails(g.id)), [loadDetails])
   const deleteGame = useCallback((g: Game, withSaves: boolean) => void api.deleteGame(g.id, withSaves), [])
   const addGamesDialog = useCallback(() => void api.addGamesDialog().then(handleAdd), [handleAdd])
@@ -469,10 +488,11 @@ export function App() {
             toggleFullscreen: () => void api.toggleFullscreen(),
             quit: () => void api.quit(),
             openSearch,
-            newCollection: () => openEntry('new-collection')
-          })
+            newCollection: () => openEntry('new-collection'),
+            openPhoto: (i) => setPhoto(i)
+          }, shots)
         : [],
-    [state, openPanel, command, openSearch, openEntry]
+    [state, openPanel, command, openSearch, openEntry, shots]
   )
 
   // initial column: first console with games, otherwise Settings
@@ -563,6 +583,7 @@ export function App() {
         gbChoose,
         gbMore,
         gbInstall,
+        refreshArtwork,
         deleteGame,
         addGamesDialog,
         addGameAs
@@ -597,6 +618,7 @@ export function App() {
     gbChoose,
     gbMore,
     gbInstall,
+    refreshArtwork,
     deleteGame,
     addGamesDialog,
     addGameAs,
@@ -625,6 +647,24 @@ export function App() {
       return
     }
     if (booting || !state) return
+
+    if (photo !== null) {
+      if (a === 'left' || a === 'up' || a === 'l1') {
+        if (photo > 0) {
+          sfx.move()
+          setPhoto(photo - 1)
+        }
+      } else if (a === 'right' || a === 'down' || a === 'r1') {
+        if (photo < shots.length - 1) {
+          sfx.move()
+          setPhoto(photo + 1)
+        }
+      } else if (a === 'back' || a === 'confirm') {
+        sfx.back()
+        setPhoto(null)
+      }
+      return
+    }
 
     if (activePanel) {
       const n = activePanel.items.length
@@ -882,7 +922,7 @@ export function App() {
         <Boot onDone={() => setBooting(false)} />
       ) : (
         <>
-          <TopBar pad={pad} battery={null} />
+          <TopBar pad={pad} battery={battery} />
           {state && column && (
             <Xmb
               columns={columns}
@@ -918,6 +958,7 @@ export function App() {
               }}
             />
           )}
+          {photo !== null && <PhotoViewer shots={shots} index={photo} />}
           {activePanel && (
             <PanelView
               panel={activePanel}

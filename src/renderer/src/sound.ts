@@ -83,3 +83,95 @@ class Sfx {
 }
 
 export const sfx = new Sfx()
+
+/**
+ * Original background music: a slow, generated ambient pad (four soft chords that drift, with a few
+ * high notes on top). Off by default; paused while a game runs and during the screensaver.
+ */
+class Music {
+  private ctx: AudioContext | null = null
+  private out: GainNode | null = null
+  private timer: number | null = null
+  private step = 0
+  playing = false
+
+  // Fmaj9 – Dm9 – Bbmaj7 – C6/9 (in Hz), voiced low and wide
+  private chords = [
+    [87.31, 130.81, 174.61, 220.0, 261.63, 392.0],
+    [73.42, 110.0, 146.83, 174.61, 220.0, 329.63],
+    [58.27, 116.54, 146.83, 174.61, 220.0, 293.66],
+    [65.41, 98.0, 146.83, 164.81, 220.0, 293.66]
+  ]
+
+  start(): void {
+    if (this.playing) return
+    this.playing = true
+    if (!this.ctx) {
+      this.ctx = new AudioContext()
+      this.out = this.ctx.createGain()
+      this.out.gain.value = 0
+      const lp = this.ctx.createBiquadFilter()
+      lp.type = 'lowpass'
+      lp.frequency.value = 1400
+      this.out.connect(lp)
+      lp.connect(this.ctx.destination)
+    }
+    void this.ctx.resume()
+    const t = this.ctx.currentTime
+    this.out!.gain.cancelScheduledValues(t)
+    this.out!.gain.setValueAtTime(this.out!.gain.value, t)
+    this.out!.gain.linearRampToValueAtTime(0.05, t + 3)
+    this.play()
+    this.timer = window.setInterval(() => this.play(), 8000)
+  }
+
+  stop(): void {
+    if (!this.playing || !this.ctx || !this.out) return
+    this.playing = false
+    if (this.timer !== null) window.clearInterval(this.timer)
+    this.timer = null
+    const t = this.ctx.currentTime
+    this.out.gain.cancelScheduledValues(t)
+    this.out.gain.setValueAtTime(this.out.gain.value, t)
+    this.out.gain.linearRampToValueAtTime(0, t + 1.5)
+  }
+
+  private play(): void {
+    const ctx = this.ctx!
+    const chord = this.chords[this.step++ % this.chords.length]
+    const t = ctx.currentTime + 0.05
+    for (const [i, f] of chord.entries()) {
+      for (const detune of [-6, 6]) {
+        const o = ctx.createOscillator()
+        const g = ctx.createGain()
+        o.type = i === 0 ? 'triangle' : 'sine'
+        o.frequency.value = f
+        o.detune.value = detune
+        g.gain.setValueAtTime(0, t)
+        g.gain.linearRampToValueAtTime(i === 0 ? 0.5 : 0.22, t + 3)
+        g.gain.linearRampToValueAtTime(0, t + 9.5)
+        o.connect(g)
+        g.connect(this.out!)
+        o.start(t)
+        o.stop(t + 10)
+      }
+    }
+    // a couple of quiet bell notes from the chord, an octave up
+    for (let k = 0; k < 2; k++) {
+      const f = chord[2 + Math.floor(Math.random() * 4)] * 2
+      const at = t + 1.5 + k * 2.5 + Math.random()
+      const o = ctx.createOscillator()
+      const g = ctx.createGain()
+      o.frequency.value = f
+      g.gain.setValueAtTime(0, at)
+      g.gain.linearRampToValueAtTime(0.12, at + 0.02)
+      g.gain.exponentialRampToValueAtTime(0.0001, at + 3)
+      o.connect(g)
+      g.connect(this.out!)
+      o.start(at)
+      o.stop(at + 3.1)
+    }
+  }
+}
+
+export const music = new Music()

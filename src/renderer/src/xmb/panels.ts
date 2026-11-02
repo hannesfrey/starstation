@@ -65,6 +65,7 @@ export interface PanelHandlers {
   gbChoose: (g: Game, gbGameId: number) => void
   gbMore: (g: Game) => void
   gbInstall: (g: Game, modId: number, fileId: number) => void
+  refreshArtwork: (g: Game) => void
   deleteGame: (g: Game, withSaves: boolean) => void
   addGamesDialog: () => void
   addGameAs: (path: string, consoleId: string) => void
@@ -299,6 +300,7 @@ export function buildPanel(id: string, arg: string | undefined, state: AppState,
       items.push(
         { key: 'folders', label: 'Open folder…', run: () => (h.openPanel('folders', g.id), 'keep') },
         { key: 'info', label: 'Game info', run: () => (h.openPanel('info', g.id), 'keep') },
+        { key: 'art', label: 'Refresh artwork', run: () => (h.refreshArtwork(g), 'keep') },
         { key: 'delete', label: 'Delete game…', run: () => (h.openPanel('delete', g.id), 'keep') }
       )
       if (c && !c.quickResume) items.push({ key: 'noresume', label: `${c.short} games have no quick resume.`, info: true })
