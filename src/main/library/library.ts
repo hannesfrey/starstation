@@ -199,6 +199,13 @@ export function updateStats(id: string, fn: (s: GameStats) => GameStats): GameSt
   return stats[id]
 }
 
+/** A deleted game: drop its play time / favorite. */
+export function forgetGame(id: string): void {
+  const { [id]: _gone, ...rest } = stats
+  stats = rest
+  writeJson(statsFile(), stats)
+}
+
 export function toggleFavorite(id: string): GameStats {
   return updateStats(id, (s) => ({ ...s, favorite: !s.favorite }))
 }

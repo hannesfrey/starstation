@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from './api'
-import { input, type Action, type PadKind } from './input'
+import { input, BACKSPACE, type Action, type PadKind } from './input'
+import { TextEntry, KEY_ROWS, clampCol, type EntryState, type EntryResult } from './components/TextEntry'
 import { sfx } from './sound'
 import { Background } from './components/Background'
 import { Boot } from './components/Boot'
@@ -11,7 +12,9 @@ import { Xmb } from './xmb/Xmb'
 import { PanelView } from './xmb/PanelView'
 import { buildColumns, type XItem } from './xmb/model'
 import { buildPanel, type Panel, type PanelExtra } from './xmb/panels'
-import type { AppState, Game, LaunchResult, Notice, Settings } from '../../shared/types'
+import type { AddGamesResult, AppState, Game, LaunchResult, Notice, Settings } from '../../shared/types'
+
+const byTitle = (a: Game, b: Game) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base', numeric: true })
 
 interface PanelRef {
   id: string
@@ -38,7 +41,9 @@ export function App() {
   const [errorPanel, setErrorPanel] = useState<{ title: string; result: LaunchResult; index: number } | null>(null)
   const [pad, setPad] = useState<PadKind | null>(null)
   const [idle, setIdle] = useState(false)
-  const [extra, setExtra] = useState<PanelExtra>({ emuProgress: {}, importing: false })
+  const [extra, setExtra] = useState<PanelExtra>({ emuProgress: {}, importing: false, details: {} })
+  const [entry, setEntry] = useState<EntryState | null>(null)
+  const [dragging, setDragging] = useState(false)
   const lastInput = useRef(Date.now())
   const scanned = useRef(false)
 
@@ -70,6 +75,7 @@ export function App() {
         apply({ library })
       }),
       api.on('consoles', (consoles) => apply({ consoles })),
+      api.on('collections', (collections) => apply({ collections })),
       api.on('running', (running) => apply({ running })),
       api.on('import-progress', (p) => setExtra((x) => ({ ...x, importProgress: p }))),
       api.on('emulator-progress', ({ id, text }) => setExtra((x) => ({ ...x, emuProgress: { ...x.emuProgress, [id]: text } }))),
@@ -111,17 +117,69 @@ export function App() {
     void api.runCommand(cmd, arg)
   }, [])
 
+  const loadDetails = useCallback(async (id: string) => {
+    const d = await api.gameDetails(id)
+    if (d) setExtra((x) => ({ ...x, details: { ...x.details, [id]: d } }))
+    return d
+  }, [])
+
+  const launchMode = useCallback(async (g: Game, mode: 'fresh' | 'resume') => {
+    sfx.launch()
+    setPanels([])
+    const r = await api.launch(g.id, mode)
+    if (!r.ok) {
+      sfx.error()
+      setErrorPanel({ title: `Can't start ${g.title}`, result: r, index: 1 })
+    }
+  }, [])
+
+  /** ✕ on a game: offer Resume / Start fresh when a resume state exists, otherwise just play. */
   const launch = useCallback(
     async (g: Game) => {
-      sfx.launch()
-      setPanels([])
-      const r = await api.launch(g.id)
-      if (!r.ok) {
-        sfx.error()
-        setErrorPanel({ title: `Can't start ${g.title}`, result: r, index: 1 })
+      const c = state?.consoles.find((x) => x.id === g.console)
+      if (c?.quickResume) {
+        const d = await loadDetails(g.id)
+        if (d?.resume) {
+          sfx.confirm()
+          setPanels([{ id: 'resume', arg: g.id, index: 0 }])
+          return
+        }
       }
+      void launchMode(g, 'fresh')
     },
-    []
+    [state?.consoles, loadDetails, launchMode]
+  )
+
+  const handleAdd = useCallback((r: AddGamesResult | null) => {
+    if (!r?.ask.length) return
+    setExtra((x) => ({ ...x, addAsk: r.ask }))
+    setPanels((p) => [...p.filter((q) => q.id !== 'add-ask'), { id: 'add-ask', index: 0 }])
+  }, [])
+
+  const addGameAs = useCallback(
+    (p: string, consoleId: string) => {
+      setExtra((x) => {
+        const rest = (x.addAsk ?? []).filter((q) => q.path !== p)
+        if (!rest.length) setPanels((ps) => ps.filter((q) => q.id !== 'add-ask'))
+        return { ...x, addAsk: rest }
+      })
+      if (consoleId) void api.addGames([p], consoleId).then(handleAdd)
+    },
+    [handleAdd]
+  )
+
+  const openSearch = useCallback(() => {
+    sfx.confirm()
+    setEntry({ kind: 'search', title: 'Search', value: '', row: 0, col: 0, focus: 'keys', result: 0 })
+  }, [])
+
+  const openEntry = useCallback(
+    (kind: 'new-collection' | 'rename-collection', target?: string) => {
+      const name = kind === 'rename-collection' ? (state?.collections.find((c) => c.id === target)?.name ?? '') : ''
+      setPanels([]) // the keyboard takes over the screen
+      setEntry({ kind, title: kind === 'new-collection' ? 'New collection' : 'Rename collection', value: name, row: 0, col: 0, focus: 'keys', result: 0, target })
+    },
+    [state?.collections]
   )
 
   const toggleFavorite = useCallback(
@@ -136,6 +194,7 @@ export function App() {
 
   const openPanel = useCallback((id: string, arg?: string) => {
     setPanels((p) => [...p, { id, arg, index: 0 }])
+    if (arg && ['game', 'backups', 'delete'].includes(id)) void loadDetails(arg)
     if (id === 'emulators') {
       api.emulators().then((emulators) => setExtra((x) => ({ ...x, emulators })))
       api.checkEmulatorUpdates().then((emulators) => setExtra((x) => ({ ...x, emulators })))
@@ -144,7 +203,7 @@ export function App() {
       setExtra((x) => (x.importing ? x : { ...x, importSources: undefined, importResult: undefined, importProgress: undefined }))
       api.importScan().then((importSources) => setExtra((x) => ({ ...x, importSources })))
     }
-  }, [])
+  }, [loadDetails])
 
   const installEmulator = useCallback((id: string) => {
     api.installEmulator(id).then(() => api.emulators().then((emulators) => setExtra((x) => ({ ...x, emulators }))))
@@ -157,6 +216,117 @@ export function App() {
     api.importRun(index).then((importResult) => setExtra((x) => ({ ...x, importing: false, importResult })))
   }, [])
 
+  const applyCollections = useCallback((collections: AppState['collections']) => setState((s) => (s ? { ...s, collections } : s)), [])
+  const collectionToggle = useCallback(
+    (id: string, gameId: string) => void api.collectionToggle(id, gameId).then(applyCollections),
+    [applyCollections]
+  )
+  const collectionDelete = useCallback((id: string) => void api.collectionDelete(id).then(applyCollections), [applyCollections])
+  const backupNow = useCallback((g: Game) => void api.backupNow(g.id).then(() => loadDetails(g.id)), [loadDetails])
+  const restoreBackup = useCallback(
+    (g: Game, id: string) => void api.restoreBackup(g.id, id).then(() => loadDetails(g.id)),
+    [loadDetails]
+  )
+  const restorePreviousResume = useCallback((g: Game) => void api.restorePreviousResume(g.id).then(() => loadDetails(g.id)), [loadDetails])
+  const deleteGame = useCallback((g: Game, withSaves: boolean) => void api.deleteGame(g.id, withSaves), [])
+  const addGamesDialog = useCallback(() => void api.addGamesDialog().then(handleAdd), [handleAdd])
+
+  // ---- text entry (search, collection names) ----
+  const searchHits = useMemo((): { game: Game; item: EntryResult }[] | undefined => {
+    if (!entry || entry.kind !== 'search' || !state) return undefined
+    const words = entry.value.toLowerCase().split(/\s+/).filter(Boolean)
+    if (!words.length) return []
+    const cons = new Map(state.consoles.map((c) => [c.id, c]))
+    return state.library.games
+      .filter((g) => {
+        const hay = `${g.title} ${g.serial ?? ''} ${cons.get(g.console)?.short ?? ''}`.toLowerCase()
+        return words.every((w) => hay.includes(w))
+      })
+      .sort(byTitle)
+      .slice(0, 100)
+      .map((g) => ({
+        game: g,
+        item: { key: g.id, label: g.title, sub: cons.get(g.console)?.name ?? g.console, icon: cons.get(g.console)?.icon ?? 'disc', art: g.icon }
+      }))
+  }, [entry, state])
+
+  const typeChar = useCallback((ch: string) => {
+    setEntry((e) => {
+      if (!e) return e
+      if (ch === BACKSPACE) return { ...e, value: e.value.slice(0, -1), result: 0 }
+      // on-screen keys are capitals: write words as "Title case"
+      const prev = e.value.slice(-1)
+      const c = /[A-Z]/.test(ch) && prev && prev !== ' ' ? ch.toLowerCase() : ch
+      return { ...e, value: (e.value + c).slice(0, 40), result: 0 }
+    })
+  }, [])
+
+  const entryDone = useCallback(() => {
+    if (!entry) return
+    const value = entry.value.trim()
+    if (entry.kind === 'search') {
+      if (searchHits?.length) setEntry({ ...entry, focus: 'results', result: 0 })
+      else setEntry(null)
+      return
+    }
+    if (!value) {
+      sfx.error()
+      return
+    }
+    sfx.confirm()
+    if (entry.kind === 'new-collection')
+      void api.collectionCreate(value, entry.target).then((cols) => {
+        applyCollections(cols)
+        notify({ kind: 'success', title: 'Collection created', detail: value })
+      })
+    else if (entry.target) void api.collectionRename(entry.target, value).then(applyCollections)
+    setEntry(null)
+    setPanels([])
+  }, [entry, searchHits, applyCollections, notify])
+
+  const pressKey = useCallback(
+    (r: number, c: number) => {
+      const k = KEY_ROWS[r][c]
+      setEntry((e) => (e ? { ...e, row: r, col: c, focus: 'keys' } : e))
+      sfx.move()
+      if (k === 'SPACE') typeChar(' ')
+      else if (k === 'DELETE') typeChar(BACKSPACE)
+      else if (k === 'DONE') entryDone()
+      else typeChar(k)
+    },
+    [typeChar, entryDone]
+  )
+
+  useEffect(() => {
+    input.setTextHandler(entry && !panels.length && !errorPanel ? typeChar : null)
+    return () => input.setTextHandler(null)
+  }, [entry, panels.length, errorPanel, typeChar])
+
+  // ---- drag & drop game files into the window ----
+  useEffect(() => {
+    const over = (e: DragEvent) => {
+      e.preventDefault()
+      setDragging(true)
+    }
+    const leave = (e: DragEvent) => {
+      if (!e.relatedTarget) setDragging(false)
+    }
+    const drop = (e: DragEvent) => {
+      e.preventDefault()
+      setDragging(false)
+      const paths = [...(e.dataTransfer?.files ?? [])].map((f) => api.pathForFile(f)).filter(Boolean)
+      if (paths.length) void api.addGames(paths).then(handleAdd)
+    }
+    window.addEventListener('dragover', over)
+    window.addEventListener('dragleave', leave)
+    window.addEventListener('drop', drop)
+    return () => {
+      window.removeEventListener('dragover', over)
+      window.removeEventListener('dragleave', leave)
+      window.removeEventListener('drop', drop)
+    }
+  }, [handleAdd])
+
   // ---- model ----
   const columns = useMemo(
     () =>
@@ -165,10 +335,12 @@ export function App() {
             openPanel,
             command,
             toggleFullscreen: () => void api.toggleFullscreen(),
-            quit: () => void api.quit()
+            quit: () => void api.quit(),
+            openSearch,
+            newCollection: () => openEntry('new-collection')
           })
         : [],
-    [state, openPanel, command]
+    [state, openPanel, command, openSearch, openEntry]
   )
 
   // initial column: first console with games, otherwise Settings
@@ -210,7 +382,9 @@ export function App() {
   const rowKey = column ? column.id + folderStack.map((f) => '/' + f.key).join('') : ''
   const saved = rows[rowKey]
   const byKey = saved?.key ? items.findIndex((it) => it.key === saved.key) : -1
-  const row = byKey >= 0 ? byKey : Math.min(saved?.index ?? 0, Math.max(0, items.length - 1))
+  // a console column opens on its first game, not on the Search item above it
+  const firstGame = Math.max(0, items.findIndex((it) => it.kind === 'game'))
+  const row = byKey >= 0 ? byKey : Math.min(saved?.index ?? firstGame, Math.max(0, items.length - 1))
   const current = items[row]
 
   const activePanelRef = errorPanel ? null : panels[panels.length - 1]
@@ -228,8 +402,61 @@ export function App() {
       }
     }
     if (!activePanelRef || !state) return null
-    return buildPanel(activePanelRef.id, activePanelRef.arg, state, { setSetting, command, launch, toggleFavorite, openPanel, installEmulator, checkUpdates, runImport }, extra)
-  }, [activePanelRef, errorPanel, state, setSetting, command, launch, toggleFavorite, openPanel, installEmulator, checkUpdates, runImport, extra])
+    return buildPanel(
+      activePanelRef.id,
+      activePanelRef.arg,
+      state,
+      {
+        setSetting,
+        command,
+        launch,
+        toggleFavorite,
+        openPanel,
+        installEmulator,
+        checkUpdates,
+        runImport,
+        launchMode,
+        openEntry,
+        collectionToggle,
+        collectionDelete,
+        backupNow,
+        restoreBackup,
+        restorePreviousResume,
+        deleteGame,
+        addGamesDialog,
+        addGameAs
+      },
+      extra
+    )
+  }, [
+    activePanelRef,
+    errorPanel,
+    state,
+    setSetting,
+    command,
+    launch,
+    toggleFavorite,
+    openPanel,
+    installEmulator,
+    checkUpdates,
+    runImport,
+    launchMode,
+    openEntry,
+    collectionToggle,
+    collectionDelete,
+    backupNow,
+    restoreBackup,
+    restorePreviousResume,
+    deleteGame,
+    addGamesDialog,
+    addGameAs,
+    extra
+  ])
+
+  // a panel whose subject is gone (deleted game, finished question) closes itself
+  useEffect(() => {
+    if (activePanelRef && state && !activePanel) setPanels((p) => p.slice(0, -1))
+  }, [activePanelRef, activePanel, state])
 
   const panelIndex = activePanel
     ? firstSelectable(activePanel, Math.min(errorPanel ? errorPanel.index : (activePanelRef?.index ?? 0), activePanel.items.length - 1), 1)
@@ -240,8 +467,8 @@ export function App() {
   }
 
   // ---- input ----
-  const handler = useRef<(a: Action) => void>(() => undefined)
-  handler.current = (a: Action) => {
+  const handler = useRef<(a: Action, src?: string) => void>(() => undefined)
+  handler.current = (a: Action, src?: string) => {
     lastInput.current = Date.now()
     if (idle) {
       setIdle(false)
@@ -271,6 +498,89 @@ export function App() {
         sfx.back()
         if (errorPanel) setErrorPanel(null)
         else setPanels((p) => p.slice(0, -1))
+      }
+      return
+    }
+
+    if (entry) {
+      const hits = searchHits ?? []
+      if (entry.focus === 'keys') {
+        const move = (row: number, col: number) => {
+          sfx.move()
+          setEntry({ ...entry, row, col: clampCol(row, col) })
+        }
+        switch (a) {
+          case 'up':
+            if (entry.row > 0) move(entry.row - 1, entry.col)
+            break
+          case 'down':
+            if (entry.row < KEY_ROWS.length - 1) move(entry.row + 1, entry.col)
+            break
+          case 'left':
+            if (entry.col > 0) move(entry.row, entry.col - 1)
+            break
+          case 'right':
+            if (entry.col < KEY_ROWS[entry.row].length - 1) move(entry.row, entry.col + 1)
+            else if (hits.length) {
+              sfx.column()
+              setEntry({ ...entry, focus: 'results', result: 0 })
+            }
+            break
+          case 'r1':
+            if (hits.length) {
+              sfx.column()
+              setEntry({ ...entry, focus: 'results', result: 0 })
+            }
+            break
+          case 'confirm':
+            // Enter on a real keyboard finishes; ✕ types the highlighted key
+            if (src === 'keyboard') entryDone()
+            else pressKey(entry.row, entry.col)
+            break
+          case 'search':
+            sfx.back()
+            typeChar(BACKSPACE)
+            break
+          case 'start':
+            entryDone()
+            break
+          case 'back':
+            sfx.back()
+            setEntry(null)
+            break
+        }
+      } else {
+        const hit = hits[entry.result]
+        switch (a) {
+          case 'up':
+          case 'down': {
+            const next = entry.result + (a === 'up' ? -1 : 1)
+            if (next >= 0 && next < hits.length) {
+              sfx.move()
+              setEntry({ ...entry, result: next })
+            }
+            break
+          }
+          case 'left':
+          case 'l1':
+          case 'back':
+          case 'search':
+            sfx.back()
+            setEntry({ ...entry, focus: 'keys' })
+            break
+          case 'confirm':
+            if (hit) void launch(hit.game)
+            break
+          case 'options':
+            if (hit) {
+              sfx.confirm()
+              openPanel('game', hit.game.id)
+            }
+            break
+          case 'select':
+            if (hit) toggleFavorite(hit.game)
+            break
+        }
       }
       return
     }
@@ -324,6 +634,9 @@ export function App() {
         if (current?.game) {
           sfx.confirm()
           openPanel('game', current.game.id)
+        } else if (current?.options) {
+          sfx.confirm()
+          current.options()
         }
         break
       case 'select':
@@ -346,11 +659,12 @@ export function App() {
         break
       }
       case 'search':
+        openSearch()
         break
     }
   }
 
-  useEffect(() => input.on((a) => handler.current(a)), [])
+  useEffect(() => input.on((a, src) => handler.current(a, src)), [])
 
   // mouse activity also counts as input for the screensaver
   useEffect(() => {
@@ -385,7 +699,20 @@ export function App() {
         ['confirm', 'Select'],
         ['back', 'Back']
       ]
-    : current?.game
+    : entry
+      ? entry.focus === 'keys'
+        ? [
+            ['confirm', 'Type'],
+            ['search', 'Delete'],
+            ['start', 'Done'],
+            ['back', 'Close']
+          ]
+        : [
+            ['confirm', 'Play'],
+            ['options', 'Options'],
+            ['back', 'Keyboard']
+          ]
+      : current?.game
       ? [
           ['confirm', 'Play'],
           ['options', 'Options'],
@@ -396,7 +723,7 @@ export function App() {
           ...(folderStack.length ? ([['back', 'Back']] as [GlyphButton, string][]) : [])
         ]
 
-  const bgArt = !activePanel && current?.game?.background
+  const bgArt = !activePanel && !entry && current?.game?.background
   return (
     <div className={`app ${idle ? 'idle' : ''} ${running ? 'running' : ''}`}>
       <Background paused={!!running} dim={idle} />
@@ -429,6 +756,18 @@ export function App() {
               onOptions={() => handler.current('options')}
             />
           )}
+          {entry && (
+            <TextEntry
+              entry={entry}
+              results={entry.kind === 'search' ? (searchHits ?? []).map((h) => h.item) : undefined}
+              onKey={(r, c) => pressKey(r, c)}
+              onResult={(i) => setEntry({ ...entry, focus: 'results', result: i })}
+              onResultActivate={(i) => {
+                const hit = searchHits?.[i]
+                if (hit) void launch(hit.game)
+              }}
+            />
+          )}
           {activePanel && (
             <PanelView
               panel={activePanel}
@@ -446,6 +785,11 @@ export function App() {
             </div>
           )}
         </>
+      )}
+      {dragging && (
+        <div className="drop-hint" data-testid="drop-hint">
+          Drop game files to add them
+        </div>
       )}
       <Notices list={notices} onExpire={expire} />
       {idle && <div className="screensaver" data-testid="screensaver" />}

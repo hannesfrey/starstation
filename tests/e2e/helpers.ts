@@ -17,14 +17,22 @@ export function makeFiles(name: string): string {
  * Presets = the real ones + a "testcon" console whose emulator is a tiny Node script
  * that records its arguments and exits after `ms`.
  */
-export function makePresets(files: string, ms = 1500): string {
+export function makePresets(files: string, ms = 1500, opts: { quickResume?: boolean } = {}): string {
   const dst = path.join(files, '_presets')
   fs.cpSync(path.join(SOURCE, 'presets'), dst, { recursive: true })
   const emuDir = path.join(files, '_fakeemu')
   fs.mkdirSync(emuDir, { recursive: true })
+  // Like a real emulator: records its arguments, and on close writes the game's save + a resume state
+  // into Files\saves\testcon (next to games\testcon).
   fs.writeFileSync(
     path.join(emuDir, 'fake-emu.js'),
-    `const fs=require('fs');fs.writeFileSync(${JSON.stringify(path.join(emuDir, 'launched.json'))},JSON.stringify(process.argv.slice(2)));setTimeout(()=>process.exit(0),${ms});`
+    `const fs=require('fs'),path=require('path');const args=process.argv.slice(2);` +
+      `fs.writeFileSync(${JSON.stringify(path.join(emuDir, 'launched.json'))},JSON.stringify(args));` +
+      `const game=args[args.length-1];const base=path.basename(game,path.extname(game));` +
+      `const saves=path.join(path.dirname(game),'..','..','saves','testcon');` +
+      `setTimeout(()=>{fs.mkdirSync(path.join(saves,'states'),{recursive:true});` +
+      `fs.writeFileSync(path.join(saves,base+'.sav'),'played '+Date.now());` +
+      `fs.writeFileSync(path.join(saves,'states',base+'.state'),'state');process.exit(0)},${ms});`
   )
   fs.writeFileSync(
     path.join(dst, 'emulators', 'fakeemu.json'),
@@ -42,7 +50,9 @@ export function makePresets(files: string, ms = 1500): string {
       launch: { args: ['{emu}/fake-emu.js', '{launch}'] },
       extensions: ['.tst'],
       config: [],
-      quickResume: false
+      backup: [{ path: '{saves}/{basename}.sav' }],
+      resume: { state: '{saves}/states/{basename}.state', args: ['--resume', '{state}'], at: 1 },
+      quickResume: !!opts.quickResume
     })
   )
   return dst

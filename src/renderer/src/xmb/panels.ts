@@ -1,4 +1,4 @@
-import type { AppState, EmulatorInfo, Game, ImportProgressInfo, ImportResultInfo, ImportSourceInfo, Settings } from '../../../shared/types'
+import type { AddGamesResult, AppState, EmulatorInfo, Game, GameDetails, ImportProgressInfo, ImportResultInfo, ImportSourceInfo, Settings } from '../../../shared/types'
 import { formatPlayTime } from './model'
 
 /** Data some panels load on demand. */
@@ -9,6 +9,10 @@ export interface PanelExtra {
   importProgress?: ImportProgressInfo
   importResult?: ImportResultInfo
   importing: boolean
+  /** Triangle-menu data per game (resume state, backups). */
+  details: Record<string, GameDetails>
+  /** Files whose console has to be picked by hand. */
+  addAsk?: AddGamesResult['ask']
 }
 
 export interface PItem {
@@ -37,9 +41,27 @@ export interface PanelHandlers {
   installEmulator: (id: string) => void
   checkUpdates: () => void
   runImport: (index: number) => void
+  launchMode: (g: Game, mode: 'fresh' | 'resume') => void
+  openEntry: (kind: 'new-collection' | 'rename-collection', target?: string) => void
+  collectionToggle: (id: string, gameId: string) => void
+  collectionDelete: (id: string) => void
+  backupNow: (g: Game) => void
+  restoreBackup: (g: Game, backupId: string) => void
+  restorePreviousResume: (g: Game) => void
+  deleteGame: (g: Game, withSaves: boolean) => void
+  addGamesDialog: () => void
+  addGameAs: (path: string, consoleId: string) => void
 }
 
 const onOff = (b: boolean) => (b ? 'On' : 'Off')
+
+export function formatDate(t: number): string {
+  const d = new Date(t)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+const REASON = { launch: 'before playing', manual: 'by hand', 'before-restore': 'before a restore' }
 
 function formatSize(bytes: number): string {
   if (bytes < 0) return '—'
@@ -187,6 +209,8 @@ export function buildPanel(id: string, arg: string | undefined, state: AppState,
         title: 'Library',
         items: [
           { key: 'count', label: `${state.library.games.length} games`, info: true },
+          { key: 'add', label: 'Add games…', run: () => h.addGamesDialog() },
+          { key: 'drop', label: 'Tip: you can also drag game files into this window.', info: true },
           { key: 'rescan', label: 'Rescan games', run: () => h.command('rescan') },
           { key: 'games', label: 'Open games folder', run: () => h.command('open-folder', 'games') }
         ]
@@ -205,19 +229,172 @@ export function buildPanel(id: string, arg: string | undefined, state: AppState,
       const g = state.library.games.find((x) => x.id === arg)
       if (!g) return null
       const st = state.library.stats[g.id]
+      const c = state.consoles.find((x) => x.id === g.console)
+      const d = x.details[g.id]
+      const items: PItem[] = []
+      if (d?.resume) {
+        items.push({ key: 'resume', label: 'Resume', value: formatDate(d.resume.savedAt), run: () => h.launchMode(g, 'resume') })
+        items.push({ key: 'fresh', label: 'Start fresh', run: () => h.launchMode(g, 'fresh') })
+      } else items.push({ key: 'play', label: 'Play', run: () => h.launchMode(g, 'fresh') })
+      items.push(
+        { key: 'fav', label: st?.favorite ? 'Remove from Favorites' : 'Add to Favorites', run: () => (h.toggleFavorite(g), 'keep') },
+        { key: 'collect', label: 'Add to collection…', run: () => (h.openPanel('add-to-collection', g.id), 'keep') }
+      )
+      if (d?.canBackup ?? true)
+        items.push({
+          key: 'backups',
+          label: 'Save backups',
+          value: d ? `${d.backups.length}` : undefined,
+          run: () => (h.openPanel('backups', g.id), 'keep')
+        })
+      items.push(
+        { key: 'folders', label: 'Open folder…', run: () => (h.openPanel('folders', g.id), 'keep') },
+        { key: 'info', label: 'Game info', run: () => (h.openPanel('info', g.id), 'keep') },
+        { key: 'delete', label: 'Delete game…', run: () => (h.openPanel('delete', g.id), 'keep') }
+      )
+      if (c && !c.quickResume) items.push({ key: 'noresume', label: `${c.short} games have no quick resume.`, info: true })
+      return { id, title: g.title, items }
+    }
+    case 'resume': {
+      const g = state.library.games.find((x) => x.id === arg)
+      const r = g && x.details[g.id]?.resume
+      if (!g || !r) return null
       return {
         id,
         title: g.title,
         items: [
-          { key: 'play', label: 'Play', run: () => h.launch(g) },
-          {
-            key: 'fav',
-            label: st?.favorite ? 'Remove from Favorites' : 'Add to Favorites',
-            run: () => (h.toggleFavorite(g), 'keep')
-          },
-          { key: 'folder', label: 'Open game folder', run: () => h.command('open-folder', `game:${g.id}`) },
-          { key: 'saves', label: 'Open saves folder', run: () => h.command('open-folder', `saves:${g.console}`) },
-          { key: 'info', label: 'Game info', run: () => (h.openPanel('info', g.id), 'keep') }
+          { key: 'when', label: `Saved when you closed it on ${formatDate(r.savedAt)}.`, info: true },
+          ...(r.warning ? [{ key: 'warn', label: r.warning, info: true }] : []),
+          { key: 'resume', label: 'Resume', run: () => h.launchMode(g, 'resume') },
+          { key: 'fresh', label: 'Start fresh', run: () => h.launchMode(g, 'fresh') }
+        ]
+      }
+    }
+    case 'add-to-collection': {
+      const g = state.library.games.find((x) => x.id === arg)
+      if (!g) return null
+      return {
+        id,
+        title: 'Add to collection',
+        items: [
+          ...state.collections.map((c) => ({
+            key: `c-${c.id}`,
+            label: c.name,
+            value: c.games.includes(g.id) ? 'In collection' : '',
+            run: () => (h.collectionToggle(c.id, g.id), 'keep' as const)
+          })),
+          { key: 'new', label: 'New collection…', run: () => (h.openEntry('new-collection', g.id), 'keep') }
+        ]
+      }
+    }
+    case 'collection': {
+      const c = state.collections.find((x) => x.id === arg)
+      if (!c) return null
+      return {
+        id,
+        title: c.name,
+        items: [
+          { key: 'count', label: `${c.games.length} games`, info: true },
+          { key: 'rename', label: 'Rename…', run: () => (h.openEntry('rename-collection', c.id), 'keep') },
+          { key: 'delete', label: 'Delete collection', run: () => (h.openPanel('collection-delete', c.id), 'keep') }
+        ]
+      }
+    }
+    case 'collection-delete': {
+      const c = state.collections.find((x) => x.id === arg)
+      if (!c) return null
+      return {
+        id,
+        title: `Delete "${c.name}"?`,
+        items: [
+          { key: 'msg', label: 'Only the collection is deleted. The games stay in your library.', info: true },
+          { key: 'yes', label: 'Delete collection', run: () => h.collectionDelete(c.id) },
+          { key: 'no', label: 'Cancel' }
+        ]
+      }
+    }
+    case 'backups': {
+      const g = state.library.games.find((x) => x.id === arg)
+      if (!g) return null
+      const d = x.details[g.id]
+      const items: PItem[] = [{ key: 'now', label: 'Back up now', run: () => (h.backupNow(g), 'keep') }]
+      if (!d) items.push({ key: 'loading', label: 'Loading…', info: true })
+      else if (!d.backups.length) items.push({ key: 'none', label: 'No backups yet. Saves are backed up every time you start the game (last 5 kept).', info: true })
+      for (const b of d?.backups ?? [])
+        items.push({
+          key: `b-${b.id}`,
+          label: formatDate(b.createdAt),
+          value: `${REASON[b.reason]} · ${formatSize(b.bytes)}`,
+          run: () => (h.openPanel('backup', `${g.id}|${b.id}`), 'keep')
+        })
+      if (d?.previousResume)
+        items.push({
+          key: 'prevresume',
+          label: 'Bring back the earlier resume point',
+          value: formatDate(d.previousResume),
+          run: () => (h.restorePreviousResume(g), 'keep')
+        })
+      items.push({ key: 'folder', label: 'Open backups folder', run: () => h.command('open-folder', `backups:${g.console}`) })
+      return { id, title: 'Save backups', items }
+    }
+    case 'backup': {
+      const [gid, bid] = (arg ?? '').split('|')
+      const g = state.library.games.find((x) => x.id === gid)
+      const b = g && x.details[g.id]?.backups.find((y) => y.id === bid)
+      if (!g || !b) return null
+      return {
+        id,
+        title: `Backup from ${formatDate(b.createdAt)}`,
+        items: [
+          { key: 'msg', label: 'Restoring replaces the current saves. They are backed up first, so you can go back.', info: true },
+          { key: 'restore', label: 'Restore this backup', run: () => h.restoreBackup(g, b.id) },
+          { key: 'open', label: 'Open this backup folder', run: () => h.command('open-path', b.folder) },
+          { key: 'cancel', label: 'Cancel' }
+        ]
+      }
+    }
+    case 'folders': {
+      const g = state.library.games.find((x) => x.id === arg)
+      if (!g) return null
+      return {
+        id,
+        title: 'Open folder',
+        items: [
+          { key: 'game', label: 'Game files', run: () => h.command('open-folder', `game:${g.id}`) },
+          { key: 'saves', label: 'Saves', run: () => h.command('open-folder', `saves:${g.console}`) },
+          { key: 'backups', label: 'Save backups', run: () => h.command('open-folder', `backups:${g.console}`) },
+          { key: 'shots', label: 'Screenshots', run: () => h.command('open-folder', `screenshots:${g.console}`) },
+          { key: 'mods', label: 'Mods', run: () => h.command('open-folder', `mods:${g.console}`) }
+        ]
+      }
+    }
+    case 'delete': {
+      const g = state.library.games.find((x) => x.id === arg)
+      if (!g) return null
+      const d = x.details[g.id]
+      const items: PItem[] = [
+        { key: 'msg', label: `${g.title} goes to the Recycle Bin, so you can still get it back.`, info: true },
+        { key: 'keep', label: 'Delete game, keep saves', run: () => h.deleteGame(g, false) }
+      ]
+      if (d?.ownSaves) items.push({ key: 'all', label: 'Delete game and its saves', run: () => h.deleteGame(g, true) })
+      else items.push({ key: 'shared', label: 'Its saves stay: none belong only to this game (memory cards are shared).', info: true })
+      items.push({ key: 'cancel', label: 'Cancel' })
+      return { id, title: 'Delete game?', items }
+    }
+    case 'add-ask': {
+      const q = x.addAsk?.[0]
+      if (!q) return null
+      const name = q.path.split(/[\\/]/).pop()
+      return {
+        id,
+        title: 'Which console is this for?',
+        items: [
+          { key: 'file', label: name ?? q.path, info: true },
+          ...q.options.map((o) => {
+            const c = state.consoles.find((y) => y.id === o)
+            return { key: `as-${o}`, label: c?.name ?? o, run: () => (h.addGameAs(q.path, o), 'keep' as const) }
+          }),
+          { key: 'skip', label: 'Skip this file', run: () => (h.addGameAs(q.path, ''), 'keep' as const) }
         ]
       }
     }

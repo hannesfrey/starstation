@@ -5,29 +5,112 @@
   "order": 90,
   "icon": "disc-mini",
   "emulator": "duckstation",
-  "launch": { "args": ["-batch", "-fullscreen", "--", "{launch}"] },
-  "extensions": [".cue", ".chd", ".pbp", ".m3u", ".iso", ".ecm", ".mds", ".img"],
-  "games": { "multiDisc": "m3u" },
+  "launch": {
+    "args": [
+      "-batch",
+      "-fullscreen",
+      "--",
+      "{launch}"
+    ]
+  },
+  "extensions": [
+    ".cue",
+    ".chd",
+    ".pbp",
+    ".m3u",
+    ".iso",
+    ".ecm",
+    ".mds",
+    ".img"
+  ],
+  "games": {
+    "multiDisc": "m3u"
+  },
   "bios": {
     "hint": "Any PS1 BIOS dump (512 KB, e.g. SCPH-1001 / SCPH-5502 / SCPH-7502). DuckStation picks the right region automatically.",
-    "files": [{ "label": "PS1 BIOS (any region)", "match": "\\.(bin|rom|mbx)$", "size": [524288], "required": true }]
+    "files": [
+      {
+        "label": "PS1 BIOS (any region)",
+        "match": "\\.(bin|rom|mbx)$",
+        "size": [
+          524288
+        ],
+        "required": true
+      }
+    ]
   },
-  "gameId": { "method": "ps1-serial", "titleDb": { "type": "yaml-serial", "file": "{emu}/resources/gamedb.yaml" } },
-  "saves": { "dir": "{saves}" },
+  "gameId": {
+    "method": "ps1-serial",
+    "titleDb": {
+      "type": "yaml-serial",
+      "file": "{emu}/resources/gamedb.yaml"
+    }
+  },
+  "saves": {
+    "dir": "{saves}"
+  },
   "config": [
     {
       "type": "ini",
       "file": "{emu}/settings.ini",
       "set": {
-        "Main": { "SetupWizardIncomplete": "false", "StartFullscreen": "true", "ConfirmPowerOff": "false" },
-        "BIOS": { "SearchDirectory": "{bios}" },
-        "MemoryCards": { "Directory": "{saves}/memcards" },
-        "Folders": { "SaveStates": "{saves}/savestates", "Screenshots": "{screenshots}" },
-        "GameList": { "RecursivePaths": "{games}" }
+        "Main": {
+          "SetupWizardIncomplete": "false",
+          "StartFullscreen": "true",
+          "ConfirmPowerOff": "false",
+          "SaveStateOnExit": "true"
+        },
+        "BIOS": {
+          "SearchDirectory": "{bios}"
+        },
+        "MemoryCards": {
+          "Directory": "{saves}/memcards"
+        },
+        "Folders": {
+          "SaveStates": "{saves}/savestates",
+          "Screenshots": "{screenshots}"
+        },
+        "GameList": {
+          "RecursivePaths": "{games}"
+        }
       }
     }
   ],
-  "import": { "roms": ["psx", "ps1", "playstation"], "saves": [ { "from": ["duckstation/memcards", "duckstation/saves"], "to": "memcards" }, { "from": ["duckstation/savestates", "duckstation/states"], "to": "savestates" } ] },
+  "import": {
+    "roms": [
+      "psx",
+      "ps1",
+      "playstation"
+    ],
+    "saves": [
+      {
+        "from": [
+          "duckstation/memcards",
+          "duckstation/saves"
+        ],
+        "to": "memcards"
+      },
+      {
+        "from": [
+          "duckstation/savestates",
+          "duckstation/states"
+        ],
+        "to": "savestates"
+      }
+    ]
+  },
   "quickResume": true,
-  "notes": "Multi-disc games: put the discs and a .m3u playlist in one folder; only the .m3u is listed."
+  "notes": "Multi-disc games: put the discs and a .m3u playlist in one folder; only the .m3u is listed.",
+  "backup": [
+    {
+      "path": "{saves}/memcards",
+      "shared": true
+    }
+  ],
+  "resume": {
+    "state": "{saves}/savestates/{serial}_resume.sav",
+    "args": [
+      "-resume"
+    ]
+  }
 }

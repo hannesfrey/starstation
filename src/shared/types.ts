@@ -81,6 +81,8 @@ export interface GameStats {
   playCount: number
   lastPlayed?: number
   favorite?: boolean
+  /** Emulator version that wrote the current resume state. */
+  resumeVersion?: string
 }
 
 export interface LibraryView {
@@ -120,6 +122,7 @@ export interface AppState {
   settings: Settings
   consoles: ConsoleInfo[]
   library: LibraryView
+  collections: Collection[]
   running: RunningGame | null
 }
 
@@ -168,7 +171,19 @@ export interface StarstationApi {
   getState(): Promise<AppState>
   setSetting<K extends keyof Settings>(key: K, value: Settings[K]): Promise<Settings>
   rescan(): Promise<LibraryView>
-  launch(gameId: string): Promise<LaunchResult>
+  launch(gameId: string, mode?: 'fresh' | 'resume'): Promise<LaunchResult>
+  gameDetails(gameId: string): Promise<GameDetails | null>
+  backupNow(gameId: string): Promise<BackupInfo | null>
+  restoreBackup(gameId: string, backupId: string): Promise<{ ok: boolean; error?: string }>
+  restorePreviousResume(gameId: string): Promise<{ ok: boolean; error?: string }>
+  deleteGame(gameId: string, withSaves: boolean): Promise<{ ok: boolean; error?: string }>
+  collectionCreate(name: string, firstGame?: string): Promise<Collection[]>
+  collectionRename(id: string, name: string): Promise<Collection[]>
+  collectionDelete(id: string): Promise<Collection[]>
+  collectionToggle(id: string, gameId: string): Promise<Collection[]>
+  addGames(paths: string[], consoleId?: string): Promise<AddGamesResult>
+  addGamesDialog(): Promise<AddGamesResult | null>
+  pathForFile(file: File): string
   toggleFavorite(gameId: string): Promise<GameStats>
   openFolder(kind: string, arg?: string): Promise<void>
   runCommand(command: string, arg?: string): Promise<void>
@@ -182,4 +197,45 @@ export interface StarstationApi {
   on(channel: 'import-progress', cb: (p: ImportProgressInfo) => void): () => void
   on(channel: 'emulator-progress', cb: (p: { id: string; text: string }) => void): () => void
   on(channel: 'navigate', cb: (where: string) => void): () => void
+  on(channel: 'collections', cb: (c: Collection[]) => void): () => void
+}
+
+export interface BackupInfo {
+  id: string
+  createdAt: number
+  reason: 'launch' | 'manual' | 'before-restore'
+  bytes: number
+  folder: string
+}
+
+export interface ResumeInfo {
+  savedAt: number
+  /** Set when the emulator was updated after the state was saved. */
+  warning?: string
+}
+
+/** Loaded when the Triangle menu opens. */
+export interface GameDetails {
+  resume: ResumeInfo | null
+  backups: BackupInfo[]
+  /** Save data that belongs only to this game (deleted with it if asked). */
+  ownSaves: number
+  /** Save backups are possible for this console. */
+  canBackup: boolean
+  /** Resume state kept from before the last "Start fresh". */
+  previousResume: number | null
+}
+
+export interface Collection {
+  id: string
+  name: string
+  games: string[]
+  createdAt: number
+}
+
+export interface AddGamesResult {
+  added: { path: string; console: string; title?: string }[]
+  /** Files whose console can't be told apart (e.g. .chd = PS1 or PS2): ask Hannes. */
+  ask: { path: string; options: string[] }[]
+  errors: string[]
 }

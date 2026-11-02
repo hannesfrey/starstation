@@ -94,6 +94,13 @@ export interface ConsolePreset {
     saves?: { from: string[]; to: string }[]
     storage?: { from: string[]; to: string }[]
   }
+  /**
+   * Save data of one game, backed up before every launch. Placeholders: {saves} {serial} {basename} …;
+   * '*' is allowed in the last path part. shared = used by every game (memory cards): never deleted with a game.
+   */
+  backup?: { path: string; shared?: boolean }[]
+  /** Quick resume: the resume state the emulator writes on close ({state} = its path in args). */
+  resume?: { state: string; args: string[]; /** Position in the launch args (default 0 = first). */ at?: number }
   quickResume: boolean
   shaderHint?: boolean
   netplay?: boolean
@@ -181,6 +188,7 @@ export function vars(c: ConsolePreset, extra: Record<string, string> = {}): Reco
     config: dir('config'),
     console: c.id,
     core: c.core ?? '',
+    resume: 'false',
     ...extra
   }
 }

@@ -16,6 +16,8 @@ export type Action =
   | 'l1'
   | 'r1'
 
+export const BACKSPACE = 'Backspace'
+
 export type PadKind = 'playstation' | 'xbox' | 'generic'
 
 export interface PadEvent {
@@ -71,6 +73,7 @@ export class InputManager {
   private raf = 0
   private enabled = true
   private known = new Map<number, string>()
+  private text: ((ch: string) => void) | null = null
   lastKind: PadKind | null = null
 
   start(): void {
@@ -97,6 +100,11 @@ export class InputManager {
   setEnabled(on: boolean): void {
     this.enabled = on
     this.held.clear()
+  }
+
+  /** While the on-screen keyboard is open, typed characters go here (BACKSPACE = delete). */
+  setTextHandler(fn: ((ch: string) => void) | null): void {
+    this.text = fn
   }
 
   on(l: Listener): () => void {
@@ -131,6 +139,11 @@ export class InputManager {
       } else return
     }
     this.any()
+    if (this.text && !e.ctrlKey && !e.altKey && !e.metaKey && (e.key.length === 1 || e.key === 'Backspace')) {
+      e.preventDefault()
+      this.text(e.key === 'Backspace' ? BACKSPACE : e.key)
+      return
+    }
     let a: Action | null = null
     switch (e.key) {
       case 'ArrowUp':

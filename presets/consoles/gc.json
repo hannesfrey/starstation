@@ -5,25 +5,80 @@
   "order": 40,
   "icon": "disc-mini",
   "emulator": "dolphin",
-  "launch": { "args": ["-b", "-e", "{launch}"] },
-  "extensions": [".iso", ".gcm", ".rvz", ".gcz", ".ciso", ".wia", ".m3u"],
-  "gameId": { "method": "gc-header" },
-  "saves": { "dir": "{saves}", "note": "Dolphin keeps saves in its User folder; the saves folder links there." },
-  "import": { "roms": ["gc", "gamecube", "ngc"] },
+  "launch": {
+    "args": [
+      "-b",
+      "-e",
+      "{launch}"
+    ]
+  },
+  "extensions": [
+    ".iso",
+    ".gcm",
+    ".rvz",
+    ".gcz",
+    ".ciso",
+    ".wia",
+    ".m3u"
+  ],
+  "gameId": {
+    "method": "gc-header"
+  },
+  "saves": {
+    "dir": "{saves}",
+    "note": "Dolphin keeps saves in its User folder; the saves folder links there."
+  },
+  "import": {
+    "roms": [
+      "gc",
+      "gamecube",
+      "ngc"
+    ]
+  },
   "config": [
     {
       "type": "ini",
       "file": "{emu}/User/Config/Dolphin.ini",
       "set": {
-        "Display": { "Fullscreen": "True" },
-        "Interface": { "ConfirmStop": "False", "ShowActiveTitle": "False" },
-        "General": { "ISOPaths": "1", "ISOPath0": "{games}", "UseDiscordPresence": "False" },
-        "Analytics": { "PermissionAsked": "True", "Enabled": "False" }
+        "Display": {
+          "Fullscreen": "True"
+        },
+        "Interface": {
+          "ConfirmStop": "False",
+          "ShowActiveTitle": "False"
+        },
+        "General": {
+          "ISOPaths": "1",
+          "ISOPath0": "{games}",
+          "UseDiscordPresence": "False"
+        },
+        "Analytics": {
+          "PermissionAsked": "True",
+          "Enabled": "False"
+        }
       }
     },
-    { "type": "link", "path": "{saves}/GC", "target": "{emu}/User/GC" },
-    { "type": "mkdir", "path": "{emu}/User/ScreenShots" },
-    { "type": "link", "path": "{screenshots}/dolphin", "target": "{emu}/User/ScreenShots" }
+    {
+      "type": "link",
+      "path": "{saves}/GC",
+      "target": "{emu}/User/GC"
+    },
+    {
+      "type": "mkdir",
+      "path": "{emu}/User/ScreenShots"
+    },
+    {
+      "type": "link",
+      "path": "{screenshots}/dolphin",
+      "target": "{emu}/User/ScreenShots"
+    }
   ],
-  "quickResume": true
+  "quickResume": false,
+  "backup": [
+    {
+      "path": "{saves}/GC",
+      "shared": true
+    }
+  ],
+  "notes": "No quick resume: Dolphin cannot save a state automatically when it closes."
 }

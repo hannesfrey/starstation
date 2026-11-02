@@ -4,8 +4,8 @@ Read SPEC.md first. This file tracks where the build stands and every small deci
 
 ## Current state
 
-- **Phase:** Building. Steps 1–5 done. **Playable milestone reached 2026-11-02:** Hannes's setup is imported and Midnight Club 3 boots from Starstation (PS2).
-- **Next step:** Step 6 — Game experience
+- **Phase:** Building. Steps 1–6 done. **Playable milestone reached 2026-11-02:** Hannes's setup is imported and Midnight Club 3 boots from Starstation (PS2).
+- **Next step:** Step 7 — Controllers & graphics
 
 ## How to work on it
 
@@ -102,6 +102,20 @@ Flags checked on 2026-11-02 against current sources: Azahar `-f <file>` (citra_q
 - Download sources: GitHub releases for Azahar/xemu/Xenia (like PCSX2/RPCS3/DuckStation), fixed official URLs for RetroArch 1.22.2 (buildbot) and Dolphin 2609a (dl.dolphin-emu.org) with their download pages noted.
 - Test: all 11 presets load in spec order and show as XMB columns.
 - **Pending:** real install tests for the other emulators (`NETWORK=1`, large downloads — postponed while Hannes was streaming) and real game launches per preset (Hannes OK'd visible tests on 2026-11-02; PS2 verified; the other consoles have no games yet — verify when Hannes adds some).
+
+### Step 6 — Game experience (done 2026-11-02, tag `step-06-game`)
+
+- **Triangle menu:** Play, or Resume / Start fresh when a resume state exists · Favorites · Add to collection · Save backups · Open folder (game files, saves, backups, screenshots, mods) · Game info · Delete game. "No quick resume" note for consoles without it. Netplay, graphics, CRT, patches, mods and artwork entries come with steps 7–10.
+- **Quick resume** (`resume` in the preset: state path + args + `at` position). Verified 2026-11-02 against current sources: PCSX2 `[EmuCore] SaveStateOnShutdown`, state `<serial> (<crc>).resume.p2s`, load with `-statefile`; DuckStation `[Main] SaveStateOnExit`, `<serial>_resume.sav`, `-resume`; RetroArch `savestate_auto_save` + `savestate_auto_load = {resume}` (written per launch), `<rom>.state.auto`. **Turned off for GameCube, Wii (Dolphin), 3DS (Azahar) and Xbox (xemu):** none of them can save a state automatically when they close (Dolphin only loads with `-s`), so the spec's "where supported" excludes them. PS3/Xbox 360 already had none.
+- ✕ on a game with a resume state opens Resume / Start fresh; a warning shows if the emulator version changed since the state was saved (`resumeVersion` is recorded in stats after each session).
+- **Start fresh keeps the previous resume state** (`backups\<console>\<game>\previous-resume`), and Save backups offers "Bring back the earlier resume point". Added after the real test: a fresh PCSX2 test run overwrote Hannes's Nov 1 resume state (his memory cards were untouched and backed up, and PCSX2's slot-1 state from the same moment still exists).
+- **Save backups** (`backup` in the preset): before every launch, if anything changed since the last backup (fingerprint of names/sizes/times), copied to `backups\<console>\<game>\<local time>\` with a manifest; newest 5 kept; > 1 GB skipped with a log line. Restore backs up the current saves first and keeps linked folders (junctions) in place. PS1/PS2 memory cards, GC/Wii/3DS/360 save folders are `shared` (never deleted with a game); RetroArch `.srm` and PS3 `savedata\<serial>*` are per game. Xbox saves live in the HDD image → no per-game backup.
+- **Search:** □ / Ctrl+F or the Search item at the top of each console column; on-screen keyboard (controller/mouse, Title case), real keyboard typing; results across all consoles (title, serial, console); → / R1 to the results, ✕ play, △ options.
+- **Collections column:** Favorites, own collections (△ → rename/delete), automatic: Recently added (30 days), 2+ players, Not played yet, Most played; "New collection". Stored in `config\library\collections.json`.
+- **Delete game:** confirmation, "keep saves" or "delete game and its saves" (only per-game saves); everything goes to the Recycle Bin (`shell.trashItem`), so it can be undone. Hidden test runs use `config\test-trash` instead of Hannes's Recycle Bin.
+- **Add games** (spec 7): Settings → Library → Add games… or drag files onto the window. Console detected by extension, then by contents when several consoles share it: GameCube/Wii disc magic, ISO9660 `SYSTEM.CNF` BOOT2/BOOT (PS2/PS1), `PS3_GAME/PARAM.SFO`, XDVDFS (Xbox vs 360 by `default.xbe/.xex`, XGD1/2/3 offsets). Still ambiguous (.chd, .zip, …) → "Which console is this for?". Files are moved (with .cue tracks / .m3u discs); existing files are never overwritten.
+- Real tests 2026-11-02 (Hannes OK'd visible tests): PS2 fresh → closed normally (CloseMainWindow) → resume state written, memory cards backed up; PS2 resume → `-statefile …resume.p2s`, PCSX2 loaded the state and continued in the intro where it was closed. `scripts/real-launch.mjs` gained `--resume` and `--close <process>`.
+- Tests: `tests/e2e/game.spec.ts` (resume + backups + restore + keep 5 + previous resume; search, on-screen keys, collections, delete, add games incl. ambiguous .chd and no overwrite; disc sniffing for GC/Wii/Xbox).
 
 ### Small technical choices (steps 2–3)
 

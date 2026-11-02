@@ -136,8 +136,8 @@ describe('ISO9660', () => {
     iso.close()
   })
   it('reads the real PS2 game if present', () => {
-    const real = 'C:/Users/Hannes/Desktop/Emulator/Emulation/roms/ps2/Midnight Club 3 - DUB Edition Remix (Europe, Australia) (En,Fr,De,Es,It).iso'
-    if (!fs.existsSync(real)) return
+    const real = ['C:/Users/Hannes/Desktop/Starstation/Files/games/ps2', 'C:/Users/Hannes/Desktop/Emulator/Emulation/roms/ps2'].map((d) => d + '/Midnight Club 3 - DUB Edition Remix (Europe, Australia) (En,Fr,De,Es,It).iso').find((p) => fs.existsSync(p))
+    if (!real) return
     const iso = new IsoReader(real)
     expect(serialFromSystemCnf(iso.readFile('SYSTEM.CNF')!.toString('latin1'))).toBe('SLES-53717')
     iso.close()

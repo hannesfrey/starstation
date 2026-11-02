@@ -88,10 +88,10 @@ export function applyStep(step: ConfigStep, v: Record<string, string>): void {
 }
 
 /** Make sure the emulator is portable and points at Starstation's folders. Safe to run before every launch. */
-export function applyConsoleConfig(c: ConsolePreset): void {
+export function applyConsoleConfig(c: ConsolePreset, extra: Record<string, string> = {}): void {
   const e = getEmulator(c.emulator)
   if (!e) return
-  const v = vars(c)
+  const v = vars(c, extra)
   for (const d of [dir('bios', c.id), dir('games', c.id), dir('saves', c.id), dir('media', 'screenshots', c.id)])
     fs.mkdirSync(d, { recursive: true })
   for (const step of [...e.portable, ...c.config]) {

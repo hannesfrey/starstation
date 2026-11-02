@@ -5,18 +5,57 @@
   "order": 130,
   "icon": "box-360",
   "emulator": "xenia",
-  "launch": { "args": ["--fullscreen", "{launch}"] },
-  "extensions": [".iso", ".xex", ".zar"],
-  "games": { "folderMarker": "default.xex", "folderLaunch": "default.xex" },
-  "gameId": { "method": "filename" },
-  "saves": { "dir": "{saves}", "note": "Xenia keeps saves in its content folder; the saves folder links there." },
-  "import": { "roms": ["xbox360", "x360"] },
+  "launch": {
+    "args": [
+      "--fullscreen",
+      "{launch}"
+    ]
+  },
+  "extensions": [
+    ".iso",
+    ".xex",
+    ".zar"
+  ],
+  "games": {
+    "folderMarker": "default.xex",
+    "folderLaunch": "default.xex"
+  },
+  "gameId": {
+    "method": "filename"
+  },
+  "saves": {
+    "dir": "{saves}",
+    "note": "Xenia keeps saves in its content folder; the saves folder links there."
+  },
+  "import": {
+    "roms": [
+      "xbox360",
+      "x360"
+    ]
+  },
   "config": [
-    { "type": "link", "path": "{saves}/content", "target": "{emu}/content" },
-    { "type": "mkdir", "path": "{emu}/screenshots" },
-    { "type": "link", "path": "{screenshots}/xenia", "target": "{emu}/screenshots" }
+    {
+      "type": "link",
+      "path": "{saves}/content",
+      "target": "{emu}/content"
+    },
+    {
+      "type": "mkdir",
+      "path": "{emu}/screenshots"
+    },
+    {
+      "type": "link",
+      "path": "{screenshots}/xenia",
+      "target": "{emu}/screenshots"
+    }
   ],
   "quickResume": false,
   "shaderHint": true,
-  "notes": "No save states in Xenia, so no quick resume. Extracted games: a folder with default.xex."
+  "notes": "No save states in Xenia, so no quick resume. Extracted games: a folder with default.xex.",
+  "backup": [
+    {
+      "path": "{saves}/content",
+      "shared": true
+    }
+  ]
 }

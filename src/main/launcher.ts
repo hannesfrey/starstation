@@ -1,8 +1,8 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import fs from 'node:fs'
-import path from 'node:path'
 import type { BrowserWindow } from 'electron'
-import { getConsole, getEmulator, emulatorDir, emulatorExe, fill, vars } from './presets'
+import { getConsole, getEmulator, emulatorDir, emulatorExe, fill } from './presets'
+import { gameVars, keepPreviousResume, resumeLaunch } from './gamedata'
 import { applyConsoleConfig } from './emuconfig'
 import { biosStatus } from './bios'
 import { getGame, updateStats, view } from './library/library'
@@ -16,7 +16,7 @@ let running: (RunningGame & { proc: ChildProcess }) | null = null
 let mainWindow: BrowserWindow | null = null
 /** Hooks run before launch (save backup) and after exit (quick resume bookkeeping). */
 const beforeHooks: ((gameId: string) => Promise<void> | void)[] = []
-const afterHooks: ((gameId: string, seconds: number, code: number | null) => Promise<void> | void)[] = []
+const afterHooks: ((gameId: string, seconds: number, code: number | null, startedAt: number) => Promise<void> | void)[] = []
 
 export function setLauncherWindow(w: BrowserWindow): void {
   mainWindow = w
@@ -24,7 +24,7 @@ export function setLauncherWindow(w: BrowserWindow): void {
 export function onBeforeLaunch(fn: (gameId: string) => Promise<void> | void): void {
   beforeHooks.push(fn)
 }
-export function onAfterExit(fn: (gameId: string, seconds: number, code: number | null) => Promise<void> | void): void {
+export function onAfterExit(fn: (gameId: string, seconds: number, code: number | null, startedAt: number) => Promise<void> | void): void {
   afterHooks.push(fn)
 }
 
@@ -33,7 +33,7 @@ export function runningGame(): RunningGame | null {
 }
 
 /** Build the emulator command line for a game (exported for tests). */
-export function buildCommand(gameId: string, extraArgs: string[] = []): { exe: string; args: string[]; cwd: string } | LaunchResult {
+export function buildCommand(gameId: string, extraArgs: string[] = [], resumeArgs: string[] = [], resumeAt = 0): { exe: string; args: string[]; cwd: string } | LaunchResult {
   const game = getGame(gameId)
   if (!game) return { ok: false, error: 'This game is no longer in the library.', fix: { label: 'Rescan library', command: 'rescan' } }
   const c = getConsole(game.console)
@@ -58,21 +58,28 @@ export function buildCommand(gameId: string, extraArgs: string[] = []): { exe: s
     }
   if (!fs.existsSync(game.launchPath))
     return { ok: false, error: 'The game file was moved or deleted.', fix: { label: 'Rescan library', command: 'rescan' } }
-  const v = vars(c, { launch: game.launchPath, game: game.path, gamedir: path.dirname(game.path) })
-  const args = [...c.launch.args.map((a) => fill(a, v)), ...extraArgs].filter((a) => a !== '')
+  const v = gameVars(game)
+  const base = c.launch.args.map((a) => fill(a, v))
+  base.splice(resumeAt, 0, ...resumeArgs)
+  const args = [...base, ...extraArgs].filter((a) => a !== '')
   return { exe, args, cwd: c.launch.cwd ? fill(c.launch.cwd, v) : emulatorDir(e) }
 }
 
-export async function launch(gameId: string, extraArgs: string[] = []): Promise<LaunchResult> {
+export type LaunchMode = 'fresh' | 'resume'
+
+export async function launch(gameId: string, mode: LaunchMode = 'fresh', extraArgs: string[] = []): Promise<LaunchResult> {
   if (running) return { ok: false, error: `${running.title} is still running.` }
   const game = getGame(gameId)
   const c = game ? getConsole(game.console) : undefined
-  if (c) applyConsoleConfig(c)
-  const cmd = buildCommand(gameId, extraArgs)
+  const rl = game ? resumeLaunch(game, mode) : { args: [], at: 0, vars: {} }
+  if (c) applyConsoleConfig(c, rl.vars)
+  const cmd = buildCommand(gameId, extraArgs, rl.args, rl.at)
   if ('ok' in cmd) {
     log.warn(`launch refused for ${gameId}: ${cmd.error}`)
     return cmd
   }
+  // Start fresh: the emulator overwrites the resume state when it closes, so keep the old one
+  if (mode === 'fresh' && game) await keepPreviousResume(game).catch((e) => log.warn('could not keep the resume state', e))
   for (const h of beforeHooks) {
     try {
       await h(gameId)
@@ -80,7 +87,7 @@ export async function launch(gameId: string, extraArgs: string[] = []): Promise<
       log.warn('before-launch hook failed', e)
     }
   }
-  log.info(`launch ${gameId}: "${cmd.exe}" ${cmd.args.map((a) => JSON.stringify(a)).join(' ')}`)
+  log.info(`launch ${gameId} (${mode}): "${cmd.exe}" ${cmd.args.map((a) => JSON.stringify(a)).join(' ')}`)
   let proc: ChildProcess
   try {
     proc = spawn(cmd.exe, cmd.args, {
@@ -134,7 +141,7 @@ export async function launch(gameId: string, extraArgs: string[] = []): Promise<
           action: { label: 'Open logs', command: 'open-folder', arg: 'logs' }
         })
       }
-      for (const h of afterHooks) Promise.resolve(h(gameId, seconds, code)).catch((e) => log.warn('after-exit hook failed', e))
+      for (const h of afterHooks) Promise.resolve(h(gameId, seconds, code, startedAt)).catch((e) => log.warn('after-exit hook failed', e))
       bringToFront()
     })
   })

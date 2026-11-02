@@ -11,11 +11,14 @@ import { applyConsoleConfig } from './emuconfig'
 import { biosStatus } from './bios'
 import { findSources, planImport, runImport, summarize } from './importer'
 import { checkUpdates, emulatorInfos, installCore, installEmulator } from './emulators'
-import { loadLibrary, rescan, view, toggleFavorite, getGame } from './library/library'
+import { loadLibrary, rescan, view, toggleFavorite, getGame, forgetGame, updateStats } from './library/library'
+import { backupGame, gameFiles, listBackups, noteResumeVersion, ownSaves, previousResume, pruneBackups, restoreBackup, restorePreviousResume, resumeInfo, saveEntries } from './gamedata'
+import { createCollection, deleteCollection, listCollections, removeGameFromCollections, renameCollection, toggleInCollection } from './collections'
+import { addGames } from './addgames'
 import { consoleInfos } from './consoles'
-import { launch, setLauncherWindow, runningGame, stopRunning } from './launcher'
+import { launch, setLauncherWindow, runningGame, stopRunning, onBeforeLaunch, onAfterExit } from './launcher'
 import { attachWindow, notify, send } from './notify'
-import type { AppState, EmulatorInfo, Settings } from '../shared/types'
+import type { AddGamesResult, AppState, EmulatorInfo, GameDetails, Settings } from '../shared/types'
 
 // ---- before ready: keep everything inside Files\ ----
 redirectElectronPaths()
@@ -77,6 +80,7 @@ function state(): AppState {
     settings: getSettings(),
     consoles: consoleInfos(),
     library: view(),
+    collections: listCollections(),
     running: runningGame()
   }
 }
@@ -116,6 +120,12 @@ async function runCommand(command: string, arg?: string): Promise<void> {
         fs.mkdirSync(f, { recursive: true })
         await shell.openPath(f)
       }
+      return
+    }
+    case 'open-path': {
+      // only folders inside Files\ (e.g. one save backup)
+      const p = arg ? path.resolve(arg) : ''
+      if (p && p.toLowerCase().startsWith(path.resolve(filesDir()).toLowerCase() + path.sep) && fs.existsSync(p)) await shell.openPath(p)
       return
     }
     case 'rescan':
@@ -236,7 +246,56 @@ function registerIpc(): void {
     send('consoles', consoleInfos())
     return l
   })
-  ipcMain.handle('launch', (_e, id: string) => launch(id))
+  ipcMain.handle('launch', (_e, id: string, mode?: 'fresh' | 'resume') => launch(id, mode === 'resume' ? 'resume' : 'fresh'))
+  ipcMain.handle('game-details', (_e, id: string): GameDetails | null => {
+    const g = getGame(id)
+    if (!g) return null
+    return { resume: resumeInfo(g), backups: listBackups(g), ownSaves: ownSaves(g).length, canBackup: !!getConsole(g.console)?.backup?.length, previousResume: previousResume(g)?.savedAt ?? null }
+  })
+  ipcMain.handle('backup-now', async (_e, id: string) => {
+    const g = getGame(id)
+    if (!g) return null
+    const b = await backupGame(g, 'manual')
+    if (b) await pruneBackups(g)
+    notify(b ? { kind: 'save', title: 'Saves backed up', detail: g.title } : { kind: 'info', title: saveEntries(g).length ? 'Saves unchanged since the last backup' : 'No saves found yet', detail: g.title })
+    return b
+  })
+  ipcMain.handle('backup-restore', async (_e, id: string, backupId: string) => {
+    const g = getGame(id)
+    if (!g) return { ok: false, error: 'Game not found' }
+    if (runningGame()) return { ok: false, error: 'Close the game first.' }
+    try {
+      await restoreBackup(g, backupId)
+      notify({ kind: 'save', title: 'Saves restored', detail: g.title })
+      return { ok: true }
+    } catch (e) {
+      notify({ kind: 'error', title: 'Restore failed', detail: (e as Error).message })
+      return { ok: false, error: (e as Error).message }
+    }
+  })
+  ipcMain.handle('resume-restore-previous', async (_e, id: string) => {
+    const g = getGame(id)
+    if (!g) return { ok: false, error: 'Game not found' }
+    if (runningGame()) return { ok: false, error: 'Close the game first.' }
+    try {
+      await restorePreviousResume(g)
+      notify({ kind: 'save', title: 'Earlier resume point is back', detail: g.title })
+      return { ok: true }
+    } catch (e) {
+      return { ok: false, error: (e as Error).message }
+    }
+  })
+  ipcMain.handle('delete-game', (_e, id: string, withSaves: boolean) => deleteGame(id, !!withSaves))
+  ipcMain.handle('collection-create', (_e, name: string, first?: string) => pushCollections(createCollection(name, first)))
+  ipcMain.handle('collection-rename', (_e, id: string, name: string) => pushCollections(renameCollection(id, name)))
+  ipcMain.handle('collection-delete', (_e, id: string) => pushCollections(deleteCollection(id)))
+  ipcMain.handle('collection-toggle', (_e, id: string, gameId: string) => pushCollections(toggleInCollection(id, gameId)))
+  ipcMain.handle('add-games', (_e, paths: string[], consoleId?: string) => doAddGames(paths, consoleId))
+  ipcMain.handle('add-games-dialog', async () => {
+    const pick = await dialog.showOpenDialog(win!, { title: 'Add games', properties: ['openFile', 'multiSelections'] })
+    if (pick.canceled || !pick.filePaths.length) return null
+    return doAddGames(pick.filePaths)
+  })
   ipcMain.handle('toggle-favorite', (_e, id: string) => toggleFavorite(id))
   ipcMain.handle('open-folder', (_e, kind: string, arg?: string) => runCommand('open-folder', arg ? `${kind}:${arg}` : kind))
   ipcMain.handle('run-command', (_e, command: string, arg?: string) => runCommand(command, arg))
@@ -246,6 +305,71 @@ function registerIpc(): void {
     return win.isFullScreen()
   })
   ipcMain.handle('quit', () => app.quit())
+}
+
+function pushCollections<T>(list: T): T {
+  send('collections', list)
+  return list
+}
+
+async function doAddGames(paths: string[], consoleId?: string): Promise<AddGamesResult> {
+  const r = await addGames(paths, consoleId)
+  if (r.added.length) {
+    const lib = rescan()
+    send('library', lib)
+    send('consoles', consoleInfos())
+    for (const a of r.added) a.title = lib.games.find((g) => g.path.toLowerCase() === a.path.toLowerCase())?.title
+    notify({ kind: 'success', title: r.added.length === 1 ? 'Game added' : `${r.added.length} games added`, detail: r.added.map((a) => a.title ?? path.basename(a.path)).join(', ') })
+  }
+  if (r.errors.length) notify({ kind: 'warning', title: 'Some files were not added', detail: r.errors.slice(0, 2).join(' ') })
+  return r
+}
+
+/** Move the game (and, if asked, its own saves) to the Recycle Bin, then forget it. */
+async function deleteGame(id: string, withSaves: boolean): Promise<{ ok: boolean; error?: string }> {
+  const g = getGame(id)
+  if (!g) return { ok: false, error: 'Game not found' }
+  if (runningGame()?.gameId === id) return { ok: false, error: 'Close the game first.' }
+  const targets = [...gameFiles(g), ...(withSaves ? ownSaves(g) : [])].filter((p) => fs.existsSync(p))
+  try {
+    for (const t of targets) await trash(t)
+  } catch (e) {
+    log.error(`delete ${id} failed`, e)
+    notify({ kind: 'error', title: 'Could not delete the game', detail: (e as Error).message })
+    send('library', rescan())
+    return { ok: false, error: (e as Error).message }
+  }
+  forgetGame(id)
+  send('collections', removeGameFromCollections(id))
+  send('library', rescan())
+  send('consoles', consoleInfos())
+  log.info(`deleted ${id} (${targets.length} item(s), saves ${withSaves ? 'deleted' : 'kept'})`)
+  notify({ kind: 'info', title: 'Game deleted', detail: `${g.title} is in the Recycle Bin${withSaves ? ' with its saves' : ''}.` })
+  return { ok: true }
+}
+
+/** Recycle Bin, so a delete can be undone. Hidden test runs use a folder instead of Hannes's Recycle Bin. */
+async function trash(p: string): Promise<void> {
+  if (HEADLESS) {
+    const to = dir('config', 'test-trash', `${Date.now()}-${path.basename(p)}`)
+    fs.mkdirSync(path.dirname(to), { recursive: true })
+    fs.renameSync(p, to)
+    return
+  }
+  await shell.trashItem(p)
+}
+
+function registerHooks(): void {
+  onBeforeLaunch(async (id) => {
+    const g = getGame(id)
+    if (!g) return
+    const b = await backupGame(g, 'launch')
+    if (b) await pruneBackups(g)
+  })
+  onAfterExit((id, _s, _c, startedAt) => {
+    const v = noteResumeVersion(id, startedAt)
+    if (v) updateStats(id, (s) => ({ ...s, resumeVersion: v }))
+  })
 }
 
 function registerMediaProtocol(): void {
@@ -273,6 +397,7 @@ app.whenReady().then(() => {
   loadPresets()
   loadLibrary()
   registerIpc()
+  registerHooks()
   registerMediaProtocol()
   win = createWindow()
   attachWindow(win)
