@@ -1,0 +1,21 @@
+# Portable build tools and caches (local only)
+tools/
+node_modules/
+dist/
+out/
+release/
+*.log
+
+# Never commit user data, BIOS, games, firmware, keys or credentials
+secrets.json
+*.bin
+*.BIN
+*.rom
+*.ROM*
+*.pup
+*.PUP
+*.iso
+*.chd
+*.keys
+prod.keys
+title.keys
