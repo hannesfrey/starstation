@@ -1,4 +1,4 @@
-import type { AddGamesResult, AppState, CustomConsoleForm, PackageChoice, PackageProgress, EmulatorInfo, Game, GameDetails, GbGame, GbMod, GbModDetails, HealthIssue, ModsView, NetplayRoom, GraphicsLevel, ImportProgressInfo, ImportResultInfo, ImportSourceInfo, Settings } from '../../../shared/types'
+import type { UpdateState, AddGamesResult, AppState, CustomConsoleForm, PackageChoice, PackageProgress, EmulatorInfo, Game, GameDetails, GbGame, GbMod, GbModDetails, HealthIssue, ModsView, NetplayRoom, GraphicsLevel, ImportProgressInfo, ImportResultInfo, ImportSourceInfo, Settings } from '../../../shared/types'
 import { formatPlayTime } from './model'
 
 /** Data some panels load on demand. */
@@ -28,6 +28,7 @@ export interface PanelExtra {
   pad?: { name: string; api: string } | null
   pkg: { choice: PackageChoice; size?: number; progress?: PackageProgress; busy: boolean; result?: string; useSettings?: boolean; code?: string }
   setup?: { done: boolean; existing: boolean; filesDir: string }
+  update?: UpdateState
 }
 
 export interface PItem {
@@ -99,6 +100,7 @@ export interface PanelHandlers {
   installAll: () => void
   wizardNext: (to?: number) => void
   wizardFinish: (artwork: boolean) => void
+  checkUpdates2: () => void
   deleteGame: (g: Game, withSaves: boolean) => void
   addGamesDialog: () => void
   addGameAs: (path: string, consoleId: string) => void
@@ -628,6 +630,16 @@ export function buildPanel(id: string, arg: string | undefined, state: AppState,
         title: 'About Starstation',
         items: [
           { key: 'v', label: `Version ${state.info.version}`, info: true },
+          {
+            key: 'update',
+            label: 'Check for updates',
+            value: (() => {
+              const u = x.update
+              if (!u || u.status === 'idle') return undefined
+              return { checking: 'Checking…', latest: 'Up to date', downloading: `Downloading ${u.version}…`, ready: `${u.version} on next start`, error: 'Check failed', dev: 'Development build' }[u.status]
+            })(),
+            run: () => (h.checkUpdates2(), 'keep')
+          },
           { key: 'f', label: `Folder: ${state.info.filesDir}`, info: true },
           { key: 'logs', label: 'Open logs folder', run: () => h.command('open-folder', 'logs') },
           { key: 'lic', label: 'Licenses of the emulators', run: () => (h.openPanel('licenses'), 'keep') },

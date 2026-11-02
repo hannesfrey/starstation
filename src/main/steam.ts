@@ -3,7 +3,6 @@ import path from 'node:path'
 import zlib from 'node:zlib'
 import { execFileSync } from 'node:child_process'
 import { app } from 'electron'
-import { dir } from './paths'
 import { logger } from './log'
 
 /**
@@ -132,7 +131,7 @@ export function addToSteam(): { ok: boolean; error?: string; users?: number } {
   const list = users(s)
   if (!list.length) return { ok: false, error: 'No Steam user found. Log in to Steam once, then try again.' }
   const t = launchTarget()
-  const icon = dir('config', 'starstation.ico')
+  const icon = app.isPackaged ? path.join(process.resourcesPath, 'icon.ico') : path.join(app.getAppPath(), 'build', 'icon.ico')
   let changed = 0
   for (const u of list) {
     const f = path.join(u, 'config', 'shortcuts.vdf')

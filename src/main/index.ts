@@ -18,6 +18,7 @@ import { createCollection, deleteCollection, listCollections, removeGameFromColl
 import { addGames } from './addgames'
 import { availableOptions, gameOptions, setGameOption } from './gameoptions'
 import { reportPads } from './controllers'
+import { checkNow, startUpdater, updateState } from './updater'
 import { addMod, deleteMod, finishAdd, gamebananaGame, listMods, modSupport, setGamebananaGame, setModEnabled } from './mods'
 import { gbModDetails, installGbMod, listGbMods, searchGames } from './gamebanana'
 import { fetchArtwork, queueArtwork } from './artwork'
@@ -66,6 +67,7 @@ function createWindow(): BrowserWindow {
     minHeight: 540,
     backgroundColor: '#05070d',
     title: 'Starstation',
+    icon: app.isPackaged ? path.join(process.resourcesPath, 'icon.ico') : path.join(app.getAppPath(), 'build', 'icon.ico'),
     show: false,
     fullscreen: (s.startFullscreen || process.argv.includes('--fullscreen')) && !HEADLESS,
     autoHideMenuBar: true,
@@ -405,6 +407,8 @@ function registerIpc(): void {
     return { done, existing, filesDir: filesDir() }
   })
   ipcMain.handle('setup-done', () => writeJson(dir('config', 'setup.json'), { done: true, at: new Date().toISOString() }))
+  ipcMain.handle('update-state', () => updateState())
+  ipcMain.handle('update-check', () => checkNow())
   ipcMain.handle('licenses', () =>
     allEmulators()
       .filter((e) => !path.isAbsolute(e.folder))
@@ -672,6 +676,7 @@ app.whenReady().then(() => {
   win.webContents.once('did-finish-load', () => {
     setTimeout(() => scanAndArt(), 50)
     startBatteryPolling()
+    startUpdater(notify)
   })
 })
 

@@ -203,6 +203,8 @@ export interface StarstationApi {
   packageCancel(): Promise<void>
   setupStatus(): Promise<{ done: boolean; existing: boolean; filesDir: string }>
   setupDone(): Promise<void>
+  updateState(): Promise<UpdateState>
+  checkForUpdates(): Promise<UpdateState>
   gameDetails(gameId: string): Promise<GameDetails | null>
   backupNow(gameId: string): Promise<BackupInfo | null>
   restoreBackup(gameId: string, backupId: string): Promise<{ ok: boolean; error?: string }>
@@ -416,6 +418,12 @@ export interface PackageProgress {
   pct: number
   code?: string
   detail?: string
+}
+
+export interface UpdateState {
+  status: 'idle' | 'checking' | 'latest' | 'downloading' | 'ready' | 'error' | 'dev'
+  version?: string
+  error?: string
 }
 
 export interface Collection {

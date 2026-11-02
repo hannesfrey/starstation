@@ -1,7 +1,7 @@
 {
   "name": "starstation",
   "productName": "Starstation",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "A PS3-style console menu for emulated games on Windows",
   "author": "hannesfrey",
   "license": "MIT",
@@ -18,8 +18,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "test:e2e": "playwright test",
-    "dist": "electron-vite build && electron-builder --win --publish never",
-    "release": "electron-vite build && electron-builder --win --publish always"
+    "dist": "node scripts/fetch-bin.mjs && electron-vite build && electron-builder --win --publish never",
+    "release": "node scripts/fetch-bin.mjs && electron-vite build && electron-builder --win --publish always"
   },
   "dependencies": {
     "electron-updater": "^6.8.11"
@@ -38,5 +38,66 @@
     "typescript": "^7.0.2",
     "vite": "^8.3.5",
     "vitest": "^5.1.0"
+  },
+  "build": {
+    "appId": "io.github.hannesfrey.starstation",
+    "productName": "Starstation",
+    "executableName": "Starstation",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "out/**",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "presets",
+        "to": "presets"
+      },
+      {
+        "from": "resources/bin",
+        "to": "bin"
+      },
+      {
+        "from": "build/icon.ico",
+        "to": "icon.ico"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": false,
+      "createStartMenuShortcut": false,
+      "deleteAppDataOnUninstall": false,
+      "runAfterFinish": true,
+      "include": "build/installer.nsh",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "uninstallDisplayName": "Starstation",
+      "artifactName": "Starstation-Setup-${version}.exe"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "hannesfrey",
+        "repo": "starstation",
+        "releaseType": "release"
+      }
+    ]
   }
 }

@@ -15,7 +15,14 @@ let filesRoot: string | null = null
 export function filesDir(): string {
   if (filesRoot) return filesRoot
   if (process.env.STARSTATION_FILES) filesRoot = path.resolve(process.env.STARSTATION_FILES)
-  else if (app.isPackaged) filesRoot = path.resolve(path.dirname(process.execPath), '..')
+  else if (app.isPackaged) {
+    // installed layout: ...\Starstation\Files\app\Starstation.exe → Files. Anything else (someone moved the
+    // program): keep data next to it in its own folder, never in a random parent folder.
+    const exeDir = path.dirname(process.execPath)
+    const parent = path.dirname(exeDir)
+    filesRoot =
+      path.basename(exeDir).toLowerCase() === 'app' && path.basename(parent).toLowerCase() === 'files' ? parent : path.join(parent, 'Starstation Files')
+  }
   else filesRoot = path.resolve(app.getAppPath(), '..')
   return filesRoot
 }
@@ -58,4 +65,9 @@ export function redirectElectronPaths(): void {
   app.setPath('crashDumps', path.join(e, 'crashes'))
   app.setPath('temp', path.join(e, 'temp'))
   fs.mkdirSync(path.join(e, 'temp'), { recursive: true })
+  // electron-updater keeps its downloads in %LOCALAPPDATA%: point that into Files\config\electron for
+  // Starstation itself; emulators still get the real one (see launcher)
+  if (!process.env.STARSTATION_REAL_LOCALAPPDATA) process.env.STARSTATION_REAL_LOCALAPPDATA = process.env.LOCALAPPDATA ?? ''
+  process.env.LOCALAPPDATA = path.join(e, 'local')
+  fs.mkdirSync(process.env.LOCALAPPDATA, { recursive: true })
 }

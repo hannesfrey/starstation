@@ -121,7 +121,12 @@ export async function launch(
       detached: false,
       stdio: 'ignore',
       windowsHide: false,
-      env: { ...process.env, TEMP: dir('config', 'electron', 'temp'), TMP: dir('config', 'electron', 'temp') }
+      env: {
+        ...process.env,
+        ...(process.env.STARSTATION_REAL_LOCALAPPDATA ? { LOCALAPPDATA: process.env.STARSTATION_REAL_LOCALAPPDATA } : {}),
+        TEMP: dir('config', 'electron', 'temp'),
+        TMP: dir('config', 'electron', 'temp')
+      }
     })
   } catch (e) {
     return { ok: false, error: `Could not start the emulator: ${(e as Error).message}` }

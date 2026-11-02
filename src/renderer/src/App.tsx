@@ -245,6 +245,7 @@ export function App() {
   const openPanel = useCallback((id: string, arg?: string) => {
     setPanels((p) => [...p, { id, arg, index: 0 }])
     if (arg && ['game', 'backups', 'delete'].includes(id)) void loadDetails(arg)
+    if (id === 'about') void api.updateState().then((update) => setExtra((x) => ({ ...x, update })))
     if (id === 'health') {
       setExtra((x) => ({ ...x, health: undefined }))
       void api.health().then((health) => setExtra((x) => ({ ...x, health })))
@@ -571,6 +572,10 @@ export function App() {
     [setSetting, state?.settings.bootAnimation]
   )
 
+  const checkUpdates2 = useCallback(() => {
+    setExtra((x) => ({ ...x, update: { status: 'checking' } }))
+    void api.checkForUpdates().then((update) => setExtra((x) => ({ ...x, update })))
+  }, [])
   const refreshArtwork = useCallback(
     (g: Game) => {
       notify({ kind: 'info', title: 'Looking for artwork…', detail: g.title })
@@ -828,6 +833,7 @@ export function App() {
         installAll,
         wizardNext,
         wizardFinish,
+        checkUpdates2,
         deleteGame,
         addGamesDialog,
         addGameAs
@@ -888,6 +894,7 @@ export function App() {
     installAll,
     wizardNext,
     wizardFinish,
+    checkUpdates2,
     deleteGame,
     addGamesDialog,
     addGameAs,
