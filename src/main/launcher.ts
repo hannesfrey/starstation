@@ -142,7 +142,7 @@ export async function launch(gameId: string, extraArgs: string[] = []): Promise<
 
 export function bringToFront(): void {
   const w = mainWindow
-  if (!w || w.isDestroyed()) return
+  if (!w || w.isDestroyed() || process.env.STARSTATION_HEADLESS === '1') return
   if (w.isMinimized()) w.restore()
   w.show()
   // Windows only lets the foreground app steal focus; briefly going always-on-top gets us back in front.

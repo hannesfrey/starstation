@@ -31,5 +31,6 @@
       }
     }
   ],
+  "import": { "roms": ["ps2", "playstation2"], "saves": [ { "from": ["pcsx2/memcards", "pcsx2/saves"], "to": "memcards" }, { "from": ["pcsx2/sstates", "pcsx2/states"], "to": "sstates" } ] },
   "quickResume": true
 }

@@ -56,6 +56,7 @@ export async function launchApp(files: string, presets?: string): Promise<{ app:
     env: {
       ...process.env,
       STARSTATION_FILES: files,
+      STARSTATION_HEADLESS: '1',
       ...(presets ? { STARSTATION_PRESETS: presets } : {}),
       ELECTRON_RENDERER_URL: ''
     }

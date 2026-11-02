@@ -30,6 +30,7 @@
     { "type": "mkdir", "path": "{emu}/screenshots" },
     { "type": "link", "path": "{screenshots}/rpcs3", "target": "{emu}/screenshots" }
   ],
+  "import": { "roms": ["ps3", "playstation3"], "storage": [ { "from": ["rpcs3/dev_hdd0", "rpcs3/hdd0"], "to": "{emu}/dev_hdd0" } ] },
   "quickResume": false,
   "shaderHint": true,
   "notes": "Games can be folder dumps (with PS3_GAME), ISOs, or PKG games installed into RPCS3."

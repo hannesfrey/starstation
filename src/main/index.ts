@@ -15,6 +15,9 @@ import type { AppState, Settings } from '../shared/types'
 // ---- before ready: keep everything inside Files\ ----
 redirectElectronPaths()
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
+/** Automated tests: never show a window or play sound on Hannes's screen. */
+const HEADLESS = process.env.STARSTATION_HEADLESS === '1'
+if (HEADLESS) app.commandLine.appendSwitch('mute-audio')
 const log = logger('main')
 protocol.registerSchemesAsPrivileged([
   { scheme: 'starstation-media', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }
@@ -37,8 +40,10 @@ function createWindow(): BrowserWindow {
     backgroundColor: '#05070d',
     title: 'Starstation',
     show: false,
-    fullscreen: s.startFullscreen,
+    fullscreen: s.startFullscreen && !HEADLESS,
     autoHideMenuBar: true,
+    skipTaskbar: HEADLESS,
+    paintWhenInitiallyHidden: true,
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
       sandbox: true,
@@ -48,7 +53,8 @@ function createWindow(): BrowserWindow {
     }
   })
   w.removeMenu()
-  w.once('ready-to-show', () => w.show())
+  if (HEADLESS) w.webContents.setAudioMuted(true)
+  else w.once('ready-to-show', () => w.show())
   w.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:\/\//.test(url)) shell.openExternal(url)
     return { action: 'deny' }

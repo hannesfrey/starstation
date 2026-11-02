@@ -12,7 +12,8 @@ Read SPEC.md first. This file tracks where the build stands and every small deci
 - Open a PowerShell, `. .\env.ps1` (portable Node/gh, caches in `tools\`).
 - `npm run dev` (hot reload), `npx electron-vite build`, `npx tsc --noEmit -p tsconfig.json`
 - Tests: `npx vitest run` (unit), `npx playwright test` (drives the real Electron app with a throw-away Files folder and a fake emulator; see `tests/e2e/helpers.ts`). `SCREENSHOTS=1 npx playwright test screens` writes screenshots to `tools/cache/screens`.
-- Env overrides: `STARSTATION_FILES` (Files folder), `STARSTATION_PRESETS` (preset folder), `STARSTATION_LOG_STDOUT=1`.
+- Env overrides: `STARSTATION_FILES` (Files folder), `STARSTATION_PRESETS` (preset folder), `STARSTATION_LOG_STDOUT=1`, `STARSTATION_HEADLESS=1` (window never shown, not in taskbar, audio muted, never brought to front — the e2e helper always sets it and the boot test asserts it).
+- **Hannes uses this PC while the build runs.** Automated tests must stay invisible and silent. Anything that necessarily shows on screen (real emulator launch tests — they go fullscreen) is only done after asking Hannes first.
 
 ## Start-of-run checklist
 

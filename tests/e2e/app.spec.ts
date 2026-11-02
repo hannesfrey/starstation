@@ -6,6 +6,9 @@ import { launchApp, makeFiles, makePresets, writeSettings } from './helpers'
 test('boot animation shows and can be skipped', async () => {
   const files = makeFiles('boot')
   const { app, page } = await launchApp(files)
+  // tests must never pop up on the real screen or play sound
+  const shown = await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().map((w) => w.isVisible() || !w.webContents.isAudioMuted()))
+  expect(shown).toEqual([false])
   await expect(page.getByTestId('boot')).toBeVisible()
   await page.keyboard.press('Enter')
   await expect(page.getByTestId('boot')).toHaveCount(0, { timeout: 3000 })

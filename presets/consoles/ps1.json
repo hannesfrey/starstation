@@ -27,6 +27,7 @@
       }
     }
   ],
+  "import": { "roms": ["psx", "ps1", "playstation"], "saves": [ { "from": ["duckstation/memcards", "duckstation/saves"], "to": "memcards" }, { "from": ["duckstation/savestates", "duckstation/states"], "to": "savestates" } ] },
   "quickResume": true,
   "notes": "Multi-disc games: put the discs and a .m3u playlist in one folder; only the .m3u is listed."
 }
