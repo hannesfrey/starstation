@@ -1,5 +1,15 @@
-import type { AppState, Game, Settings } from '../../../shared/types'
+import type { AppState, EmulatorInfo, Game, ImportProgressInfo, ImportResultInfo, ImportSourceInfo, Settings } from '../../../shared/types'
 import { formatPlayTime } from './model'
+
+/** Data some panels load on demand. */
+export interface PanelExtra {
+  emulators?: EmulatorInfo[]
+  emuProgress: Record<string, string>
+  importSources?: ImportSourceInfo[]
+  importProgress?: ImportProgressInfo
+  importResult?: ImportResultInfo
+  importing: boolean
+}
 
 export interface PItem {
   key: string
@@ -24,6 +34,9 @@ export interface PanelHandlers {
   launch: (g: Game) => void
   toggleFavorite: (g: Game) => void
   openPanel: (id: string, arg?: string) => void
+  installEmulator: (id: string) => void
+  checkUpdates: () => void
+  runImport: (index: number) => void
 }
 
 const onOff = (b: boolean) => (b ? 'On' : 'Off')
@@ -35,9 +48,81 @@ function formatSize(bytes: number): string {
   return `${Math.max(1, Math.round(bytes / 1e3))} KB`
 }
 
-export function buildPanel(id: string, arg: string | undefined, state: AppState, h: PanelHandlers): Panel | null {
+const KIND_LABEL = { emulator: 'Emulators', bios: 'BIOS files', saves: 'Save folders', storage: 'Emulator storage', game: 'Games' }
+
+export function buildPanel(id: string, arg: string | undefined, state: AppState, h: PanelHandlers, x: PanelExtra): Panel | null {
   const s = state.settings
   switch (id) {
+    case 'emulators': {
+      if (!x.emulators) return { id, title: 'Emulators', items: [{ key: 'loading', label: 'Loading…', info: true }] }
+      return {
+        id,
+        title: 'Emulators',
+        items: [
+          ...x.emulators.map((e) => {
+            const busy = x.emuProgress[e.id]
+            const status = busy
+              ? busy
+              : !e.installed
+                ? 'Not installed'
+                : e.updateAvailable
+                  ? `Update available (${e.latest})`
+                  : 'Up to date'
+            return {
+              key: `emu-${e.id}`,
+              label: `${e.name}${e.version ? ` ${e.version}` : ''} · ${e.consoles.join(', ')}`,
+              value: status,
+              disabled: !!busy,
+              run: () => {
+                if (e.page) h.command('open-url', e.page)
+                else if (!e.installed || e.updateAvailable) h.installEmulator(e.id)
+                return 'keep' as const
+              }
+            }
+          }),
+          { key: 'check', label: 'Check for updates', run: () => (h.checkUpdates(), 'keep') },
+          { key: 'folder', label: 'Open emulators folder', run: () => h.command('open-folder', 'emulators') }
+        ]
+      }
+    }
+    case 'import': {
+      if (x.importing || x.importResult) {
+        const p = x.importProgress
+        const phase = { copy: 'Copying', verify: 'Checking copies', move: 'Moving games', done: 'Finished', error: 'Stopped' }
+        const items: PItem[] = []
+        if (x.importing && p) {
+          items.push({ key: 'phase', label: `${phase[p.phase]} ${p.total ? `${p.done}/${p.total}` : ''}`, info: true })
+          if (p.current) items.push({ key: 'current', label: p.current, info: true })
+        }
+        if (x.importResult) {
+          const r = x.importResult
+          items.push({ key: 'res', label: r.ok ? `Done: ${r.moved} game(s) moved, ${r.copied} item(s) copied.` : 'The import stopped. Nothing was moved.', info: true })
+          for (const [i, err] of r.errors.slice(0, 3).entries()) items.push({ key: `err${i}`, label: err, info: true })
+          if (r.conflicts.length) items.push({ key: 'conf', label: `${r.conflicts.length} file(s) already existed and were kept as they are.`, info: true })
+          items.push({ key: 'ok', label: 'OK' })
+        }
+        return { id, title: 'Import from EmuDeck', items }
+      }
+      if (!x.importSources) return { id, title: 'Import from EmuDeck', items: [{ key: 'loading', label: 'Looking for EmuDeck…', info: true }] }
+      if (!x.importSources.length)
+        return { id, title: 'Import from EmuDeck', items: [{ key: 'none', label: 'No EmuDeck setup found on this PC.', info: true }] }
+      return {
+        id,
+        title: 'Import from EmuDeck',
+        items: [
+          { key: 'how', label: 'Copies emulators, BIOS and saves, checks the copies, then moves the games. Nothing is deleted.', info: true },
+          ...x.importSources.flatMap((src) => [
+            { key: `src${src.index}`, label: src.label, info: true },
+            ...src.summary
+              .filter((k) => k.count)
+              .map((k) => ({ key: `s${src.index}-${k.kind}`, label: `${KIND_LABEL[k.kind]}: ${k.count} (${formatSize(k.bytes)})`, info: true })),
+            ...(src.summary.some((k) => k.count)
+              ? [{ key: `run${src.index}`, label: 'Start import', run: () => (h.runImport(src.index), 'keep' as const) }]
+              : [{ key: `nothing${src.index}`, label: 'Nothing new to import.', info: true }])
+          ])
+        ]
+      }
+    }
     case 'general': {
       const screensaver = [1, 5, 10, 15, 30, 0]
       const icons: Settings['buttonIcons'][] = ['auto', 'playstation', 'xbox']

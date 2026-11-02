@@ -10,7 +10,7 @@ import { KeyHints, type GlyphButton } from './components/Glyph'
 import { Xmb } from './xmb/Xmb'
 import { PanelView } from './xmb/PanelView'
 import { buildColumns, type XItem } from './xmb/model'
-import { buildPanel, type Panel } from './xmb/panels'
+import { buildPanel, type Panel, type PanelExtra } from './xmb/panels'
 import type { AppState, Game, LaunchResult, Notice, Settings } from '../../shared/types'
 
 interface PanelRef {
@@ -38,6 +38,7 @@ export function App() {
   const [errorPanel, setErrorPanel] = useState<{ title: string; result: LaunchResult; index: number } | null>(null)
   const [pad, setPad] = useState<PadKind | null>(null)
   const [idle, setIdle] = useState(false)
+  const [extra, setExtra] = useState<PanelExtra>({ emuProgress: {}, importing: false })
   const lastInput = useRef(Date.now())
   const scanned = useRef(false)
 
@@ -70,6 +71,8 @@ export function App() {
       }),
       api.on('consoles', (consoles) => apply({ consoles })),
       api.on('running', (running) => apply({ running })),
+      api.on('import-progress', (p) => setExtra((x) => ({ ...x, importProgress: p }))),
+      api.on('emulator-progress', ({ id, text }) => setExtra((x) => ({ ...x, emuProgress: { ...x.emuProgress, [id]: text } }))),
       api.on('notice', (n) => {
         setNotices((l) => [...l, n])
         sfx.notify()
@@ -133,6 +136,25 @@ export function App() {
 
   const openPanel = useCallback((id: string, arg?: string) => {
     setPanels((p) => [...p, { id, arg, index: 0 }])
+    if (id === 'emulators') {
+      api.emulators().then((emulators) => setExtra((x) => ({ ...x, emulators })))
+      api.checkEmulatorUpdates().then((emulators) => setExtra((x) => ({ ...x, emulators })))
+    }
+    if (id === 'import') {
+      setExtra((x) => (x.importing ? x : { ...x, importSources: undefined, importResult: undefined, importProgress: undefined }))
+      api.importScan().then((importSources) => setExtra((x) => ({ ...x, importSources })))
+    }
+  }, [])
+
+  const installEmulator = useCallback((id: string) => {
+    api.installEmulator(id).then(() => api.emulators().then((emulators) => setExtra((x) => ({ ...x, emulators }))))
+  }, [])
+  const checkUpdates = useCallback(() => {
+    api.checkEmulatorUpdates().then((emulators) => setExtra((x) => ({ ...x, emulators })))
+  }, [])
+  const runImport = useCallback((index: number) => {
+    setExtra((x) => ({ ...x, importing: true, importResult: undefined }))
+    api.importRun(index).then((importResult) => setExtra((x) => ({ ...x, importing: false, importResult })))
   }, [])
 
   // ---- model ----
@@ -206,8 +228,8 @@ export function App() {
       }
     }
     if (!activePanelRef || !state) return null
-    return buildPanel(activePanelRef.id, activePanelRef.arg, state, { setSetting, command, launch, toggleFavorite, openPanel })
-  }, [activePanelRef, errorPanel, state, setSetting, command, launch, toggleFavorite, openPanel])
+    return buildPanel(activePanelRef.id, activePanelRef.arg, state, { setSetting, command, launch, toggleFavorite, openPanel, installEmulator, checkUpdates, runImport }, extra)
+  }, [activePanelRef, errorPanel, state, setSetting, command, launch, toggleFavorite, openPanel, installEmulator, checkUpdates, runImport, extra])
 
   const panelIndex = activePanel
     ? firstSelectable(activePanel, Math.min(errorPanel ? errorPanel.index : (activePanelRef?.index ?? 0), activePanel.items.length - 1), 1)

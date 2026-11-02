@@ -84,6 +84,22 @@ export function buildColumns(state: AppState, h: ModelHandlers): XColumn[] {
           }))
       },
       {
+        key: 'emulators',
+        label: 'Emulators',
+        sub: 'Installed versions and updates',
+        icon: 'emulator',
+        kind: 'action',
+        run: () => h.openPanel('emulators')
+      },
+      {
+        key: 'import',
+        label: 'Import from EmuDeck',
+        sub: 'Bring emulators, BIOS, saves and games over',
+        icon: 'package',
+        kind: 'action',
+        run: () => h.openPanel('import')
+      },
+      {
         key: 'library',
         label: 'Library',
         sub: `${library.games.length} games`,

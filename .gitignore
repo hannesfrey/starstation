@@ -19,3 +19,6 @@ secrets.json
 *.keys
 prod.keys
 title.keys
+
+# Bundled helper binaries are downloaded by scripts/fetch-bin.mjs
+resources/bin/

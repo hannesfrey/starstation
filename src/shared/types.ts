@@ -123,8 +123,48 @@ export interface AppState {
   running: RunningGame | null
 }
 
+export interface EmulatorInfo {
+  id: string
+  name: string
+  installed: boolean
+  version: string | null
+  latest: string | null
+  updateAvailable: boolean
+  consoles: string[]
+  canInstall: boolean
+  page?: string
+}
+
+export interface ImportSourceInfo {
+  index: number
+  label: string
+  summary: { kind: 'emulator' | 'bios' | 'saves' | 'storage' | 'game'; count: number; bytes: number }[]
+  skipped: string[]
+}
+
+export interface ImportProgressInfo {
+  phase: 'copy' | 'verify' | 'move' | 'done' | 'error'
+  done: number
+  total: number
+  current: string
+  error?: string
+}
+
+export interface ImportResultInfo {
+  ok: boolean
+  copied: number
+  moved: number
+  conflicts: string[]
+  errors: string[]
+}
+
 /** API exposed by the preload script as window.starstation. */
 export interface StarstationApi {
+  importScan(): Promise<ImportSourceInfo[]>
+  importRun(index: number): Promise<ImportResultInfo>
+  emulators(): Promise<EmulatorInfo[]>
+  checkEmulatorUpdates(): Promise<EmulatorInfo[]>
+  installEmulator(id: string): Promise<{ ok: boolean; error?: string; info?: EmulatorInfo }>
   getState(): Promise<AppState>
   setSetting<K extends keyof Settings>(key: K, value: Settings[K]): Promise<Settings>
   rescan(): Promise<LibraryView>
@@ -139,4 +179,7 @@ export interface StarstationApi {
   on(channel: 'library', cb: (l: LibraryView) => void): () => void
   on(channel: 'consoles', cb: (c: ConsoleInfo[]) => void): () => void
   on(channel: 'running', cb: (r: RunningGame | null) => void): () => void
+  on(channel: 'import-progress', cb: (p: ImportProgressInfo) => void): () => void
+  on(channel: 'emulator-progress', cb: (p: { id: string; text: string }) => void): () => void
+  on(channel: 'navigate', cb: (where: string) => void): () => void
 }

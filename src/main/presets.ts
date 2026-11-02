@@ -72,6 +72,12 @@ export interface ConsolePreset {
   }
   saves?: { dir: string; note?: string }
   config: ConfigStep[]
+  /** Where games, saves and emulator storage live in an EmuDeck / Desktop\Emulator setup. */
+  import?: {
+    roms?: string[]
+    saves?: { from: string[]; to: string }[]
+    storage?: { from: string[]; to: string }[]
+  }
   quickResume: boolean
   shaderHint?: boolean
   netplay?: boolean

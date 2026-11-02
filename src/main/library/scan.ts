@@ -50,8 +50,8 @@ export function folderSize(p: string, limit = 200_000): number {
 }
 
 /** Find all games of one console in Files\games\<console> (+ installed games, e.g. PS3 HDD). */
-export function scanConsole(c: ConsolePreset): ScanEntry[] {
-  const root = dir('games', c.id)
+export function scanConsole(c: ConsolePreset, rootOverride?: string): ScanEntry[] {
+  const root = rootOverride ?? dir('games', c.id)
   const exts = new Set(c.extensions.map((e) => e.toLowerCase()))
   const marker = c.games?.folderMarker
   const out: ScanEntry[] = []
@@ -111,7 +111,7 @@ export function scanConsole(c: ConsolePreset): ScanEntry[] {
   }
 
   // Installed games (PS3 PKG installs in dev_hdd0\game)
-  if (c.games?.installedDir) {
+  if (c.games?.installedDir && !rootOverride) {
     const inst = fill(c.games.installedDir, vars(c))
     let ents: fs.Dirent[] = []
     try {

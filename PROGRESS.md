@@ -78,6 +78,16 @@ Electron 45 + React 19 + TypeScript 7 + electron-vite 6 (Vite 8). Main process i
 - Launch: preset command line, cwd = emulator folder, TEMP inside Files. Starstation waits for the process to exit, adds play time, and comes back to the front. Clear errors with a fix button: emulator missing → Install, BIOS missing → Open BIOS folder, PS3 firmware missing → Install PS3 firmware, file gone → Rescan; "closed right away" notice if the emulator exits within 4 s with an error code.
 - Tests: 11 unit tests (SFO, ISO9660 incl. the real Midnight Club 3 ISO → SLES-53717, serials, title cleaning, ini/kv editing, title DB) and 3 Playwright tests (boot/skip, scan + launch + return + play time + favorite, settings toggle + △ menu + launch error with fix).
 
+### Step 4 — Import + emulator manager (code done 2026-11-02; Hannes's real import pending)
+
+- `src/main/importer.ts`: finds `Desktop\Emulator` (portable layout) and real EmuDeck setups (`<drive>:\Emulation` + `%APPDATA%\EmuDeck\Emulators`). Plan per console preset (`import.roms/saves/storage` in the preset JSON + emulator `importNames`): copy emulators used by presets, BIOS files matching preset rules (+ companion files with the same name stem, e.g. PS2 .NVM/.MEC/.ROM1), saves, emulator storage (PS3 dev_hdd0) → verify everything (size for all, SHA-1 for files < 64 MB) → only then move games (same drive = rename; other drive = copy + verify + remove). Existing files are never overwritten (conflicts kept and reported), empty folders skipped, archives/notes (.7z, .txt) stay in the source. Versions of imported emulators come from `Downloads\download-log.txt`. History in `config\imports.json`.
+- Safety: hidden test runs (`STARSTATION_HEADLESS=1`) never look at the real PC; tests use `STARSTATION_IMPORT_SOURCE` with a fake setup.
+- `src/main/emulators.ts`: Settings → Emulators lists installed version / "Update available"; checks GitHub `releases/latest` (cached 1 h), installs/updates by download → extract (zip: Windows tar, 7z: bundled `7zr.exe`) → flatten single top folder → write `.starstation.json` marker → re-apply portable/config steps. Downloads go to `config\downloads` and are deleted afterwards.
+- `scripts/fetch-bin.mjs`: fetches `7zr.exe` from 7-zip.org pinned by SHA-256; falls back to a local copy with the same hash (7-zip.org DNS failed on 2026-11-02, so Hannes's verified copy from `Desktop\Emulator\Tools\7zip` was used).
+- PS3 firmware: "Install PS3 firmware" asks for PS3UPDAT.PUP (button opens Sony's official page) and runs `rpcs3 --installfw`.
+- Tests: import e2e (copy/verify/move, config rewrite, PS3 saves link), "headless never sees the real PC", and a network test (`NETWORK=1`) that really installs PCSX2 from GitHub — passed.
+- **Pending:** Hannes's real import. On 2026-11-02 PCSX2 from `Desktop\Emulator` was still open (since 2026-11-01 19:29, no game), so the import waits until Hannes closes it — don't kill his processes.
+
 ### Small technical choices (steps 2–3)
 
 - Console column layout: Recently played ▸ and Favorites ▸ folders appear at the top when they have entries, then all games A–Z directly in the column (fewer clicks than an "All games" folder). Search comes with step 6.
