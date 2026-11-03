@@ -5,7 +5,7 @@ Read SPEC.md first. This file tracks where the build stands and every small deci
 ## Current state
 
 - **Phase:** All 12 steps done; v1.0.0 released 2026-11-02. **Playable milestone reached 2026-11-02:** Hannes's setup is imported and Midnight Club 3 boots from Starstation (PS2).
-- **Next step:** Hannes tests with the checklist at the end of this file; fixes and new presets go into 1.0.x releases (`npm run release` needs GH_TOKEN; create/push the tag first).
+- **Next step:** Hannes adds games via `Files\games\New downloads` and tests with the checklist at the end of this file; fixes and new presets go into 1.0.x releases (`npm run release` needs GH_TOKEN; create/push the tag first).
 
 ## How to work on it
 
@@ -203,6 +203,14 @@ Settings column now: General · Graphics · Consoles (+ Add a console) · Contro
 - **First GitHub release:** https://github.com/hannesfrey/starstation/releases/tag/v1.0.0 (installer, blockmap, latest.yml). The first publish attempt failed half way (GitHub needs the tag first); the release was completed with gh and `latest.yml` regenerated from the uploaded installer (sha512 + size checked).
 - After the release: `checkNow` reports the check result even without the update events (only mattered in hidden runs) — in the source, ships with the next version.
 - Original app icon: `scripts/make-icon.cjs` → `build/icon.ico` / `icon.png`; README for the repo.
+
+### After 1.0.0 — New downloads folder (2026-11-03, Hannes asked; plan OK'd with "A")
+
+- `Files\games\New downloads` (`src/main/downloads.ts`): while Starstation runs and no game is running, the folder is checked every 4 s. A download counts as finished when it hasn't changed for 3 s between two looks; `.crdownload/.part/.tmp/…` files (and a final name next to a Firefox `.part`) are left alone.
+- **Archives** `.zip`/`.rar` (Windows tar = libarchive 3.5.2; RAR4 + RAR5 checked with libarchive's own test files) and `.7z`/`.7z.001` (bundled 7zr) are unpacked into `config\downloads\unpack-*`; free space ≥ 4× archive + 512 MB is checked first. The games inside are sorted with the drag & drop logic (disc sniffing, .cue brings its .bin). **Hannes chose A:** the archive goes to the Recycle Bin only when every game in it was added (or handed over as a question); otherwise it stays and he gets a message. Readmes etc. inside go with the unpacked leftovers.
+- **Unclear console** (e.g. .chd): the file is moved into New downloads and the menu asks "Which console is this for?". Not a game / damaged / split .partN.rar: stays, one message per session. Plain game files and folders (unpacked by hand, PS3/Xbox dumps) are sorted too; a hand-unpacked folder goes to the Recycle Bin once only extras are left.
+- Settings → Library: "Sort new downloads automatically" (on by default), "Open New downloads folder". Packages don't include New downloads (they copy per console).
+- `extract()` in emulators.ts now uses the new `unpack()`. Test: `tests/e2e/downloads.spec.ts` (zip, 7z, unclear .chd, plain file, partial download, damaged zip, extras, setting off).
 
 ## Final report — test checklist for Hannes
 

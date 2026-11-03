@@ -104,19 +104,27 @@ function run(exe: string, args: string[], cwd?: string): Promise<number> {
   })
 }
 
+/**
+ * Unpack an archive into the folder `to` (created; removed again on failure). Both tools check the
+ * archive's checksums and fail on a damaged or incomplete file.
+ */
+export async function unpack(archive: string, to: string): Promise<void> {
+  await fsp.mkdir(to, { recursive: true })
+  const lower = archive.toLowerCase()
+  // Windows' tar (libarchive) reads zip and rar (4 and 5); 7z needs the bundled 7-Zip
+  const code = lower.endsWith('.zip') || lower.endsWith('.rar')
+    ? await run(path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'tar.exe'), ['-xf', archive, '-C', to])
+    : await run(sevenZip(), ['x', '-y', `-o${to}`, archive])
+  if (code !== 0) {
+    await fsp.rm(to, { recursive: true, force: true })
+    throw new Error(`Extracting ${path.basename(archive)} failed (code ${code})`)
+  }
+}
+
 /** Extract an archive into `to`; if everything sits in one top folder, that folder is flattened. */
 export async function extract(archive: string, to: string, opts: { flatten?: boolean } = {}): Promise<void> {
   const tmp = `${to}.extract-${Date.now()}`
-  await fsp.mkdir(tmp, { recursive: true })
-  const lower = archive.toLowerCase()
-  // Windows' tar reads zip and rar; 7z needs the bundled 7-Zip
-  const code = lower.endsWith('.zip') || lower.endsWith('.rar')
-    ? await run(path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'tar.exe'), ['-xf', archive, '-C', tmp])
-    : await run(sevenZip(), ['x', '-y', `-o${tmp}`, archive])
-  if (code !== 0) {
-    await fsp.rm(tmp, { recursive: true, force: true })
-    throw new Error(`Extracting ${path.basename(archive)} failed (code ${code})`)
-  }
+  await unpack(archive, tmp)
   let root = tmp
   const ents = await fsp.readdir(tmp)
   if (opts.flatten !== false && ents.length === 1 && (await fsp.stat(path.join(tmp, ents[0]))).isDirectory()) root = path.join(tmp, ents[0])

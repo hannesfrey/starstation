@@ -15,6 +15,14 @@ import type { AddGamesResult } from '../shared/types'
 
 const log = logger('addgames')
 
+/** games\New downloads: Hannes downloads games here and Starstation sorts them (downloads.ts). */
+export const NEW_DOWNLOADS = 'New downloads'
+
+/** Every file extension some console's games use (lower case, with dot). */
+export function gameExtensions(): Set<string> {
+  return new Set(allConsoles().flatMap((c) => c.extensions.map((e) => e.toLowerCase())))
+}
+
 function readAt(file: string, pos: number, len: number): Buffer | null {
   let fd: number | null = null
   try {
@@ -118,7 +126,7 @@ export async function addGames(paths: string[], consoleId?: string): Promise<Add
   for (const p of [...paths].sort((a, b) => rank(a) - rank(b))) {
     const name = path.basename(p)
     if (!fs.existsSync(p)) continue // already moved as part of a .cue / .m3u
-    if (inside(p, gamesRoot)) {
+    if (inside(p, gamesRoot) && !inside(p, path.join(gamesRoot, NEW_DOWNLOADS))) {
       res.errors.push(`${name} is already in the games folder.`)
       continue
     }

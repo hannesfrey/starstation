@@ -108,6 +108,11 @@ export function App() {
       api.on('running', (running) => apply({ running })),
       api.on('import-progress', (p) => setExtra((x) => ({ ...x, importProgress: p }))),
       api.on('emulator-progress', ({ id, text }) => setExtra((x) => ({ ...x, emuProgress: { ...x.emuProgress, [id]: text } }))),
+      // a file from New downloads whose console is unclear
+      api.on('add-ask', (ask) => {
+        setExtra((x) => ({ ...x, addAsk: [...(x.addAsk ?? []).filter((q) => !ask.some((n) => n.path === q.path)), ...ask] }))
+        setPanels((p) => [...p.filter((q) => q.id !== 'add-ask'), { id: 'add-ask', index: 0 }])
+      }),
       api.on('notice', (n) => {
         setNotices((l) => [...l, n])
         sfx.notify()

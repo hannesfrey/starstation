@@ -68,7 +68,7 @@ const api = {
   quit: () => ipcRenderer.invoke('quit'),
   mediaUrl: (absPath: string) => `starstation-media://local/${encodeURIComponent(absPath)}`,
   on: (channel: string, cb: (payload: unknown) => void) => {
-    const allowed = ['notice', 'library', 'consoles', 'collections', 'screenshots', 'battery', 'package-progress', 'running', 'navigate', 'import-progress', 'emulator-progress']
+    const allowed = ['notice', 'library', 'consoles', 'collections', 'screenshots', 'battery', 'package-progress', 'running', 'navigate', 'import-progress', 'emulator-progress', 'add-ask']
     if (!allowed.includes(channel)) throw new Error(`Unknown channel ${channel}`)
     const h = (_e: unknown, payload: unknown) => cb(payload)
     ipcRenderer.on(channel, h)

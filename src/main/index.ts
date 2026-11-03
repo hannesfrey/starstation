@@ -38,6 +38,7 @@ import { readJson } from './store'
 import { consoleInfos } from './consoles'
 import { launch, setLauncherWindow, runningGame, stopRunning, onBeforeLaunch, onAfterExit } from './launcher'
 import { attachWindow, notify, send } from './notify'
+import { startDownloadWatcher } from './downloads'
 import type { AddGamesResult, AppState, CustomConsoleForm, EmulatorInfo, GameDetails, NetplayRoom, PackageChoice, PackageProgress, Settings } from '../shared/types'
 
 // ---- before ready: keep everything inside Files\ ----
@@ -677,6 +678,13 @@ app.whenReady().then(() => {
     setTimeout(() => scanAndArt(), 50)
     startBatteryPolling()
     startUpdater(notify)
+    startDownloadWatcher({
+      addGames: (paths) => doAddGames(paths),
+      trash,
+      notify,
+      ask: (items) => send('add-ask', items),
+      paused: () => !getSettings().sortDownloads || !!runningGame()
+    })
   })
 })
 

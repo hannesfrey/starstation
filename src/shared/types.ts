@@ -20,6 +20,8 @@ export interface Settings {
   bootAnimation: boolean
   /** Download missing artwork in the background. */
   artworkAuto: boolean
+  /** Unpack and sort games saved to games\New downloads. */
+  sortDownloads: boolean
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -35,7 +37,8 @@ export const DEFAULT_SETTINGS: Settings = {
   netplayNickname: 'Player',
   netplayRelay: 'madrid',
   bootAnimation: true,
-  artworkAuto: true
+  artworkAuto: true,
+  sortDownloads: true
 }
 
 export type ConsoleIcon = 'cartridge' | 'cartridge-wide' | 'cartridge-n64' | 'disc' | 'disc-mini' | 'handheld' | 'box' | 'box-360' | 'remote'
@@ -246,6 +249,7 @@ export interface StarstationApi {
   on(channel: 'emulator-progress', cb: (p: { id: string; text: string }) => void): () => void
   on(channel: 'navigate', cb: (where: string) => void): () => void
   on(channel: 'collections', cb: (c: Collection[]) => void): () => void
+  on(channel: 'add-ask', cb: (ask: AddGamesResult['ask']) => void): () => void
   on(channel: 'screenshots', cb: (s: Screenshot[]) => void): () => void
   on(channel: 'battery', cb: (b: BatteryInfo | null) => void): () => void
   on(channel: 'package-progress', cb: (p: PackageProgress) => void): () => void
