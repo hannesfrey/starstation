@@ -101,7 +101,8 @@ Flags checked on 2026-11-02 against current sources: Azahar `-f <file>` (citra_q
 - Xbox 360 on Xenia Canary: .iso/.xex/.zar and folder games with `default.xex` (new generic `games.folderLaunch`), `content` linked into saves, shader hint, no quick resume.
 - Download sources: GitHub releases for Azahar/xemu/Xenia (like PCSX2/RPCS3/DuckStation), fixed official URLs for RetroArch 1.22.2 (buildbot) and Dolphin 2609a (dl.dolphin-emu.org) with their download pages noted.
 - Test: all 11 presets load in spec order and show as XMB columns.
-- **Pending:** real install tests for the other emulators (`NETWORK=1`, large downloads — postponed while Hannes was streaming) and real game launches per preset (Hannes OK'd visible tests on 2026-11-02; PS2 verified; the other consoles have no games yet — verify when Hannes adds some).
+- **Real install tests done 2026-11-03** (`NETWORK=1 npx playwright test install`, hidden, throw-away Files folders): all 8 emulators install from their official sources (PCSX2, DuckStation, RPCS3, Azahar, xemu, Xenia from GitHub; RetroArch 1.22.2 from the buildbot; Dolphin 2609a from dl.dolphin-emu.org), plus the mesen/snes9x/mupen64plus_next cores. Found and fixed: the version of fixed-URL emulators was guessed from the link ("dolphin-2609a-x64.7z" → "64.7"); those presets now state `download.version`, and the importer's guess from download-log asset names ignores x64/.7z and knows Dolphin-style versions (`formats/version.ts`, unit-tested). Hannes's Dolphin/RetroArch markers corrected to 2609a / 1.22.2.
+- **Pending:** real game launches per preset (Hannes OK'd visible tests on 2026-11-02; PS2 verified; the other consoles have no games yet — verify when Hannes adds some).
 
 ### Step 6 — Game experience (done 2026-11-02, tag `step-06-game`)
 

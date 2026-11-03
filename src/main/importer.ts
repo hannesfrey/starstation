@@ -8,6 +8,7 @@ import { scanConsole } from './library/scan'
 import { copyTree, moveFile, partsOf, verifyTree } from './fsutil'
 import { writeJson, readJson } from './store'
 import { logger } from './log'
+import { versionFromAsset } from './formats/version'
 
 const log = logger('import')
 
@@ -366,8 +367,7 @@ function parseDownloadLog(file?: string): Record<string, { version: string; asse
     const [name, tag, asset] = parts
     let version = tag
     if (!version || version === 'latest' || version.startsWith('build-')) {
-      const m = /(\d+\.\d+(?:\.\d+)?(?:-\d+)?)/.exec(asset)
-      version = m ? m[1] : tag || 'imported'
+      version = versionFromAsset(asset) ?? (tag || 'imported')
     }
     out[name.toLowerCase()] = { version: version.replace(/^v\.?/, ''), asset }
   }

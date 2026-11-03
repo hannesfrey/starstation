@@ -177,7 +177,7 @@ export async function installEmulator(id: string, onProgress?: (text: string) =>
   } else if (e.download?.type === 'url') {
     url = e.download.url
     name = path.basename(new URL(url).pathname)
-    version = /(\d+\.\d+(?:\.\d+)?)/.exec(url)?.[1] ?? 'latest'
+    version = e.download.version
   } else throw new Error(`${e.name} has to be downloaded by hand from its website.`)
 
   const dl = dir('config', 'downloads', name)

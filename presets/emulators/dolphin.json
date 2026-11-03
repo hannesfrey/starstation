@@ -6,6 +6,7 @@
   "download": {
     "type": "url",
     "url": "https://dl.dolphin-emu.org/releases/2609a/dolphin-2609a-x64.7z",
+    "version": "2609a",
     "page": "https://dolphin-emu.org/download/"
   },
   "portable": [

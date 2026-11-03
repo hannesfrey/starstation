@@ -155,7 +155,7 @@ export interface EmulatorPreset {
   name: string
   folder: string
   exe: string
-  download?: { type: 'github'; repo: string; asset: string } | { type: 'url'; url: string; page?: string } | { type: 'page'; page: string }
+  download?: { type: 'github'; repo: string; asset: string } | { type: 'url'; url: string; version: string; page?: string } | { type: 'page'; page: string }
   portable: ConfigStep[]
   /** Folder names this emulator has in an EmuDeck / Desktop\Emulator setup. */
   importNames: string[]
