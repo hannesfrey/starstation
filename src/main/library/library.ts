@@ -11,7 +11,7 @@ import { logger } from '../log'
 import type { Game, GameStats, LibraryView } from '../../shared/types'
 
 const log = logger('library')
-const CACHE_VERSION = 2 // 2: 3DS title IDs, N64 ROM names
+const CACHE_VERSION = 3 // 2: 3DS title IDs, N64 ROM names; 3: titles without .xiso
 
 interface CacheFile {
   version: number

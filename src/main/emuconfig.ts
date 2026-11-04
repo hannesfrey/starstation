@@ -12,6 +12,20 @@ function str(v: string | number | boolean): string {
   return typeof v === 'string' ? v : String(v)
 }
 
+/**
+ * Emulators don't always create the folders they are pointed at (PCSX2 then can't create its memory
+ * cards). Every setting that names a folder inside saves\ or media\ is created before launch.
+ */
+function ensureFolders(values: string[]): void {
+  const roots = [dir('saves'), dir('media')].map((r) => path.resolve(r).toLowerCase() + path.sep)
+  for (const raw of values) {
+    const val = raw.replace(/^['"]|['"]$/g, '')
+    if (!path.isAbsolute(val) || path.extname(val)) continue
+    const abs = path.resolve(val)
+    if (roots.some((r) => abs.toLowerCase().startsWith(r))) fs.mkdirSync(abs, { recursive: true })
+  }
+}
+
 export function applyStep(step: ConfigStep, v: Record<string, string>): void {
   switch (step.type) {
     case 'touch': {
@@ -66,6 +80,7 @@ export function applyStep(step: ConfigStep, v: Record<string, string>): void {
         set[sec] = {}
         for (const [k, val] of Object.entries(entries)) set[sec][k] = Array.isArray(val) ? val.map((x) => fill(x, v)) : one(val)
       }
+      ensureFolders(Object.values(set).flatMap((e) => Object.values(e).flat()))
       const before = fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : ''
       const after = setIniValues(before, set, step.spacing ?? ' = ')
       if (after !== before) {
@@ -77,6 +92,7 @@ export function applyStep(step: ConfigStep, v: Record<string, string>): void {
     case 'kv': {
       const p = fill(step.file, v)
       const set = Object.fromEntries(Object.entries(step.set).map(([k, val]) => [k, fill(val, v)]))
+      ensureFolders(Object.values(set))
       const before = fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : ''
       const after = setKvValues(before, set, step.sep)
       if (after !== before) {

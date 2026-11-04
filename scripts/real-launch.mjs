@@ -1,5 +1,5 @@
 // Dev helper: really launch the first game of a console through the hidden app (the emulator window is visible!).
-// node scripts/real-launch.mjs <console> <seconds> [screenshot.png] [--resume] [--close <processName>] [--press F12]
+// node scripts/real-launch.mjs <console> <seconds> [screenshot.png] [--resume] [--close <processName>] [--press F12] [--game <title part>]
 // --close asks the emulator window to close normally (like clicking X), so it can save its resume state.
 import { _electron as electron } from '@playwright/test'
 import path from 'node:path'
@@ -16,6 +16,7 @@ const flag = (name) => {
 }
 const resume = flag('--resume') !== undefined
 const closeName = flag('--close')
+const gameName = flag('--game') // part of the title, e.g. 'Mario 64'
 const press = flag('--press') // e.g. F12: sent to the emulator window halfway through
 const [consoleId = 'ps2', secsArg = '25', shot] = argv
 const ps = (cmd) => execFileSync('powershell', ['-NoProfile', '-Command', cmd], { encoding: 'utf8' })
@@ -31,7 +32,7 @@ await page.waitForLoadState('domcontentloaded')
 await page.waitForFunction(() => !!window.starstation)
 await page.waitForTimeout(1500)
 const st = await page.evaluate(() => window.starstation.getState())
-const g = st.library.games.find((x) => x.console === consoleId)
+const g = st.library.games.find((x) => x.console === consoleId && (typeof gameName !== 'string' || x.title.toLowerCase().includes(gameName.toLowerCase())))
 console.log('GAME', g?.id, g?.title)
 console.log('DETAILS', JSON.stringify(await page.evaluate((id) => window.starstation.gameDetails(id), g.id)))
 const res = await page.evaluate(([id, mode]) => window.starstation.launch(id, mode), [g.id, resume ? 'resume' : 'fresh'])

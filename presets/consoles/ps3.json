@@ -45,6 +45,18 @@
   },
   "config": [
     {
+      "type": "ini",
+      "file": "{emu}/GuiConfigs/CurrentSettings.ini",
+      "spacing": "=",
+      "set": {
+        "main_window": {
+          "confirmationBoxExitGame": "false",
+          "confirmationBoxBootGame": "false",
+          "infoBoxEnabledWelcome": "false"
+        }
+      }
+    },
+    {
       "type": "mkdir",
       "path": "{emu}/dev_hdd0/home/00000001/savedata"
     },

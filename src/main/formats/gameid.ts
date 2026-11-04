@@ -119,6 +119,8 @@ export function nintendoDiscId(file: string): { id: string; title: string } | nu
 /** "Legend of Zelda, The - Ocarina (USA) (Rev 1) [!]" → "The Legend of Zelda - Ocarina" */
 export function cleanTitle(name: string): string {
   let t = name
+    // double endings like "Halo 2.xiso.iso" or "Game.nkit.iso"
+    .replace(/\.(xiso|nkit|dec)$/i, '')
     .replace(/\s*[([][^)\]]*[)\]]/g, '')
     .replace(/_/g, ' ')
     .replace(/\s+/g, ' ')

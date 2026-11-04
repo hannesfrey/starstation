@@ -155,6 +155,7 @@ describe('serials and titles', () => {
     expect(cleanTitle('Midnight Club 3 - DUB Edition Remix (Europe, Australia) (En,Fr,De,Es,It)')).toBe('Midnight Club 3 - DUB Edition Remix')
     expect(cleanTitle('Legend of Zelda, The - Ocarina of Time (USA) (Rev 1) [!]')).toBe('The Legend of Zelda - Ocarina of Time')
     expect(cleanTitle('super_mario_world')).toBe('super mario world')
+    expect(cleanTitle('Halo 2 (Spain, Mexico) (En,Ja,Fr,De,Es,It,Zh,Ko).xiso')).toBe('Halo 2')
   })
   it('lists files referenced by cue and m3u', () => {
     const cue = tmp('game.cue')
