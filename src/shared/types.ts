@@ -129,6 +129,10 @@ export interface AppInfo {
   version: string
   filesDir: string
   isPackaged: boolean
+  /** Started without mods, themes and custom settings. */
+  safeMode: boolean
+  /** This PC gets new versions first and can release them to everyone. */
+  tester: boolean
 }
 
 export interface AppState {
@@ -150,6 +154,10 @@ export interface EmulatorInfo {
   consoles: string[]
   canInstall: boolean
   page?: string
+  /** Version everyone gets (marked as tested on the tester PC). */
+  tested?: string
+  /** Tester PC: the installed version is newer than the tested one → "Mark as tested". */
+  untested?: boolean
 }
 
 export interface ImportSourceInfo {
@@ -210,6 +218,16 @@ export interface StarstationApi {
   setupDone(): Promise<void>
   updateState(): Promise<UpdateState>
   checkForUpdates(): Promise<UpdateState>
+  /** Once after starting: crash (offer safe mode), rescue note, What's new. */
+  startNotes(): Promise<StartNotes>
+  /** Go back to a kept older version (Starstation restarts). */
+  undoUpdate(to: string): Promise<{ ok: boolean; error?: string }>
+  /** Tester PC: make the running beta a normal release. */
+  releaseToEveryone(): Promise<{ ok: boolean; error?: string; already?: boolean }>
+  /** Tester PC: the installed emulator version becomes the one everyone gets. */
+  markTested(emulatorId: string): Promise<{ ok: boolean; error?: string }>
+  /** Enter / leave safe mode (the menu starts again). */
+  setSafeMode(on: boolean): Promise<{ ok: boolean; error?: string }>
   gameDetails(gameId: string): Promise<GameDetails | null>
   backupNow(gameId: string): Promise<BackupInfo | null>
   restoreBackup(gameId: string, backupId: string): Promise<{ ok: boolean; error?: string }>
@@ -432,6 +450,23 @@ export interface UpdateState {
   status: 'idle' | 'checking' | 'latest' | 'downloading' | 'ready' | 'error' | 'dev'
   version?: string
   error?: string
+  /** beta: this PC gets new versions first (tester). everyone: only versions released to everyone. */
+  channel?: 'beta' | 'everyone'
+  tester?: boolean
+  /** Versions "Undo update" can go back to, newest first. */
+  previous?: string[]
+  /** After going back: this version is not offered again until a newer one exists. */
+  skipped?: string
+  /** Tester: the running version is a beta that only the tester has so far. */
+  canRelease?: boolean
+}
+
+/** Shown once after starting: crash → offer safe mode, rescue note, What's new. */
+export interface StartNotes {
+  safeMode: boolean
+  crashed: boolean
+  rescued?: { from: string; to: string }
+  whatsNew?: { version: string; summary: string[]; details: string[] }
 }
 
 export interface Collection {

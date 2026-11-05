@@ -4,6 +4,7 @@ import { getConsole, fill, type ConsolePreset, type GameOption } from './presets
 import { applyStep } from './emuconfig'
 import { gameVars } from './gamedata'
 import { getSettings } from './settings'
+import { inSafeMode } from './safeflag'
 import { logger } from './log'
 import type { Game, GameOptions, GraphicsLevel } from '../shared/types'
 
@@ -20,7 +21,8 @@ function all(): Record<string, Stored> {
 export function gameOptions(g: Game): GameOptions {
   const c = getConsole(g.console)
   const s = getSettings()
-  const st = all()[g.id] ?? {}
+  // safe mode: every game starts with the defaults, its own choices come back afterwards
+  const st = inSafeMode() ? {} : (all()[g.id] ?? {})
   const patches: Record<string, boolean> = {}
   for (const p of c?.patches ?? []) patches[p.id] = st.patches?.[p.id] ?? !!p.default
   return { graphics: st.graphics ?? s.graphicsDefault, crt: st.crt ?? s.crtDefault, patches }
@@ -32,6 +34,7 @@ export function availableOptions(g: Game): { graphics: boolean; crt: boolean; pa
 }
 
 export function setGameOption(g: Game, key: 'graphics' | 'crt' | 'patch', value: string | boolean, patchId?: string): GameOptions {
+  if (inSafeMode()) return gameOptions(g) // safe mode never changes saved choices
   const list = all()
   const cur = list[g.id] ?? {}
   if (key === 'graphics' && ['original', 'enhanced', 'max'].includes(String(value))) cur.graphics = value as GraphicsLevel

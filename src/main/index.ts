@@ -6,12 +6,17 @@ import { pathToFileURL } from 'node:url'
 import { filesDir, dir, ensureDataDirs, redirectElectronPaths } from './paths'
 import { logger } from './log'
 import { writeJson } from './store'
-import { getSettings, setSetting } from './settings'
+import { getSettings, isTester, setSetting } from './settings'
+import { enterSafeMode, inSafeMode, leaveSafeMode, restoreSuspended } from './safemode'
+import { endSession, startSession, type StartInfo } from './session'
+import { maybeRescue, releaseToEveryone, takeNewVersion, takeRescueNote, undoUpdate } from './updater'
+import { compareVersions } from '../shared/semver'
+import { whatsNewFor } from '../shared/whatsnew'
 import { allConsoles, emulatorDir, emulatorExe, getConsole, getEmulator, loadPresets } from './presets'
 import { applyConsoleConfig } from './emuconfig'
 import { biosStatus } from './bios'
 import { findSources, planImport, runImport, summarize } from './importer'
-import { checkUpdates, emulatorInfos, installCore, installEmulator } from './emulators'
+import { checkUpdates, emulatorInfos, installCore, installEmulator, markTested } from './emulators'
 import { loadLibrary, rescan, view, toggleFavorite, getGame, forgetGame, updateStats } from './library/library'
 import { backupGame, gameFiles, listBackups, noteResumeVersion, ownSaves, previousResume, pruneBackups, restoreBackup, restorePreviousResume, resumeInfo, saveEntries } from './gamedata'
 import { createCollection, deleteCollection, listCollections, removeGameFromCollections, renameCollection, toggleInCollection } from './collections'
@@ -39,7 +44,7 @@ import { consoleInfos } from './consoles'
 import { launch, setLauncherWindow, runningGame, stopRunning, onBeforeLaunch, onAfterExit } from './launcher'
 import { attachWindow, notify, send } from './notify'
 import { startDownloadWatcher } from './downloads'
-import type { AddGamesResult, AppState, CustomConsoleForm, EmulatorInfo, GameDetails, NetplayRoom, PackageChoice, PackageProgress, Settings } from '../shared/types'
+import type { AddGamesResult, AppState, CustomConsoleForm, EmulatorInfo, GameDetails, NetplayRoom, PackageChoice, PackageProgress, Settings, StartNotes } from '../shared/types'
 
 // ---- before ready: keep everything inside Files\ ----
 redirectElectronPaths()
@@ -90,7 +95,11 @@ function createWindow(): BrowserWindow {
     return { action: 'deny' }
   })
   w.webContents.on('will-navigate', (e) => e.preventDefault())
-  w.webContents.on('render-process-gone', (_e, d) => log.error('renderer gone', d))
+  w.webContents.on('render-process-gone', (_e, d) => {
+    log.error('renderer gone', d)
+    // the menu crashed: that counts as a Starstation crash (safe mode is offered next time)
+    if (d.reason !== 'clean-exit') app.exit(1)
+  })
   if (process.env.ELECTRON_RENDERER_URL) w.loadURL(process.env.ELECTRON_RENDERER_URL)
   else w.loadFile(path.join(__dirname, '../renderer/index.html'))
   return w
@@ -98,7 +107,7 @@ function createWindow(): BrowserWindow {
 
 function state(): AppState {
   return {
-    info: { version: app.getVersion(), filesDir: filesDir(), isPackaged: app.isPackaged },
+    info: { version: app.getVersion(), filesDir: filesDir(), isPackaged: app.isPackaged, safeMode: inSafeMode(), tester: isTester() },
     settings: getSettings(),
     consoles: consoleInfos(),
     library: view(),
@@ -409,7 +418,32 @@ function registerIpc(): void {
   })
   ipcMain.handle('setup-done', () => writeJson(dir('config', 'setup.json'), { done: true, at: new Date().toISOString() }))
   ipcMain.handle('update-state', () => updateState())
-  ipcMain.handle('update-check', () => checkNow())
+  ipcMain.handle('update-check', () => checkNow(notify))
+  // ---- safe updates + safe mode (SPEC-v2 B, G) ----
+  ipcMain.handle('start-notes', () => takeStartNotes())
+  ipcMain.handle('undo-update', (_e, to: string) => undoUpdate(String(to)))
+  ipcMain.handle('release-everyone', async () => {
+    const r = await releaseToEveryone()
+    notify(
+      r.ok
+        ? { kind: 'success', title: r.already ? 'Already released to everyone' : 'Released to everyone', detail: `Version ${app.getVersion()} — the other PCs update on their next start.` }
+        : { kind: 'error', title: 'Not released', detail: r.error }
+    )
+    return r
+  })
+  ipcMain.handle('emulator-mark-tested', async (_e, id: string) => {
+    const r = await markTested(String(id))
+    notify(r.ok ? { kind: 'success', title: 'Marked as tested', detail: 'The other PCs are offered this version now.' } : { kind: 'error', title: 'Not marked as tested', detail: r.error })
+    return r
+  })
+  ipcMain.handle('safe-mode', async (_e, on: boolean) => {
+    if (runningGame()) return { ok: false, error: 'Close the game first.' }
+    if (on) enterSafeMode()
+    else await leaveSafeMode()
+    // start the menu again so everything is read the safe (or normal) way
+    win?.webContents.reload()
+    return { ok: true }
+  })
   ipcMain.handle('licenses', () =>
     allEmulators()
       .filter((e) => !path.isAbsolute(e.folder))
@@ -698,6 +732,26 @@ function registerMediaProtocol(): void {
   })
 }
 
+/** What the menu shows once after starting. Taken once: a reload (safe mode) doesn't show it again. */
+let startNotes: StartNotes | null = null
+let session: StartInfo | null = null
+function takeStartNotes(): StartNotes {
+  if (!startNotes) {
+    const fresh = takeNewVersion()
+    const w = fresh ? whatsNewFor(app.getVersion(), compareVersions) : null
+    const rescued = takeRescueNote()
+    startNotes = {
+      safeMode: inSafeMode(),
+      // after a rescue the rescue note explains it; no safe-mode question on top
+      crashed: !!session?.crashedLastTime && !inSafeMode() && !rescued,
+      rescued,
+      whatsNew: w ?? undefined
+    }
+    return startNotes
+  }
+  return { safeMode: inSafeMode(), crashed: false }
+}
+
 app.on('second-instance', () => {
   if (win) {
     if (win.isMinimized()) win.restore()
@@ -705,11 +759,17 @@ app.on('second-instance', () => {
   }
 })
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   ensureDataDirs()
-  log.info(`Starstation ${app.getVersion()} starting; Files=${filesDir()}`)
+  log.info(`Starstation ${app.getVersion()} starting; Files=${filesDir()}${inSafeMode() ? ' (safe mode)' : ''}`)
+  // crashed twice right after an update? then go back to the version before, before anything else
+  session = startSession(app.getVersion())
+  if (session.crashedLastTime) log.warn(`last run ended unexpectedly (${session.crashesInARow} in a row)`)
+  if (await maybeRescue(session).catch((e) => (log.error('rescue failed', e), false))) return
   loadPresets()
   loadLibrary()
+  // mods that safe mode set aside come back at every normal start (also after a crash in safe mode)
+  if (!inSafeMode()) void restoreSuspended().catch((e) => log.warn('could not switch mods on again', e))
   registerIpc()
   registerHooks()
   registerMediaProtocol()
@@ -735,6 +795,9 @@ app.on('window-all-closed', () => {
   stopRunning()
   app.quit()
 })
+// a normal close or Windows shutting down is not a crash
+app.on('will-quit', () => endSession())
+app.on('session-end' as 'will-quit', () => endSession())
 
 process.on('uncaughtException', (e) => log.error('uncaught', e))
 process.on('unhandledRejection', (e) => log.error('unhandled rejection', e))

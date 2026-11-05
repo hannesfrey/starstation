@@ -1,7 +1,7 @@
 {
   "name": "starstation",
   "productName": "Starstation",
-  "version": "1.0.0",
+  "version": "1.9.0",
   "description": "A PS3-style console menu for emulated games on Windows",
   "author": "hannesfrey",
   "license": "MIT",
@@ -96,7 +96,7 @@
         "provider": "github",
         "owner": "hannesfrey",
         "repo": "starstation",
-        "releaseType": "release"
+        "releaseType": "prerelease"
       }
     ]
   }

@@ -1,5 +1,8 @@
 import type { UpdateState, AddGamesResult, AppState, CustomConsoleForm, PackageChoice, PackageProgress, EmulatorInfo, Game, GameDetails, GbGame, GbMod, GbModDetails, HealthIssue, ModsView, NetplayRoom, GraphicsLevel, ImportProgressInfo, ImportResultInfo, ImportSourceInfo, Settings } from '../../../shared/types'
 import { formatPlayTime } from './model'
+import { compareVersions } from '../../../shared/semver'
+import { whatsNewFor } from '../../../shared/whatsnew'
+import type { StartNotes } from '../../../shared/types'
 
 /** Data some panels load on demand. */
 export interface PanelExtra {
@@ -29,6 +32,8 @@ export interface PanelExtra {
   pkg: { choice: PackageChoice; size?: number; progress?: PackageProgress; busy: boolean; result?: string; useSettings?: boolean; code?: string }
   setup?: { done: boolean; existing: boolean; filesDir: string }
   update?: UpdateState
+  /** Shown once after starting (crash, rescue, What's new). */
+  notes?: StartNotes
 }
 
 export interface PItem {
@@ -105,6 +110,10 @@ export interface PanelHandlers {
   deleteGame: (g: Game, withSaves: boolean) => void
   addGamesDialog: () => void
   addGameAs: (path: string, consoleId: string) => void
+  setSafeMode: (on: boolean) => void
+  undoUpdate: (to: string) => void
+  releaseToEveryone: () => void
+  markTested: (emulatorId: string) => void
 }
 
 const onOff = (b: boolean) => (b ? 'On' : 'Off')
@@ -336,6 +345,8 @@ export function buildPanel(id: string, arg: string | undefined, state: AppState,
           items.push({ key: 'repair', label: 'Repair / reinstall', value: 'keeps settings and saves', disabled: !!busy, run: () => (h.installEmulator(e.id), 'keep') })
         }
       }
+      if (state.info.tester && e.tested) items.push({ key: 'tested', label: `Tested version (everyone gets it): ${e.tested}`, info: true })
+      if (e.untested) items.push({ key: 'mark', label: 'Mark as tested', value: 'offer this version to everyone', disabled: !!busy, run: () => (h.markTested(e.id), 'keep') })
       items.push({ key: 'folder', label: 'Open emulator folder', run: () => h.command('open-folder', `emulators:${e.id}`) })
       if (lic) items.push({ key: 'lic', label: `License: ${lic.license}`, info: !lic.file, run: lic.file ? () => h.command('open-path', lic.file!) : undefined })
       return { id, title: e.name, items }
@@ -634,12 +645,26 @@ export function buildPanel(id: string, arg: string | undefined, state: AppState,
           { key: 'games', label: 'Open games folder', run: () => h.command('open-folder', 'games') }
         ]
       }
-    case 'about':
+    case 'about': {
+      const u = x.update
+      const items: PItem[] = [
+        { key: 'v', label: `Version ${state.info.version}`, info: true },
+        {
+          key: 'channel',
+          label: state.info.tester ? 'Beta channel: this PC gets new versions first' : 'Gets versions once they are released to everyone',
+          info: true
+        }
+      ]
+      if (u?.canRelease)
+        items.push({ key: 'release', label: 'Release to everyone', value: 'only this PC has this version so far', run: () => (h.openPanel('release'), 'keep') })
+      if (whatsNewFor(state.info.version, compareVersions)) items.push({ key: 'new', label: "What's new", run: () => (h.openPanel('whats-new'), 'keep') })
+      if (u?.previous?.length) items.push({ key: 'undo', label: 'Undo update', value: `back to ${u.previous[0]}`, run: () => (h.openPanel('undo-update'), 'keep') })
+      if (u?.skipped) items.push({ key: 'skip', label: `Version ${u.skipped} is skipped until a newer one comes out.`, info: true })
       return {
         id,
         title: 'About Starstation',
         items: [
-          { key: 'v', label: `Version ${state.info.version}`, info: true },
+          ...items,
           {
             key: 'update',
             label: 'Check for updates',
@@ -656,6 +681,79 @@ export function buildPanel(id: string, arg: string | undefined, state: AppState,
           { key: 'own', label: 'Starstation uses only its own artwork and sounds.', info: true }
         ]
       }
+    }
+    case 'release':
+      return {
+        id,
+        title: 'Release to everyone',
+        items: [
+          { key: 'what', label: `Version ${state.info.version} becomes the version every other Starstation updates to.`, info: true },
+          { key: 'when', label: 'They get it on their next start. Undo update still works on every PC.', info: true },
+          { key: 'go', label: `Release ${state.info.version} to everyone`, run: () => h.releaseToEveryone() },
+          { key: 'no', label: 'Not yet', run: () => undefined }
+        ]
+      }
+    case 'undo-update': {
+      const prev = x.update?.previous ?? []
+      return {
+        id,
+        title: 'Undo update',
+        items: [
+          { key: 'what', label: 'Starstation closes, installs the older version and starts again. Games, saves and settings stay.', info: true },
+          ...prev.map((v) => ({ key: `to-${v}`, label: `Go back to ${v}`, run: () => h.undoUpdate(v) })),
+          { key: 'no', label: 'Keep this version', run: () => undefined }
+        ]
+      }
+    }
+    case 'whats-new': {
+      const w = x.notes?.whatsNew ?? whatsNewFor(state.info.version, compareVersions)
+      if (!w) return null
+      return {
+        id,
+        title: `What's new in ${state.info.version}`,
+        items: [
+          ...w.summary.map((line, i) => ({ key: `s${i}`, label: line, info: true })),
+          { key: 'more', label: 'Show details', run: () => (h.openPanel('whats-new-details'), 'keep') },
+          { key: 'ok', label: 'OK', run: () => undefined }
+        ]
+      }
+    }
+    case 'whats-new-details': {
+      const w = x.notes?.whatsNew ?? whatsNewFor(state.info.version, compareVersions)
+      if (!w) return null
+      return { id, title: `All changes in ${state.info.version}`, items: w.details.map((line, i) => ({ key: `d${i}`, label: line, info: true })) }
+    }
+    case 'crashed':
+      return {
+        id,
+        title: 'Starstation closed unexpectedly',
+        items: [
+          { key: 'what', label: 'Last time Starstation stopped without closing normally.', info: true },
+          { key: 'safe', label: 'Start in safe mode', value: 'without mods and custom settings', run: () => h.setSafeMode(true) },
+          { key: 'normal', label: 'Start normally', run: () => undefined }
+        ]
+      }
+    case 'safe-mode':
+      return state.info.safeMode
+        ? {
+            id,
+            title: 'Safe mode',
+            items: [
+              { key: 'what', label: 'Starstation runs without mods, themes and custom settings. Changes made now are not kept.', info: true },
+              { key: 'leave', label: 'Leave safe mode', value: 'everything comes back', run: () => h.setSafeMode(false) },
+              { key: 'stay', label: 'Stay in safe mode', run: () => undefined }
+            ]
+          }
+        : {
+            id,
+            title: 'Start in safe mode',
+            items: [
+              { key: 'what', label: 'Starts without mods, themes and custom settings, to find out what causes a problem. Nothing is deleted.', info: true },
+              { key: 'tip', label: 'Also: hold ○ while Starstation starts.', info: true },
+              { key: 'go', label: 'Start in safe mode', run: () => h.setSafeMode(true) },
+              { key: 'no', label: 'Cancel', run: () => undefined }
+            ]
+          }
     case 'game': {
       const g = state.library.games.find((x) => x.id === arg)
       if (!g) return null

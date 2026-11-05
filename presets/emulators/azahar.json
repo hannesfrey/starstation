@@ -6,7 +6,8 @@
   "download": {
     "type": "github",
     "repo": "azahar-emu/azahar",
-    "asset": "^azahar-windows-msvc-[\\d.]+\\.zip$"
+    "asset": "^azahar-windows-msvc-[\\d.]+\\.zip$",
+    "tested": "2126.2"
   },
   "portable": [
     {

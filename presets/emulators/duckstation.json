@@ -6,7 +6,8 @@
   "download": {
     "type": "github",
     "repo": "stenzek/duckstation",
-    "asset": "^duckstation-windows-x64-release\\.zip$"
+    "asset": "^duckstation-windows-x64-release\\.zip$",
+    "tested": "latest"
   },
   "portable": [
     {

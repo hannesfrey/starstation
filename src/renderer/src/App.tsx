@@ -223,6 +223,31 @@ export function App() {
     [handleAdd]
   )
 
+  // ---- safe updates + safe mode ----
+  const setSafeMode = useCallback(
+    (on: boolean) => {
+      void api.setSafeMode(on).then((r) => {
+        if (!r.ok && r.error) notify({ kind: 'error', title: on ? 'Safe mode not started' : 'Still in safe mode', detail: r.error })
+      })
+    },
+    [notify]
+  )
+  const undoUpdate = useCallback(
+    (to: string) => {
+      notify({ kind: 'update', title: `Going back to ${to}…`, detail: 'Starstation closes and starts again by itself.' })
+      void api.undoUpdate(to).then((r) => {
+        if (!r.ok) notify({ kind: 'error', title: 'Could not go back', detail: r.error })
+      })
+    },
+    [notify]
+  )
+  const releaseToEveryone = useCallback(() => {
+    void api.releaseToEveryone().then(() => api.updateState().then((update) => setExtra((x) => ({ ...x, update }))))
+  }, [])
+  const markTested = useCallback((id: string) => {
+    void api.markTested(id).then(() => api.emulators().then((emulators) => setExtra((x) => ({ ...x, emulators }))))
+  }, [])
+
   const openSearch = useCallback(() => {
     sfx.confirm()
     setEntry({ kind: 'search', title: 'Search', value: '', row: 0, col: 0, focus: 'keys', result: 0 })
@@ -851,7 +876,11 @@ export function App() {
         checkUpdates2,
         deleteGame,
         addGamesDialog,
-        addGameAs
+        addGameAs,
+        setSafeMode,
+        undoUpdate,
+        releaseToEveryone,
+        markTested
       },
       extra
     )
@@ -914,8 +943,30 @@ export function App() {
     deleteGame,
     addGamesDialog,
     addGameAs,
+    setSafeMode,
+    undoUpdate,
+    releaseToEveryone,
+    markTested,
     extra
   ])
+
+  // once after starting (and after the boot animation): crash → offer safe mode, rescue note, What's new
+  const notesTaken = useRef(false)
+  useEffect(() => {
+    if (booting || !state || wizard || notesTaken.current) return
+    notesTaken.current = true
+    void api.startNotes().then((notes) => {
+      setExtra((x) => ({ ...x, notes }))
+      if (notes.rescued)
+        notify({
+          kind: 'update',
+          title: `Back on version ${notes.rescued.to}`,
+          detail: `Version ${notes.rescued.from} closed unexpectedly twice right after updating, so Starstation went back. It is skipped until a newer version comes out.`
+        })
+      if (notes.crashed) setPanels((p) => [...p, { id: 'crashed', index: 0 }])
+      else if (notes.whatsNew) setPanels((p) => [...p, { id: 'whats-new', index: 0 }])
+    })
+  }, [booting, state, wizard, notify])
 
   // a panel whose subject is gone (deleted game, finished question) closes itself
   useEffect(() => {
@@ -1237,10 +1288,15 @@ export function App() {
       <Background paused={!!running} dim={idle} />
       {bgArt && <div className="game-bg" style={{ backgroundImage: `url("${api.mediaUrl(bgArt)}")` }} />}
       {booting ? (
-        <Boot onDone={() => setBooting(false)} />
+        <Boot onDone={() => setBooting(false)} onSafeMode={() => setSafeMode(true)} />
       ) : (
         <>
           <TopBar pad={pad} battery={battery} />
+          {state?.info.safeMode && (
+            <div className="safe-badge" data-testid="safe-badge">
+              Safe mode
+            </div>
+          )}
           {state && column && (
             <Xmb
               columns={columns}

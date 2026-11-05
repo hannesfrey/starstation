@@ -73,6 +73,9 @@ export function buildColumns(state: AppState, h: ModelHandlers, shots: Screensho
     label: 'Settings',
     icon: 'settings',
     items: [
+      ...(state.info.safeMode
+        ? [{ key: 'safe-leave', label: 'Leave safe mode', sub: 'Mods, settings and game choices come back', icon: 'health' as const, kind: 'action' as const, run: () => h.openPanel('safe-mode') }]
+        : []),
       { key: 'general', label: 'General', sub: 'Fullscreen, sounds, empty consoles, button icons', icon: 'settings', kind: 'action', run: () => h.openPanel('general') },
       { key: 'graphics', label: 'Graphics', sub: 'Default graphics level and CRT filter', icon: 'display', kind: 'action', run: () => h.openPanel('graphics') },
       {
@@ -132,6 +135,9 @@ export function buildColumns(state: AppState, h: ModelHandlers, shots: Screensho
       { key: 'steam', label: 'Steam', sub: 'Add Starstation to Steam for Big Picture mode', icon: 'steam', kind: 'action', run: () => h.openPanel('steam') },
       { key: 'packages', label: 'Packages', sub: 'Send or receive a whole setup', icon: 'package', kind: 'action', run: () => h.openPanel('packages') },
       { key: 'diagnostics', label: 'Diagnostics', sub: 'Export a report with logs and settings', icon: 'info', kind: 'action', run: () => h.openPanel('diagnostics') },
+      ...(state.info.safeMode
+        ? []
+        : [{ key: 'safe', label: 'Start in safe mode', sub: 'Without mods, themes and custom settings', icon: 'health' as const, kind: 'action' as const, run: () => h.openPanel('safe-mode') }]),
       {
         key: 'display',
         label: 'Fullscreen',
@@ -143,7 +149,7 @@ export function buildColumns(state: AppState, h: ModelHandlers, shots: Screensho
       {
         key: 'about',
         label: 'About Starstation',
-        sub: `Version ${state.info.version}`,
+        sub: `Version ${state.info.version}${state.info.tester ? ' · beta channel' : ''}`,
         icon: 'about',
         kind: 'action',
         run: () => h.openPanel('about')

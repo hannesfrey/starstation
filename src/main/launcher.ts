@@ -5,6 +5,7 @@ import { getConsole, getEmulator, emulatorDir, emulatorExe, fill } from './prese
 import { gameVars, keepPreviousResume, resumeLaunch } from './gamedata'
 import { applyGameOptions, optionVars } from './gameoptions'
 import { applyModSettings, modVars } from './mods'
+import { suspendModsFor } from './safemode'
 import { raVars } from './retroach'
 import { applyStep } from './emuconfig'
 import { applyConsoleConfig } from './emuconfig'
@@ -80,6 +81,8 @@ export async function launch(
   if (running) return { ok: false, error: `${running.title} is still running.` }
   const game = getGame(gameId)
   const c = game ? getConsole(game.console) : undefined
+  // safe mode: this game's mods are set aside before anything reads them
+  if (game) await suspendModsFor(game).catch((e) => log.warn('could not set mods aside for safe mode', e))
   const rl = game ? resumeLaunch(game, mode) : { args: [], at: 0, vars: {} }
   // per-game options (graphics level, CRT filter, patches) first fill placeholders, then add their own steps/args
   const ov = game && c ? { ...optionVars(c, game), ...modVars(c, game), ...raVars(), ...(extra.vars ?? {}) } : {}

@@ -8,6 +8,8 @@ import { applyConsoleConfig } from './emuconfig'
 import { binDir, dir } from './paths'
 import { readJson, writeJson } from './store'
 import { logger } from './log'
+import { getSecrets, isTester } from './settings'
+import { versionFromAsset } from './formats/version'
 
 import type { EmulatorInfo } from '../shared/types'
 
@@ -15,12 +17,45 @@ const log = logger('emulators')
 
 interface Marker {
   version?: string
+  /** GitHub release tag it came from (installs since v2). */
+  tag?: string
   asset?: string
   source?: string
   installedAt?: string
 }
 
+/** The release Starstation offers for each emulator: newest (tester PC) or the tested one (everyone else). */
 const latestCache = new Map<string, { at: number; tag: string; url: string; name: string } | null>()
+
+/**
+ * Tested emulator versions (SPEC-v2 B). Everyone gets the tested release; the tester PC gets the newest
+ * and can mark it as tested. The shared list lives in the Starstation repo (tested-emulators.json on main),
+ * so a version Hannes marks reaches the other PCs without a Starstation update; presets carry a fallback.
+ */
+const OWNER = 'hannesfrey'
+const REPO = 'starstation'
+const TESTED_FILE = 'tested-emulators.json'
+const rawBase = () => process.env.STARSTATION_GITHUB_RAW ?? `https://raw.githubusercontent.com/${OWNER}/${REPO}/main`
+const ghApi = () => process.env.STARSTATION_GITHUB_API ?? 'https://api.github.com'
+let testedCache: { at: number; list: Record<string, string> } | null = null
+
+async function remoteTested(): Promise<Record<string, string>> {
+  if (testedCache && Date.now() - testedCache.at < 3600_000) return testedCache.list
+  try {
+    const r = await net.fetch(`${rawBase()}/${TESTED_FILE}?t=${Date.now()}`, { headers: { 'User-Agent': 'Starstation' } })
+    const list = r.ok ? ((await r.json()) as { emulators?: Record<string, string> }).emulators ?? {} : {}
+    testedCache = { at: Date.now(), list }
+  } catch (e) {
+    log.warn('could not read the tested emulator list', e)
+    testedCache = { at: Date.now() - 3000_000, list: testedCache?.list ?? {} } // try again in 10 minutes
+  }
+  return testedCache.list
+}
+
+function testedTag(e: EmulatorPreset): string | undefined {
+  if (e.download?.type !== 'github') return undefined
+  return testedCache?.list[e.id] ?? e.download.tested
+}
 
 function marker(e: EmulatorPreset): Marker {
   return readJson<Marker>(path.join(emulatorDir(e), '.starstation.json'), {})
@@ -38,13 +73,18 @@ export function emulatorInfos(): EmulatorInfo[] {
     const l = latestCache.get(e.id)
     const latest = l?.tag ?? null
     const version = installed ? (m.version ?? 'unknown') : null
+    const tested = testedTag(e)
+    const current = !!(version && latest && isCurrent(version, latest, m.asset, l?.name))
     return {
       id: e.id,
       name: e.name,
       installed,
       version,
       latest,
-      updateAvailable: !!(installed && latest && version && !isCurrent(version, latest, m.asset, l?.name)),
+      updateAvailable: !!(installed && latest && version && !current),
+      tested,
+      // tester PC, newest installed, not the tested one yet
+      untested: !!(isTester() && installed && tested && m.tag && m.tag !== tested && !/latest|continuous|nightly/i.test(tested)),
       consoles: allConsoles()
         .filter((c) => c.emulator === e.id)
         .map((c) => c.short),
@@ -62,26 +102,43 @@ function norm(v: string): string {
 function isCurrent(installed: string, latestTag: string, asset: string | undefined, latestAsset: string | undefined): boolean {
   if (asset && latestAsset && asset === latestAsset && !/latest|continuous|nightly/i.test(latestTag)) return true
   if (norm(installed) === norm(latestTag)) return true
+  // tags like "build-<commit>" (RPCS3): the version is in the file name
+  const fromAsset = latestAsset ? versionFromAsset(latestAsset) : null
+  if (fromAsset && norm(installed) === norm(fromAsset)) return true
   if (/latest|continuous|nightly/i.test(latestTag)) return true
   return false
 }
 
-async function getJson<T>(url: string): Promise<T> {
-  const r = await net.fetch(url, { headers: { 'User-Agent': 'Starstation', Accept: 'application/vnd.github+json' } })
+async function getJson<T>(url: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
+  // the tester's GitHub login raises the rate limit (and is needed to mark versions as tested)
+  const token = isTester() ? getSecrets().github?.token : undefined
+  const r = await net.fetch(url, {
+    method: init.method ?? 'GET',
+    headers: {
+      'User-Agent': 'Starstation',
+      Accept: 'application/vnd.github+json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(init.body ? { 'Content-Type': 'application/json' } : {})
+    },
+    body: init.body ? JSON.stringify(init.body) : undefined
+  })
   if (!r.ok) throw new Error(`${url}: HTTP ${r.status}`)
   return (await r.json()) as T
 }
 
-/** Ask GitHub for the newest release of each emulator (cached for an hour). */
+/** Ask GitHub for the release to offer for each emulator (cached for an hour): newest on the tester PC, tested elsewhere. */
 export async function checkUpdates(): Promise<EmulatorInfo[]> {
+  await remoteTested()
   for (const e of usedEmulators()) {
     const d = e.download
     if (d?.type !== 'github') continue
     const c = latestCache.get(e.id)
     if (c && Date.now() - c.at < 3600_000) continue
+    const tested = testedTag(e)
+    const which = isTester() || !tested ? 'latest' : `tags/${encodeURIComponent(tested)}`
     try {
       const rel = await getJson<{ tag_name: string; assets: { name: string; browser_download_url: string }[] }>(
-        `https://api.github.com/repos/${d.repo}/releases/latest`
+        `${ghApi()}/repos/${d.repo}/releases/${which}`
       )
       const asset = rel.assets.find((a) => new RegExp(d.asset, 'i').test(a.name))
       if (asset) latestCache.set(e.id, { at: Date.now(), tag: rel.tag_name, url: asset.browser_download_url, name: asset.name })
@@ -175,13 +232,15 @@ export async function installEmulator(id: string, onProgress?: (text: string) =>
   let url: string
   let name: string
   let version: string
+  let tag: string | undefined
   if (e.download?.type === 'github') {
     latestCache.delete(e.id)
     await checkUpdates()
     const l = latestCache.get(e.id)
     if (!l) throw new Error(`No ${e.name} download found on GitHub`)
-    ;({ url, name } = l)
-    version = l.tag.replace(/^v\.?/i, '')
+    ;({ url, name, tag } = l)
+    // "build-<commit>" tags (RPCS3) and rolling tags: the file name has the real version
+    version = /^build-|^latest$/i.test(l.tag) ? (versionFromAsset(l.name) ?? l.tag) : l.tag.replace(/^v\.?/i, '')
   } else if (e.download?.type === 'url') {
     url = e.download.url
     name = path.basename(new URL(url).pathname)
@@ -195,8 +254,42 @@ export async function installEmulator(id: string, onProgress?: (text: string) =>
   onProgress?.(`Installing ${e.name}…`)
   await extract(dl, emulatorDir(e))
   await fsp.rm(dl, { force: true })
-  writeJson(path.join(emulatorDir(e), '.starstation.json'), { version, asset: name, source: url, installedAt: new Date().toISOString() })
+  writeJson(path.join(emulatorDir(e), '.starstation.json'), { version, tag, asset: name, source: url, installedAt: new Date().toISOString() })
   for (const c of allConsoles().filter((x) => x.emulator === e.id)) applyConsoleConfig(c)
   log.info(`installed ${e.id} ${version}`)
   return emulatorInfos().find((x) => x.id === id)!
+}
+
+/**
+ * Tester PC: the installed version works → it becomes the version everyone else gets.
+ * Writes tested-emulators.json in the Starstation repo (GitHub contents API, the tester's login).
+ */
+export async function markTested(id: string): Promise<{ ok: boolean; error?: string }> {
+  const e = getEmulator(id)
+  if (!e || e.download?.type !== 'github') return { ok: false, error: 'This emulator has a fixed version.' }
+  if (!isTester()) return { ok: false, error: 'Only the tester PC can mark versions as tested.' }
+  const tag = marker(e).tag
+  if (!tag) return { ok: false, error: 'Install or update it from Starstation first, so its version is known.' }
+  try {
+    const url = `${ghApi()}/repos/${OWNER}/${REPO}/contents/${TESTED_FILE}`
+    let sha: string | undefined
+    let list: Record<string, string> = {}
+    try {
+      const cur = await getJson<{ sha: string; content: string }>(url)
+      sha = cur.sha
+      list = (JSON.parse(Buffer.from(cur.content, 'base64').toString('utf8')) as { emulators?: Record<string, string> }).emulators ?? {}
+    } catch {
+      // first time: the file doesn't exist yet
+    }
+    list[id] = tag
+    const body = JSON.stringify({ emulators: list, updatedAt: new Date().toISOString() }, null, 2) + '\n'
+    await getJson(url, { method: 'PUT', body: { message: `Mark ${e.name} ${tag} as tested`, content: Buffer.from(body).toString('base64'), ...(sha ? { sha } : {}) } })
+    testedCache = { at: Date.now(), list }
+    latestCache.delete(id)
+    log.info(`marked ${id} ${tag} as tested`)
+    return { ok: true }
+  } catch (err) {
+    log.error(`mark tested ${id} failed`, err)
+    return { ok: false, error: (err as Error).message }
+  }
 }

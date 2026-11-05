@@ -1,50 +1,262 @@
-import { app } from 'electron'
+import fs from 'node:fs'
+import fsp from 'node:fs/promises'
+import path from 'node:path'
+import { spawn } from 'node:child_process'
+import { app, net } from 'electron'
 import { autoUpdater } from 'electron-updater'
+import { dir } from './paths'
+import { readJson, writeJson } from './store'
+import { getSecrets, isTester } from './settings'
 import { logger } from './log'
-import type { Notice } from '../shared/types'
+import { compareVersions } from '../shared/semver'
+import { pickRelease, type Release } from './formats/releases'
+import { endSession, type StartInfo } from './session'
+import type { Notice, UpdateState } from '../shared/types'
 
 /**
- * Starstation updates itself from GitHub releases: checked at startup, downloaded in the background,
- * installed when Starstation closes — so the new version is active on the next start.
- * Its download cache is inside Files\config\electron (see paths.redirectElectronPaths).
+ * Safe updates (SPEC-v2 B).
+ * - Releases are GitHub releases of hannesfrey/starstation. A new version is published as a pre-release:
+ *   only the tester PC (Hannes: GitHub login in secrets.json) takes pre-releases. "Release to everyone"
+ *   turns that same release into a normal one, and then every other Starstation updates to it.
+ * - Starstation picks the release itself and points electron-updater at that release's files, so the
+ *   choice is easy to follow and test; electron-updater downloads, checks and installs it.
+ * - Installers of the current and the last 3 versions are kept in Files\config\updates\installers:
+ *   Undo update and the automatic rescue run one of them (silent NSIS install, then Starstation restarts).
  */
 
 const log = logger('updater')
-let state: { status: 'idle' | 'checking' | 'latest' | 'downloading' | 'ready' | 'error' | 'dev'; version?: string; error?: string } = { status: 'idle' }
+const OWNER = 'hannesfrey'
+const REPO = 'starstation'
+const KEEP_PREVIOUS = 3
+const HEADLESS = process.env.STARSTATION_HEADLESS === '1'
 
-export function updateState(): typeof state {
-  return app.isPackaged ? state : { status: 'dev' }
+const apiBase = () => process.env.STARSTATION_GITHUB_API ?? 'https://api.github.com'
+const downloadsBase = () => process.env.STARSTATION_GITHUB_DOWNLOADS ?? `https://github.com/${OWNER}/${REPO}/releases/download`
+const updatesDir = (...p: string[]) => dir('config', 'updates', ...p)
+const installersDir = () => updatesDir('installers')
+const installerName = (v: string) => `Starstation-Setup-${v}.exe`
+
+let state: UpdateState = { status: 'idle' }
+let releases: Release[] | null = null
+
+function version(): string {
+  return process.env.STARSTATION_TEST_VERSION ?? app.getVersion()
 }
 
-export function startUpdater(notify: (n: Omit<Notice, 'id'>) => void): void {
-  if (!app.isPackaged || process.env.STARSTATION_HEADLESS === '1') return
+function skipped(): string | undefined {
+  return readJson<{ skip?: string }>(updatesDir('skip.json'), {}).skip
+}
+
+async function github<T>(p: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
+  const token = getSecrets().github?.token
+  const r = await net.fetch(`${apiBase()}${p}`, {
+    method: init.method ?? 'GET',
+    headers: {
+      'User-Agent': 'Starstation',
+      Accept: 'application/vnd.github+json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(init.body ? { 'Content-Type': 'application/json' } : {})
+    },
+    body: init.body ? JSON.stringify(init.body) : undefined
+  })
+  if (!r.ok) throw new Error(`GitHub: HTTP ${r.status}`)
+  return (await r.json()) as T
+}
+
+async function loadReleases(): Promise<Release[]> {
+  releases = await github<Release[]>(`/repos/${OWNER}/${REPO}/releases?per_page=30`)
+  return releases
+}
+
+/** Versions whose installer is kept and that are older than the running one, newest first. */
+export function previousVersions(): string[] {
+  let names: string[] = []
+  try {
+    names = fs.readdirSync(installersDir())
+  } catch {
+    return []
+  }
+  return names
+    .map((n) => /^Starstation-Setup-(.+)\.exe$/i.exec(n)?.[1])
+    .filter((v): v is string => !!v && compareVersions(v, version()) < 0)
+    .sort((a, b) => compareVersions(b, a))
+    .slice(0, KEEP_PREVIOUS)
+}
+
+export function updateState(): UpdateState {
+  const tester = isTester()
+  const cur = releases?.find((r) => r.tag_name.replace(/^v/i, '') === version())
+  return {
+    ...(app.isPackaged || process.env.STARSTATION_GITHUB_API ? state : { status: 'dev' as const }),
+    channel: tester ? 'beta' : 'everyone',
+    tester,
+    previous: previousVersions(),
+    skipped: skipped(),
+    canRelease: tester && !!cur?.prerelease
+  }
+}
+
+/** Keep a copy of an installer (current + 3 older versions are kept, the rest removed). */
+async function keepInstaller(file: string, v: string): Promise<void> {
+  await fsp.mkdir(installersDir(), { recursive: true })
+  const to = path.join(installersDir(), installerName(v))
+  if (path.resolve(file).toLowerCase() !== to.toLowerCase()) await fsp.copyFile(file, to)
+  const all = (await fsp.readdir(installersDir()))
+    .map((n) => /^Starstation-Setup-(.+)\.exe$/i.exec(n)?.[1])
+    .filter((x): x is string => !!x)
+    .sort((a, b) => compareVersions(b, a))
+  // keep everything newer than the running version (a downloaded update) + the running one + 3 older
+  const cur = version()
+  const older = all.filter((x) => compareVersions(x, cur) < 0)
+  for (const old of older.slice(KEEP_PREVIOUS)) await fsp.rm(path.join(installersDir(), installerName(old)), { force: true })
+  log.info(`kept installer ${v}`)
+}
+
+/** Download a version's installer from its GitHub release into the keep folder. */
+async function fetchInstaller(v: string): Promise<string> {
+  const to = path.join(installersDir(), installerName(v))
+  if (fs.existsSync(to)) return to
+  const r = await net.fetch(`${downloadsBase()}/v${v}/${installerName(v)}`, { headers: { 'User-Agent': 'Starstation' } })
+  if (!r.ok) throw new Error(`Installer ${v}: HTTP ${r.status}`)
+  const buf = Buffer.from(await r.arrayBuffer())
+  // an installer starts with "MZ"; anything else is an error page
+  if (buf[0] !== 0x4d || buf[1] !== 0x5a) throw new Error(`Installer ${v} is not a program`)
+  await fsp.mkdir(installersDir(), { recursive: true })
+  await fsp.writeFile(`${to}.part`, buf)
+  await fsp.rename(`${to}.part`, to)
+  await keepInstaller(to, v)
+  return to
+}
+
+/**
+ * Install another version: silent NSIS install into the same folder, then it starts itself
+ * (--force-run). Starstation quits so the installer can replace it. Hidden tests only note the call.
+ */
+function runInstaller(v: string, why: string): void {
+  const exe = path.join(installersDir(), installerName(v))
+  log.info(`installing ${v} (${why}): ${exe}`)
+  endSession() // leaving on purpose: not a crash
+  if (HEADLESS) {
+    const runs = readJson<{ version: string; why: string; args: string[] }[]>(updatesDir('test-runs.json'), [])
+    writeJson(updatesDir('test-runs.json'), [...runs, { version: v, why, args: ['/S', '--force-run'] }])
+  } else spawn(exe, ['/S', '--force-run'], { detached: true, stdio: 'ignore' }).unref()
+  setTimeout(() => app.exit(0), 500)
+}
+
+/** Settings → About → Undo update. */
+export async function undoUpdate(to: string): Promise<{ ok: boolean; error?: string }> {
+  if (!previousVersions().includes(to)) return { ok: false, error: `Version ${to} is not kept on this PC.` }
+  writeJson(updatesDir('skip.json'), { skip: version(), at: new Date().toISOString() })
+  runInstaller(to, 'undo update')
+  return { ok: true }
+}
+
+/**
+ * Started after an update and it crashed twice in a row since: go back to the version before.
+ * Runs before the window opens. true = the old version is being installed, stop starting.
+ */
+export async function maybeRescue(info: StartInfo): Promise<boolean> {
+  const cur = version()
+  const prev = info.previousVersion
+  if (info.crashesInARow < 2 || !info.neverClean || !prev || compareVersions(prev, cur) >= 0) return false
+  try {
+    if (!previousVersions().includes(prev)) await Promise.race([fetchInstaller(prev), new Promise((_r, rej) => setTimeout(() => rej(new Error('timeout')), 60_000))])
+  } catch (e) {
+    log.error(`rescue: no installer for ${prev}`, e)
+    return false
+  }
+  log.warn(`rescue: ${cur} crashed ${info.crashesInARow} times right after updating, going back to ${prev}`)
+  writeJson(updatesDir('rescued.json'), { from: cur, to: prev, at: new Date().toISOString(), shown: false })
+  writeJson(updatesDir('skip.json'), { skip: cur, at: new Date().toISOString() })
+  runInstaller(prev, 'rescue')
+  return true
+}
+
+/** After a rescue: the old version shows what happened (once). */
+export function takeRescueNote(): { from: string; to: string } | undefined {
+  const n = readJson<{ from?: string; to?: string; shown?: boolean } | null>(updatesDir('rescued.json'), null)
+  if (!n?.from || !n.to || n.shown || n.to !== version()) return undefined
+  writeJson(updatesDir('rescued.json'), { ...n, shown: true })
+  return { from: n.from, to: n.to }
+}
+
+/** First start of a new version? (for What's new). Remembers the version for next time. */
+export function takeNewVersion(): { from: string } | null {
+  const f = updatesDir('state.json')
+  const st = readJson<{ lastVersion?: string }>(f, {})
+  const cur = version()
+  writeJson(f, { ...st, lastVersion: cur })
+  return st.lastVersion && st.lastVersion !== cur ? { from: st.lastVersion } : null
+}
+
+/** Tester: make the running beta a normal release, so everyone else updates to it. */
+export async function releaseToEveryone(): Promise<{ ok: boolean; error?: string; already?: boolean }> {
+  if (!getSecrets().github?.token) return { ok: false, error: 'Only the tester PC can release versions.' }
+  const v = version()
+  try {
+    const rel = await github<{ id: number; prerelease: boolean }>(`/repos/${OWNER}/${REPO}/releases/tags/v${v}`)
+    if (!rel.prerelease) return { ok: true, already: true }
+    await github(`/repos/${OWNER}/${REPO}/releases/${rel.id}`, { method: 'PATCH', body: { prerelease: false, make_latest: 'true' } })
+    log.info(`released ${v} to everyone`)
+    await loadReleases().catch(() => undefined)
+    return { ok: true }
+  } catch (e) {
+    log.error('release to everyone failed', e)
+    return { ok: false, error: (e as Error).message }
+  }
+}
+
+let wired = false
+function wireUpdater(notify: (n: Omit<Notice, 'id'>) => void): void {
+  if (wired) return
+  wired = true
   autoUpdater.autoDownload = true
   autoUpdater.autoInstallOnAppQuit = true
+  autoUpdater.allowPrerelease = true // Starstation chooses the release itself (pickRelease)
   autoUpdater.logger = { info: (m: unknown) => log.info(String(m)), warn: (m: unknown) => log.warn(String(m)), error: (m: unknown) => log.error(String(m)), debug: () => undefined }
-  autoUpdater.on('checking-for-update', () => (state = { status: 'checking' }))
-  autoUpdater.on('update-not-available', () => (state = { status: 'latest', version: app.getVersion() }))
-  autoUpdater.on('update-available', (i) => (state = { status: 'downloading', version: i.version }))
   autoUpdater.on('update-downloaded', (i) => {
     state = { status: 'ready', version: i.version }
+    void keepInstaller(i.downloadedFile, i.version).catch((e) => log.warn('could not keep the installer', e))
     notify({ kind: 'update', title: 'Starstation update ready', detail: `Version ${i.version} is used from the next start.` })
   })
   autoUpdater.on('error', (e) => {
     state = { status: 'error', error: e.message }
-    log.warn('update check failed', e)
+    log.warn('update failed', e)
   })
-  setTimeout(() => void autoUpdater.checkForUpdates().catch(() => undefined), 8000)
 }
 
-export async function checkNow(): Promise<typeof state> {
-  if (!app.isPackaged) return { status: 'dev' }
+/** Look for a newer version for this PC and download it in the background. */
+export async function checkNow(notify: (n: Omit<Notice, 'id'>) => void = () => undefined): Promise<UpdateState> {
+  if (!app.isPackaged && !process.env.STARSTATION_GITHUB_API) return updateState()
+  if (state.status === 'downloading' || state.status === 'ready') return updateState()
+  state = { status: 'checking' }
   try {
-    const r = await autoUpdater.checkForUpdates()
-    const latest = r?.updateInfo.version
-    // the events above also set this; the answer itself is enough when they aren't registered
-    if (latest && state.status !== 'downloading' && state.status !== 'ready')
-      state = latest === app.getVersion() ? { status: 'latest', version: latest } : { status: 'downloading', version: latest }
+    const list = await loadReleases()
+    const target = pickRelease(list, version(), isTester(), skipped())
+    if (!target) {
+      state = { status: 'latest', version: version() }
+      return updateState()
+    }
+    state = { status: 'downloading', version: target }
+    if (app.isPackaged && !HEADLESS) {
+      wireUpdater(notify)
+      // versions are plain numbers (1.9.1, 2.0.0): every release has latest.yml, so v1 PCs can update too
+      autoUpdater.setFeedURL({ provider: 'generic', url: `${downloadsBase()}/v${target}`, channel: 'latest' })
+      void autoUpdater.checkForUpdates().catch((e) => {
+        state = { status: 'error', error: (e as Error).message }
+        log.warn('update download failed', e)
+      })
+    }
   } catch (e) {
     state = { status: 'error', error: (e as Error).message }
+    log.warn('update check failed', e)
   }
-  return state
+  return updateState()
+}
+
+/** At start: check for updates, and make sure the running version's installer is kept (for Undo update). */
+export function startUpdater(notify: (n: Omit<Notice, 'id'>) => void): void {
+  if (!app.isPackaged || HEADLESS) return
+  setTimeout(() => void checkNow(notify), 8000)
+  setTimeout(() => void fetchInstaller(version()).catch((e) => log.warn(`could not keep installer ${version()}`, e)), 30_000)
 }

@@ -6,7 +6,8 @@
   "download": {
     "type": "github",
     "repo": "RPCS3/rpcs3-binaries-win",
-    "asset": "_win64_msvc\\.7z$"
+    "asset": "_win64_msvc\\.7z$",
+    "tested": "build-ad468a13f6374f364467a9e4988e95938c37bb42"
   },
   "portable": [],
   "importNames": [

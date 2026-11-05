@@ -6,7 +6,8 @@
   "download": {
     "type": "github",
     "repo": "xenia-canary/xenia-canary-releases",
-    "asset": "^xenia_canary_windows.*\\.zip$"
+    "asset": "^xenia_canary_windows.*\\.zip$",
+    "tested": "02d2cb5"
   },
   "portable": [
     {

@@ -5,7 +5,7 @@ Read SPEC.md first. This file tracks where the build stands and every small deci
 ## Current state
 
 - **Phase:** v1 done (v1.0.0 released 2026-11-02, fixes after it on main). **v2 build started 2026-11-05** from `SPEC-v2.md` — see "v2" below.
-- **Next step:** v2 step 2 — Safe updates (SPEC-v2 Section B) + safe mode (Section G). Step 1 (v1 test notes) is empty: Hannes said "Nothing broke".
+- **Next step:** v2 step 3 — Couch-ready core (SPEC-v2 Section A). 1.9.0 (step 2) is the first beta.
 
 ## v2 (SPEC-v2.md)
 
@@ -16,18 +16,29 @@ Read SPEC.md first. This file tracks where the build stands and every small deci
 - **Visible tests:** couch tests may show game windows at any time, game sound muted.
 - **Install:** install the first v2 beta on Hannes's PC (Desktop\Starstation) and point his shortcut at it; Files\ stays as it is.
 - **Hannes will create (not blocking):** ScreenScraper account + developer API credentials (videos, manuals), Nexus Mods account + personal API key → `Files\config\secrets.json`.
-- **My choices:** "Release to everyone" uses the GitHub login already on this PC (`tools\gh-config`); beta versions are `2.0.0-beta.N`; existing saves stay where they are and become Hannes's first profile (nothing moved); ScreenScraper dev credentials go into the installer at build time, never into the repo. Hannes's controller is a DualShock 3 through the SCP driver (shows as an Xbox 360 pad), so on his PC no translation driver is expected.
+- **My choices:** "Release to everyone" uses the GitHub login already on this PC (`tools\gh-config`, copied into `Files\config\secrets.json` → `github.token`); betas are plain version numbers (1.9.0, 1.9.1, …, final v2 = 2.0.0) published as GitHub **pre-releases** — not `2.0.0-beta.N`, because v1.0.0 PCs only read `latest.yml` and a `-beta` version would publish `beta.yml`; existing saves stay where they are and become Hannes's first profile (nothing moved); ScreenScraper dev credentials go into the installer at build time, never into the repo. Hannes's controller is a DualShock 3 through the SCP driver (shows as an Xbox 360 pad), so on his PC no translation driver is expected.
 
 ### v2 steps
 
 - [x] 1. Fix v1 test notes — none.
-- [ ] 2. Safe updates (B) + safe mode (G)
+- [x] 2. Safe updates (B) + safe mode (G) — done 2026-11-05, tag `v2-step-02-safe`, shipped as 1.9.0 (pre-release)
 - [ ] 3. Couch-ready core (A) — milestone: "Couch-ready version on beta"
 - [ ] 4. Library & storage (D)
 - [ ] 5. Mods (E)
 - [ ] 6. Console feel (C)
 - [ ] 7. Sharing (F) + rest of G (system settings, profiles, accessibility)
 - [ ] 8. Release v2 to beta + final report
+
+### v2 step 2 — Safe updates + safe mode (2026-11-05)
+
+- **Channel** (`src/main/updater.ts`, `formats/releases.ts`): Starstation reads the GitHub release list itself and picks the newest allowed one (`pickRelease`: tester → pre-releases too; everyone else → normal releases only; never a version skipped after going back), then points electron-updater (generic provider) at `releases/download/v<ver>/latest.yml` of exactly that release. Tester = `secrets.json` has `github.token` (or `STARSTATION_TESTER=1`). `npm run release` publishes as **pre-release** (`releaseType: prerelease`).
+- **Release to everyone** (Settings → About, only when the running version's release is still a pre-release on the tester PC): `PATCH /releases/<id> {prerelease:false, make_latest:'true'}`.
+- **Emulators:** presets carry `download.tested` (versions verified on Hannes's PC: PCSX2 v2.8.2, RPCS3 build-ad468a13…, xemu v0.8.139, Xenia 02d2cb5, Azahar 2126.2, DuckStation "latest" = rolling). The shared list `tested-emulators.json` on the repo's main branch overrides it (read via raw.githubusercontent, 1 h cache). Everyone else is offered/installed the tested tag (`releases/tags/<tag>`); the tester PC gets `releases/latest` and "Mark as tested" (contents API PUT). Installs now record the `tag` in `.starstation.json`; RPCS3's `build-<sha>` tags compare by the version in the file name.
+- **Undo update:** installers of the running + 3 older versions are kept in `config\updates\installers` (copied from electron-updater's download; the running version's own installer is fetched from its GitHub release 30 s after start). Undo = silent install `Setup.exe /S --force-run`, then quit; the newer version goes into `skip.json` until a newer one exists.
+- **Automatic rescue** (`session.ts`): every start writes a "running" note, a normal close / Windows shutdown marks it clean, renderer crashes exit uncleanly. If this version never closed normally and the last 2 runs crashed, and the version before is older → install the kept (or downloaded) installer of that version before any window opens; the old version shows "Back on version X" once (`rescued.json`).
+- **What's new:** `src/shared/whatsnew.ts` (bundled, offline), shown once when `config\updates\state.json` says the last run was another version; Show details → full list; also Settings → About → What's new.
+- **Safe mode** (`safeflag.ts`, `safemode.ts`): ○/Esc during the boot animation (also when ○ is already held), Settings → Start in safe mode, or the "closed unexpectedly" question after a crash. Settings = defaults, changes kept in memory only; per-game options = defaults and not saved; a game's mods are switched off right before it starts and listed in `config\safe-mode.json`; leaving safe mode — or any normal start, e.g. after a crash in safe mode — switches them on again. The menu reloads when entering/leaving. Themes don't exist yet; step 6 must check `inSafeMode()`.
+- Tests: `tests/e2e/safe.spec.ts` (safe mode via ○ at boot, mods aside/back, crash question, What's new, rescue, undo), `tests/e2e/channel.spec.ts` (fake GitHub: channel, Release to everyone, tested emulators, Mark as tested), `tests/unit/releases.test.ts`.
 
 ## How to work on it
 
