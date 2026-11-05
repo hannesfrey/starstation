@@ -76,6 +76,7 @@ export interface PanelHandlers {
   gbMore: (g: Game) => void
   gbInstall: (g: Game, modId: number, fileId: number) => void
   refreshArtwork: (g: Game) => void
+  customArt: (g: Game, kind: 'icon' | 'background' | 'reset') => void
   runHealth: () => void
   exportReport: () => void
   raLogin: () => void
@@ -627,6 +628,7 @@ export function buildPanel(id: string, arg: string | undefined, state: AppState,
           { key: 'dl', label: 'Open New downloads folder', run: () => h.command('open-folder', 'games:New downloads') },
           { key: 'rescan', label: 'Rescan games', run: () => h.command('rescan') },
           { key: 'refresh', label: 'Refresh titles and artwork', run: () => h.clearCache() },
+          { key: 'arttip', label: 'Missing artwork is looked for again every time Starstation starts. Own pictures: game options → Choose cover…', info: true },
           { key: 'ss', label: 'ScreenScraper (extra artwork): add your login to secrets.json', info: true },
           { key: 'secrets', label: 'Open secrets.json', run: () => h.command('open-secrets') },
           { key: 'games', label: 'Open games folder', run: () => h.command('open-folder', 'games') }
@@ -703,8 +705,11 @@ export function buildPanel(id: string, arg: string | undefined, state: AppState,
         { key: 'folders', label: 'Open folder…', run: () => (h.openPanel('folders', g.id), 'keep') },
         { key: 'info', label: 'Game info', run: () => (h.openPanel('info', g.id), 'keep') },
         { key: 'art', label: 'Refresh artwork', run: () => (h.refreshArtwork(g), 'keep') },
-        { key: 'delete', label: 'Delete game…', run: () => (h.openPanel('delete', g.id), 'keep') }
+        { key: 'cover', label: 'Choose cover…', run: () => (h.customArt(g, 'icon'), 'keep') },
+        { key: 'bgpick', label: 'Choose background…', run: () => (h.customArt(g, 'background'), 'keep') }
       )
+      if (g.customArt) items.push({ key: 'artreset', label: 'Use found artwork again', run: () => (h.customArt(g, 'reset'), 'keep') })
+      items.push({ key: 'delete', label: 'Delete game…', run: () => (h.openPanel('delete', g.id), 'keep') })
       if (c && !c.quickResume) items.push({ key: 'noresume', label: `${c.short} games have no quick resume.`, info: true })
       return { id, title: g.title, items }
     }

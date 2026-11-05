@@ -42,6 +42,7 @@ const api = {
   reportPads: (ids: string[]) => ipcRenderer.invoke('report-pads', ids),
   screenshots: () => ipcRenderer.invoke('screenshots'),
   refreshArtwork: (gameId: string) => ipcRenderer.invoke('refresh-artwork', gameId),
+  customArt: (gameId: string, kind: string, file?: string) => ipcRenderer.invoke('custom-art', gameId, kind, file),
   mods: (gameId: string) => ipcRenderer.invoke('mods', gameId),
   modAddDialog: (gameId: string, folder: boolean) => ipcRenderer.invoke('mod-add-dialog', gameId, folder),
   modAdd: (gameId: string, p: string) => ipcRenderer.invoke('mod-add', gameId, p),

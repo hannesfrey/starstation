@@ -5,13 +5,14 @@ import { readJson, writeJson } from '../store'
 import { allConsoles, fill, vars, type ConsolePreset } from '../presets'
 import { cleanTitle, discSerial, n3dsTitleId, n64Header, nintendoDiscId, ps3FromFolder, ps3FromIso } from '../formats/gameid'
 import { parseSfo } from '../formats/sfo'
+import { x360TitleId } from '../formats/xdvdfs'
 import { loadSerialDb, stripDisc } from './titledb'
 import { folderSize, scanConsole, type ScanEntry } from './scan'
 import { logger } from '../log'
 import type { Game, GameStats, LibraryView } from '../../shared/types'
 
 const log = logger('library')
-const CACHE_VERSION = 3 // 2: 3DS title IDs, N64 ROM names; 3: titles without .xiso
+const CACHE_VERSION = 4 // 2: 3DS title IDs, N64 ROM names; 3: titles without .xiso; 4: Xbox 360 title IDs
 
 interface CacheFile {
   version: number
@@ -30,7 +31,15 @@ export function loadLibrary(): void {
 }
 
 export function view(): LibraryView {
-  return { games: games.map(({ mtime: _m, ...g }) => g), stats }
+  return {
+    games: games.map(({ mtime: _m, ...g }) => {
+      // your own cover / background wins over found artwork, without replacing it
+      const own = customArt(g)
+      if (!own.icon && !own.background) return g
+      return { ...g, icon: own.icon ?? g.icon, background: own.background ?? g.background, customArt: true }
+    }),
+    stats
+  }
 }
 
 export function getGame(id: string): Game | undefined {
@@ -174,6 +183,9 @@ function identify(c: ConsolePreset, e: ScanEntry, addedAt?: number): (Game & { m
       g.romName = h.name
       if (h.code.trim()) g.serial = h.code
     }
+  } else if (method === 'x360-xex') {
+    const id = x360TitleId(e.path)
+    if (id) g.serial = id
   }
   attachLocalArtwork(g)
   return g
@@ -206,6 +218,39 @@ function attachLocalArtwork(g: Game): void {
 
 export function artKey(g: Game): string {
   return (g.serial || g.title).replace(/[^\w.-]+/g, '_')
+}
+
+// ---------- your own artwork ----------
+// media\artwork\<console>\<game>\custom-icon-<time>.png: the time in the name makes the menu show a new pick right away
+
+type OwnArt = { icon?: string; background?: string }
+const ownArt = new Map<string, OwnArt>()
+
+function customArt(g: Game): OwnArt {
+  const d = dir('media', 'artwork', g.console, artKey(g))
+  let own = ownArt.get(d)
+  if (!own) {
+    own = {}
+    try {
+      for (const n of fs.readdirSync(d)) {
+        const m = /^custom-(icon|background)-\d+\.png$/.exec(n)
+        if (m) own[m[1] as keyof OwnArt] = path.join(d, n)
+      }
+    } catch {
+      // no artwork folder yet
+    }
+    ownArt.set(d, own)
+  }
+  return own
+}
+
+/** Save your own cover or background (PNG), or remove it again with null. */
+export function setCustomArt(g: Game, kind: 'icon' | 'background', png: Buffer | null): void {
+  const d = dir('media', 'artwork', g.console, artKey(g))
+  fs.mkdirSync(d, { recursive: true })
+  for (const n of fs.readdirSync(d)) if (n.startsWith(`custom-${kind}-`)) fs.rmSync(path.join(d, n), { force: true })
+  if (png) fs.writeFileSync(path.join(d, `custom-${kind}-${Date.now()}.png`), png)
+  ownArt.delete(d)
 }
 
 // ---------- stats ----------

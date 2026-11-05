@@ -21,7 +21,7 @@
     "folderLaunch": "default.xex"
   },
   "gameId": {
-    "method": "filename"
+    "method": "x360-xex"
   },
   "saves": {
     "dir": "{saves}",

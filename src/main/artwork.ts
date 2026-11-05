@@ -11,8 +11,9 @@ import type { Game } from '../shared/types'
 
 /**
  * Box art (icon) and in-game screenshot (background) for games without their own (PS3 uses ICON0/PIC1).
- * 1. libretro thumbnails (no account): GitHub mirror first, thumbnails.libretro.com second.
- * 2. ScreenScraper, only if developer + user credentials are in config\secrets.json.
+ * 1. Xbox 360 only: Microsoft's own Xbox image server, by the title ID read from the game file.
+ * 2. libretro thumbnails (no account): GitHub mirror first, thumbnails.libretro.com second.
+ * 3. ScreenScraper, only if developer + user credentials are in config\secrets.json.
  * Saved as media\artwork\<console>\<game>\icon.png / background.png.
  */
 
@@ -40,6 +41,18 @@ function libretroBases(system: string): string[] {
     `https://raw.githubusercontent.com/libretro-thumbnails/${system.replace(/ /g, '_')}/master`,
     `https://thumbnails.libretro.com/${encodeURIComponent(system)}`
   ]
+}
+
+/** Microsoft's Xbox 360 image server (http only). Tests point it at a local fake. */
+const XBOX_IMAGES = () => process.env.STARSTATION_XBOX_ART_BASE ?? 'http://download.xbox.com/content/images'
+
+/** Xbox 360: box art / background by title ID, English first (US, then UK). */
+async function fromXbox(g: Game, name: 'boxartlg.jpg' | 'background.jpg', file: string): Promise<boolean> {
+  if (g.console !== 'xbox360' || !/^[0-9A-F]{8}$/.test(g.serial ?? '')) return false
+  for (const locale of ['1033', '2057']) {
+    if (await fetchTo(`${XBOX_IMAGES()}/66acd000-77fe-1000-9115-d802${g.serial!.toLowerCase()}/${locale}/${name}`, file)) return true
+  }
+  return false
 }
 
 export function artDir(g: Game): string {
@@ -128,8 +141,11 @@ interface Tried {
   at: number
 }
 
-/** Download missing artwork. Returns true if something new was saved. */
-export async function fetchArtwork(g: Game, force = false): Promise<boolean> {
+/**
+ * Download missing artwork. Returns true if something new was saved.
+ * force: look again right now (Refresh artwork). retry: ignore the one-week wait (app start).
+ */
+export async function fetchArtwork(g: Game, force = false, retry = false): Promise<boolean> {
   const d = artDir(g)
   const icon = path.join(d, 'icon.png')
   const bg = path.join(d, 'background.png')
@@ -140,13 +156,13 @@ export async function fetchArtwork(g: Game, force = false): Promise<boolean> {
   if (!force) {
     const tried = readJson<Tried | null>(triedFile, null)
     // nothing found last time: try again after a week
-    if (tried && Date.now() - tried.at < 7 * 24 * 3600_000) return false
+    if (!retry && tried && Date.now() - tried.at < 7 * 24 * 3600_000) return false
     if ((!wantIcon || fs.existsSync(icon)) && (!wantBg || fs.existsSync(bg))) return false
   }
   let gotIcon = false
   let gotBg = false
-  if (wantIcon) gotIcon = await fromLibretro(g, 'Named_Boxarts', icon)
-  if (wantBg) gotBg = await fromLibretro(g, 'Named_Snaps', bg)
+  if (wantIcon) gotIcon = (await fromXbox(g, 'boxartlg.jpg', icon)) || (await fromLibretro(g, 'Named_Boxarts', icon))
+  if (wantBg) gotBg = (await fromXbox(g, 'background.jpg', bg)) || (await fromLibretro(g, 'Named_Snaps', bg))
   if ((wantIcon && !gotIcon) || (wantBg && !gotBg)) {
     const ss = await fromScreenScraper(g, { icon: wantIcon && !gotIcon, background: wantBg && !gotBg }, d)
     gotIcon ||= ss.icon
@@ -158,15 +174,18 @@ export async function fetchArtwork(g: Game, force = false): Promise<boolean> {
   return gotIcon || gotBg
 }
 
-let queue: Game[] = []
+let queue: { g: Game; retry: boolean }[] = []
 let busy = false
 
-/** Fetch artwork for games that have none, a few at a time, in the background. */
-export function queueArtwork(games: Game[], onChange: () => void): void {
+/**
+ * Fetch artwork for games that have none, a few at a time, in the background.
+ * retry (app start): also look again for games where nothing was found before.
+ */
+export function queueArtwork(games: Game[], onChange: () => void, retry = false): void {
   if (process.env.STARSTATION_HEADLESS === '1' && !process.env.STARSTATION_ARTWORK_BASE) return // hidden tests stay offline
   if (!getSettings().artworkAuto) return // "download artwork later" in the setup wizard
-  const known = new Set(queue.map((g) => g.id))
-  queue.push(...games.filter((g) => !known.has(g.id) && (!g.icon || !g.background)))
+  const known = new Set(queue.map((q) => q.g.id))
+  queue.push(...games.filter((g) => !known.has(g.id) && (!g.icon || !g.background)).map((g) => ({ g, retry })))
   if (busy) return
   busy = true
   void (async () => {
@@ -174,7 +193,7 @@ export function queueArtwork(games: Game[], onChange: () => void): void {
     let last = Date.now()
     while (queue.length) {
       const batch = queue.splice(0, 3)
-      const res = await Promise.all(batch.map((g) => fetchArtwork(g).catch(() => false)))
+      const res = await Promise.all(batch.map((q) => fetchArtwork(q.g, false, q.retry).catch(() => false)))
       if (res.some(Boolean)) changed = true
       if (changed && Date.now() - last > 1500) {
         onChange()

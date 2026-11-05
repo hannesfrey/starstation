@@ -86,6 +86,8 @@ export interface Game {
   discs?: number
   /** N64: internal ROM name (texture pack folder). */
   romName?: string
+  /** You picked your own cover or background. */
+  customArt?: boolean
 }
 
 export interface GameStats {
@@ -216,6 +218,8 @@ export interface StarstationApi {
   reportPads(ids: string[]): Promise<void>
   screenshots(): Promise<Screenshot[]>
   refreshArtwork(gameId: string): Promise<boolean>
+  /** Pick your own cover / background (file dialog), or 'reset' back to found artwork. file: hidden tests only. */
+  customArt(gameId: string, kind: 'icon' | 'background' | 'reset', file?: string): Promise<{ ok: boolean; error?: string }>
   mods(gameId: string): Promise<ModsView | null>
   modAddDialog(gameId: string, folder: boolean): Promise<ModAddResult | null>
   modAdd(gameId: string, path: string): Promise<ModAddResult>

@@ -588,6 +588,15 @@ export function App() {
     },
     [notify]
   )
+  const customArt = useCallback(
+    (g: Game, kind: 'icon' | 'background' | 'reset') => {
+      void api.customArt(g.id, kind).then((r) => {
+        if (r.error) notify({ kind: 'error', title: 'Could not use that picture', detail: r.error })
+        else if (r.ok) notify({ kind: 'success', title: kind === 'reset' ? 'Back to the found artwork' : kind === 'icon' ? 'New cover set' : 'New background set', detail: g.title })
+      })
+    },
+    [notify]
+  )
   const restorePreviousResume = useCallback((g: Game) => void api.restorePreviousResume(g.id).then(() => loadDetails(g.id)), [loadDetails])
   const deleteGame = useCallback((g: Game, withSaves: boolean) => void api.deleteGame(g.id, withSaves), [])
   const addGamesDialog = useCallback(() => void api.addGamesDialog().then(handleAdd), [handleAdd])
@@ -814,6 +823,7 @@ export function App() {
         gbMore,
         gbInstall,
         refreshArtwork,
+        customArt,
         runHealth,
         exportReport,
         raLogin,
@@ -875,6 +885,7 @@ export function App() {
     gbMore,
     gbInstall,
     refreshArtwork,
+    customArt,
     runHealth,
     exportReport,
     raLogin,

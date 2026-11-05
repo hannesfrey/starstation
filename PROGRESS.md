@@ -221,6 +221,15 @@ Settings column now: General · Graphics · Consoles (+ Add a console) · Contro
 - Settings → Library: "Sort new downloads automatically" (on by default), "Open New downloads folder". Packages don't include New downloads (they copy per console).
 - `extract()` in emulators.ts now uses the new `unpack()`. Test: `tests/e2e/downloads.spec.ts` (zip, 7z, unclear .chd, plain file, partial download, damaged zip, extras, setting off).
 
+### After 1.0.0 — More artwork (2026-11-05, Hannes asked)
+
+- Why MW2 had none: libretro-thumbnails' Xbox 360 set has only 12 box arts in total.
+- **Xbox 360 title IDs** (`src/main/formats/xdvdfs.ts`): default.xex is found in the XDVDFS root folder (offsets 0 / XGD2 0xFD90000 / XGD3 0x2080000 / XGD1 0x18300000), title ID from the XEX2 execution-info header (key 0x00040006, +12). Works for .iso, .xex and game folders. Preset method `x360-xex`; the ID is the Xbox 360 serial. Library cache version 4. Hannes's MW2 iso → 41560817 (checked).
+- **Microsoft's Xbox image server** first for Xbox 360: `http://download.xbox.com/content/images/66acd000-77fe-1000-9115-d802<id>/<1033|2057>/boxartlg.jpg` (cover) and `background.jpg`, then libretro. http only (https doesn't answer). Checked by hand for MW2: right cover + background.
+- **Missing artwork is looked for again at every start** (`scanAndArt(true)` → `fetchArtwork(…, retry)` ignores the one-week "nothing found" wait). Later rescans keep the week.
+- **Own pictures:** game options → "Choose cover…", "Choose background…", "Use found artwork again". Saved as `media\artwork\<console>\<game>\custom-icon-<time>.png` (time in the name so the menu shows a new pick right away), shrunk to 1024 / 2560 px wide; laid over found artwork in `view()`, so nothing is replaced. A PNG/JPG that Electron's reader refuses is kept as it is.
+- Test: `tests/e2e/artwork.spec.ts`, unit test `tests/unit/xdvdfs.test.ts`.
+
 ## Final report — test checklist for Hannes
 
 Done and tested by Claude (hidden + muted automated tests, 16 e2e + unit; real checks on this PC): import of Desktop\Emulator, PS2 launch/resume/screenshot with real PCSX2, real artwork, real health check, installer install/uninstall/reinstall in a test folder, update feed.

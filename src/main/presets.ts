@@ -85,7 +85,7 @@ export interface ConsolePreset {
     select?: BiosSelect | BiosSelect[]
   }
   gameId?: {
-    method: 'ps1-serial' | 'ps2-serial' | 'ps3-sfo' | 'gc-header' | '3ds-header' | 'n64-header' | 'filename'
+    method: 'ps1-serial' | 'ps2-serial' | 'ps3-sfo' | 'gc-header' | '3ds-header' | 'n64-header' | 'x360-xex' | 'filename'
     titleDb?: { type: 'yaml-serial'; file: string }
   }
   saves?: { dir: string; note?: string }

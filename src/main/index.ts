@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, protocol, net, shell, screen } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, nativeImage, protocol, net, shell, screen } from 'electron'
 import path from 'node:path'
 import fs from 'node:fs'
 import { spawn } from 'node:child_process'
@@ -24,7 +24,7 @@ import { gbModDetails, installGbMod, listGbMods, searchGames } from './gamebanan
 import { fetchArtwork, queueArtwork } from './artwork'
 import { listScreenshots } from './screenshots'
 import { readBattery } from './battery'
-import { reattachArtwork } from './library/library'
+import { reattachArtwork, setCustomArt } from './library/library'
 import { healthCheck } from './health'
 import { exportReport } from './diagnostics'
 import { lastUnlockCheck, raLogin, raLogout, raStatus, recentUnlocks } from './retroach'
@@ -472,6 +472,42 @@ function registerIpc(): void {
     if (!got) notify({ kind: 'info', title: 'No new artwork found', detail: g.title })
     return got
   })
+  ipcMain.handle('custom-art', async (_e, id: string, kind: string, file?: string) => {
+    const g = getGame(id)
+    if (!g) return { ok: false, error: 'Game not found' }
+    if (kind === 'reset') {
+      setCustomArt(g, 'icon', null)
+      setCustomArt(g, 'background', null)
+      send('library', view())
+      return { ok: true }
+    }
+    if (kind !== 'icon' && kind !== 'background') return { ok: false, error: 'Unknown picture' }
+    let src = HEADLESS && typeof file === 'string' ? file : null
+    if (!src) {
+      const pick = await dialog.showOpenDialog(win!, {
+        title: `${kind === 'icon' ? 'Choose a cover' : 'Choose a background'} for ${g.title}`,
+        properties: ['openFile'],
+        filters: [{ name: 'Pictures', extensions: ['png', 'jpg', 'jpeg'] }]
+      })
+      if (pick.canceled || !pick.filePaths[0]) return { ok: false }
+      src = pick.filePaths[0]
+    }
+    let img = nativeImage.createFromPath(src)
+    if (img.isEmpty()) {
+      // Electron is stricter than the menu: a real PNG/JPG it can't read is kept as it is
+      const raw = fs.readFileSync(src)
+      const isPic = raw.subarray(0, 4).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47])) || (raw[0] === 0xff && raw[1] === 0xd8)
+      if (!isPic) return { ok: false, error: 'Starstation can only use PNG or JPG pictures.' }
+      setCustomArt(g, kind, raw)
+    } else {
+      // keep the saved copy small: covers up to 1024 px wide, backgrounds up to 2560 px
+      const max = kind === 'icon' ? 1024 : 2560
+      if (img.getSize().width > max) img = img.resize({ width: max, quality: 'best' })
+      setCustomArt(g, kind, img.toPNG())
+    }
+    send('library', view())
+    return { ok: true }
+  })
   // ---- mods ----
   const withGame = <T>(id: string, fn: (g: NonNullable<ReturnType<typeof getGame>>) => T): T | { ok: false; error: string } => {
     const g = getGame(id)
@@ -596,14 +632,21 @@ async function trash(p: string): Promise<void> {
   await shell.trashItem(p)
 }
 
-/** After every scan: fetch missing artwork in the background and show it as it arrives. */
-function scanAndArt(): void {
+/**
+ * After every scan: fetch missing artwork in the background and show it as it arrives.
+ * atStart: look again for every game that still has none, even if nothing was found last time.
+ */
+function scanAndArt(atStart = false): void {
   const lib = rescan()
   send('library', lib)
   send('consoles', consoleInfos())
-  queueArtwork(lib.games, () => {
-    if (reattachArtwork()) send('library', view())
-  })
+  queueArtwork(
+    lib.games,
+    () => {
+      if (reattachArtwork()) send('library', view())
+    },
+    atStart
+  )
 }
 
 /** Battery of controller 1, about once a minute while the menu is shown. */
@@ -675,7 +718,7 @@ app.whenReady().then(() => {
   setLauncherWindow(win)
   // scan after the window is up so startup stays fast (cache is shown first)
   win.webContents.once('did-finish-load', () => {
-    setTimeout(() => scanAndArt(), 50)
+    setTimeout(() => scanAndArt(true), 50)
     startBatteryPolling()
     startUpdater(notify)
     startDownloadWatcher({
