@@ -44,7 +44,7 @@ import { addToSteam, steamStatus } from './steam'
 import { customConsoleForm, removeCustomConsole, saveCustomConsole } from './customconsole'
 import { allEmulators } from './presets'
 import { cancelTransfer, packageSize, receiveByCode, receiveFromFolder, sendByCode, buildPackage } from './packages'
-import { enablePending } from './mods'
+import { applyModProfile, deleteModProfile, enablePending, modProfiles, saveModProfile } from './mods'
 import { readJson } from './store'
 import { consoleInfos } from './consoles'
 import { launch, setLauncherWindow, runningGame, runningPid, stopRunning, onBeforeLaunch, onAfterExit } from './launcher'
@@ -602,8 +602,11 @@ function registerIpc(): void {
   const notRunning = (id: string) => (runningGame()?.gameId === id ? { ok: false as const, error: 'Close the game first.' } : null)
   ipcMain.handle('mods', (_e, id: string) => {
     const g = getGame(id)
-    return g ? { mods: listMods(g), ...modSupport(g) } : null
+    return g ? { mods: listMods(g), ...modSupport(g), ...modProfiles(g) } : null
   })
+  ipcMain.handle('mod-profile-save', (_e, id: string, name: string) => withGame(id, (g) => void saveModProfile(g, String(name))))
+  ipcMain.handle('mod-profile-delete', (_e, id: string, pid: string) => withGame(id, (g) => deleteModProfile(g, String(pid))))
+  ipcMain.handle('mod-profile-apply', (_e, id: string, pid: string) => notRunning(id) ?? withGame(id, (g) => applyModProfile(g, String(pid))))
   ipcMain.handle('mod-add', (_e, id: string, p: string) => withGame(id, (g) => addMod(g, p).then(modAdded(g))))
   ipcMain.handle('mod-add-dialog', async (_e, id: string, folder: boolean) => {
     const g = getGame(id)

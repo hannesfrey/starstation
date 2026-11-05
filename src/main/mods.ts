@@ -365,3 +365,61 @@ export function setGamebananaGame(g: Game, id: number): void {
   st.gamebananaGame = id
   save(g, st)
 }
+
+// ---------- mod profiles (SPEC-v2 E) ----------
+// A profile is a named set of mods that are on; "Vanilla" = none. Which one is active is worked out
+// from the mods that are on now (no stored "active": switching a mod by hand simply makes it "Custom").
+
+export interface ModProfile {
+  id: string
+  name: string
+  mods: string[]
+}
+
+function profilesOf(st: ModState): ModProfile[] {
+  return (st as ModState & { profiles?: ModProfile[] }).profiles ?? []
+}
+
+export function modProfiles(g: Game): { profiles: ModProfile[]; active: string | null } {
+  const st = load(g)
+  const on = st.mods.filter((m) => m.enabled).map((m) => m.id).sort().join('|')
+  const all: ModProfile[] = [{ id: 'vanilla', name: 'Vanilla', mods: [] }, ...profilesOf(st)]
+  const active = all.find((p) => [...p.mods].filter((id) => st.mods.some((m) => m.id === id)).sort().join('|') === on)
+  return { profiles: all, active: active?.id ?? null }
+}
+
+/** Save the mods that are on now as a profile (same name: replaced). */
+export function saveModProfile(g: Game, name: string): ModProfile[] {
+  const st = load(g) as ModState & { profiles?: ModProfile[] }
+  const clean = name.trim().slice(0, 30) || 'Profile'
+  const mods = st.mods.filter((m) => m.enabled).map((m) => m.id)
+  const list = (st.profiles ?? []).filter((p) => p.name.toLowerCase() !== clean.toLowerCase())
+  list.push({ id: `p${Date.now().toString(36)}`, name: clean, mods })
+  st.profiles = list
+  save(g, st)
+  return modProfiles(g).profiles
+}
+
+export function deleteModProfile(g: Game, id: string): void {
+  const st = load(g) as ModState & { profiles?: ModProfile[] }
+  st.profiles = (st.profiles ?? []).filter((p) => p.id !== id)
+  save(g, st)
+}
+
+/** Switch to a profile: mods not in it go off, mods in it come on (in the profile's order: later ones win clashes). */
+export async function applyModProfile(g: Game, id: string): Promise<{ ok: boolean; error?: string }> {
+  const prof = modProfiles(g).profiles.find((p) => p.id === id)
+  if (!prof) return { ok: false, error: 'Profile not found.' }
+  for (const m of load(g).mods.filter((x) => x.enabled && !prof.mods.includes(x.id))) {
+    const r = await setModEnabled(g, m.id, false)
+    if (!r.ok) return { ok: false, error: 'error' in r ? r.error : 'A mod could not be switched off.' }
+  }
+  for (const mid of prof.mods) {
+    const m = load(g).mods.find((x) => x.id === mid)
+    if (!m || m.enabled) continue
+    const r = await setModEnabled(g, mid, true, 'this')
+    if (!r.ok) return { ok: false, error: 'error' in r ? r.error : `${m.name} could not be switched on.` }
+  }
+  log.info(`${g.id}: mod profile ${prof.name}`)
+  return { ok: true }
+}

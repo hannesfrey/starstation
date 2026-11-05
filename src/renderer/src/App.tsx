@@ -310,6 +310,8 @@ export function App() {
   const openPanel = useCallback((id: string, arg?: string) => {
     setPanels((p) => [...p, { id, arg, index: 0 }])
     if (arg && ['game', 'backups', 'delete'].includes(id)) void loadDetails(arg)
+    // the game's options show its mod profile too
+    if (arg && id === 'game') void api.mods(arg).then((v) => v && setExtra((x) => ({ ...x, mods: { ...x.mods, [arg]: v } })))
     if (id === 'about') void api.updateState().then((update) => setExtra((x) => ({ ...x, update })))
     if (id === 'storage') {
       setExtra((x) => ({ ...x, storage: undefined }))
@@ -392,6 +394,25 @@ export function App() {
     },
     [loadMods]
   )
+  const modProfile = useCallback(
+    (g: Game, pid: string) => {
+      void api.modProfileApply(g.id, pid).then((r) => {
+        if (!r.ok) notify({ kind: 'error', title: 'Profile not switched', detail: r.error })
+        else notify({ kind: 'mod', title: 'Mod profile switched', detail: g.title })
+        void loadMods(g.id)
+      })
+    },
+    [notify, loadMods]
+  )
+  const modProfileDelete = useCallback(
+    (g: Game, pid: string) => {
+      void api.modProfileDelete(g.id, pid).then(() => loadMods(g.id))
+    },
+    [loadMods]
+  )
+  const newModProfile = useCallback((g: Game) => {
+    setEntry({ kind: 'field', title: 'Profile name', value: '', row: 0, col: 0, focus: 'keys', result: 0, target: `profile:${g.id}` })
+  }, [])
   const modToggle = useCallback(
     (g: Game, modId: string, on: boolean, winner?: 'this' | 'other') => {
       void api.modToggle(g.id, modId, on, winner).then((r) => {
@@ -717,6 +738,12 @@ export function App() {
         void api.packageReceive(value, receiveSettingsRef.current).then(endPkg)
         return
       }
+      if ((entry.target as string).startsWith('profile:')) {
+        const gid = (entry.target as string).slice(8)
+        setEntry(null)
+        if (value) void api.modProfileSave(gid, value).then(() => loadMods(gid))
+        return
+      }
       if (field === 'nickname') setSetting('netplayNickname', value.slice(0, 30))
       else if (formRef.current) setForm({ ...formRef.current, [field]: entry.value.trim() })
       setEntry(null)
@@ -730,7 +757,7 @@ export function App() {
     else if (entry.target) void api.collectionRename(entry.target, value).then(applyCollections)
     setEntry(null)
     setPanels([])
-  }, [entry, searchHits, applyCollections, notify, setSetting])
+  }, [entry, searchHits, applyCollections, notify, setSetting, loadMods])
 
   const pressKey = useCallback(
     (r: number, c: number) => {
@@ -924,7 +951,10 @@ export function App() {
         guideSeen,
         couchSave,
         compressGame,
-        openManual
+        openManual,
+        modProfile,
+        modProfileDelete,
+        newModProfile
       },
       extra
     )
@@ -995,6 +1025,9 @@ export function App() {
     couchSave,
     compressGame,
     openManual,
+    modProfile,
+    modProfileDelete,
+    newModProfile,
     extra
   ])
 

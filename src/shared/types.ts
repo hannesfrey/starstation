@@ -244,6 +244,9 @@ export interface StarstationApi {
   couchStatus(): Promise<CouchStatus>
   couchPad(): Promise<void>
   couchSave(): Promise<string>
+  modProfileSave(gameId: string, name: string): Promise<void>
+  modProfileApply(gameId: string, profileId: string): Promise<{ ok: boolean; error?: string }>
+  modProfileDelete(gameId: string, profileId: string): Promise<void>
   /** Compress / decompress a game (lossless; the original goes to the Recycle Bin after a check). */
   compressGame(gameId: string): Promise<{ ok: boolean; error?: string }>
   storage(fresh?: boolean): Promise<StorageInfo>
@@ -355,6 +358,9 @@ export interface ModInfo {
 
 export interface ModsView {
   mods: ModInfo[]
+  /** Mod profiles: Vanilla + the user's own; active = the one matching the mods that are on (null = Custom). */
+  profiles: { id: string; name: string; mods: string[] }[]
+  active: string | null
   targets: { id: string; label: string }[]
   /** Why mods can't be used for this game, if so. */
   reason?: string

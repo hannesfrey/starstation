@@ -123,6 +123,9 @@ export interface PanelHandlers {
   couchSave: () => void
   compressGame: (g: Game) => void
   openManual: (g: Game) => void
+  modProfile: (g: Game, profileId: string) => void
+  modProfileDelete: (g: Game, profileId: string) => void
+  newModProfile: (g: Game) => void
 }
 
 const onOff = (b: boolean) => (b ? 'On' : 'Off')
@@ -904,6 +907,9 @@ export function buildPanel(id: string, arg: string | undefined, state: AppState,
         })
       items.push(
         ...(g.manual ? [{ key: 'manual', label: 'Manual', value: 'the original booklet', run: () => h.openManual(g) }] : []),
+        ...((x.mods[g.id]?.profiles.length ?? 0) > 1 && x.mods[g.id]?.mods.length
+          ? [{ key: 'profile', label: 'Mod profile', value: x.mods[g.id]!.profiles.find((p) => p.id === x.mods[g.id]!.active)?.name ?? 'Custom', run: () => (h.openPanel('mod-profiles', g.id), 'keep' as const) }]
+          : []),
         { key: 'folders', label: 'Open folder…', run: () => (h.openPanel('folders', g.id), 'keep') },
         { key: 'info', label: 'Game info', run: () => (h.openPanel('info', g.id), 'keep') },
         ...(g.compat ? [{ key: 'compat', label: `Compatibility: ${g.compat.label}`, value: `${g.compat.source} list: ${g.compat.status}`, info: true }] : []),
@@ -1060,6 +1066,8 @@ export function buildPanel(id: string, arg: string | undefined, state: AppState,
       if (!v) return { id, title: 'Mods', items: [{ key: 'loading', label: 'Loading…', info: true }] }
       const items: PItem[] = []
       if (v.reason) items.push({ key: 'reason', label: v.reason, info: true })
+      if (v.mods.length)
+        items.push({ key: 'profile', label: 'Mod profile', value: v.profiles.find((p) => p.id === v.active)?.name ?? 'Custom', run: () => (h.openPanel('mod-profiles', g.id), 'keep') })
       for (const m of v.mods)
         items.push({ key: `mod-${m.id}`, label: m.name, value: m.enabled ? 'On' : 'Off', run: () => (h.openPanel('mod', `${g.id}|${m.id}`), 'keep') })
       if (!v.mods.length && !v.reason) items.push({ key: 'none', label: 'No mods yet. Add a file or folder, or drag one onto this window.', info: true })
@@ -1070,6 +1078,36 @@ export function buildPanel(id: string, arg: string | undefined, state: AppState,
       }
       items.push({ key: 'open', label: 'Open mods folder', run: () => h.command('open-folder', `mods:${g.console}`) })
       return { id, title: `Mods · ${g.title}`, items }
+    }
+    case 'mod-profiles': {
+      const g = state.library.games.find((y) => y.id === arg)
+      const v = g && x.mods[g.id]
+      if (!g || !v) return null
+      const items: PItem[] = [{ key: 'what', label: 'Switch between sets of mods while the game isn’t running. Vanilla = no mods.', info: true }]
+      for (const p of v.profiles)
+        items.push({
+          key: `prof-${p.id}`,
+          label: p.name,
+          value: p.id === v.active ? 'Active' : p.id === 'vanilla' ? 'no mods' : `${p.mods.length} mod(s)`,
+          run: () => (h.modProfile(g, p.id), 'keep')
+        })
+      if (!v.active) items.push({ key: 'custom', label: 'Now: your own mix (Custom)', info: true })
+      items.push({ key: 'save', label: 'Save the mods that are on now as a profile…', run: () => h.newModProfile(g) })
+      if (v.profiles.length > 1) items.push({ key: 'del', label: 'Delete a profile…', run: () => (h.openPanel('mod-profile-delete', g.id), 'keep') })
+      return { id, title: `Mod profiles · ${g.title}`, items }
+    }
+    case 'mod-profile-delete': {
+      const g = state.library.games.find((y) => y.id === arg)
+      const v = g && x.mods[g.id]
+      if (!g || !v) return null
+      return {
+        id,
+        title: 'Delete a profile',
+        items: [
+          { key: 'what', label: 'The mods stay installed; only the profile goes.', info: true },
+          ...v.profiles.filter((p) => p.id !== 'vanilla').map((p) => ({ key: `delp-${p.id}`, label: `Delete “${p.name}”`, run: () => h.modProfileDelete(g, p.id) }))
+        ]
+      }
     }
     case 'mod': {
       const [gid, mid] = (arg ?? '').split('|')
