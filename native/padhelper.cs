@@ -5,7 +5,7 @@
 //  - closes, focuses and sends hotkeys to the emulator window
 // Talks over stdin/stdout, one line per message:
 //   out: "ready", "home <pad>", "pads <id,id,...>", "fg <pid>", "ok <cmd>", "err <cmd> <text>"
-//   in:  "close <pid>", "focus <pid>", "keys <pid> <combo>" (e.g. SHIFT+F1), "fg", "quit"
+//   in:  "close <pid>", "focus <pid>", "keys <pid> <combo>" (e.g. SHIFT+F1), "mute <pid> [0|1]", "fg", "quit"
 // Built with the C# compiler that ships with Windows (scripts/build-native.mjs). C# 5: no newer syntax here.
 using System;
 using System.Collections.Generic;
@@ -167,6 +167,8 @@ static class PadHelper
     [DllImport("user32.dll")] static extern bool IsIconic(IntPtr h);
     [DllImport("user32.dll")] static extern bool AllowSetForegroundWindow(int pid);
     [DllImport("user32.dll")] static extern uint SendInput(uint n, INPUT[] inputs, int size);
+    [StructLayout(LayoutKind.Sequential)] struct LASTINPUTINFO { public uint cbSize; public uint dwTime; }
+    [DllImport("user32.dll")] static extern bool GetLastInputInfo(ref LASTINPUTINFO li);
     [DllImport("user32.dll")] static extern uint MapVirtualKey(uint code, uint type);
 
     [StructLayout(LayoutKind.Sequential)]
@@ -192,7 +194,11 @@ static class PadHelper
     {
         var w = Windows(pid);
         if (w.Count == 0) return false;
-        IntPtr h = w[0];
+        return FocusHwnd(w[0]);
+    }
+
+    static bool FocusHwnd(IntPtr h)
+    {
         if (IsIconic(h)) ShowWindow(h, 9); // SW_RESTORE
         // Windows only lets the foreground app hand over focus: a tap of Alt lifts that lock
         AllowSetForegroundWindow(-1);
@@ -257,6 +263,101 @@ static class PadHelper
         return w.Count > 0;
     }
 
+    // ---------------- per-app audio (like the Windows volume mixer) ----------------
+    // Only used for Starstation's own tests: the couch test mutes the emulator it starts.
+    [ComImport, Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")] class MMDeviceEnumerator { }
+    [ComImport, Guid("A95664D2-9614-4F35-A746-DE8DB63617E6"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IMMDeviceEnumerator
+    {
+        [PreserveSig] int EnumAudioEndpoints(int dataFlow, int stateMask, out IMMDeviceCollection devices);
+    }
+    [ComImport, Guid("0BD7A1BE-7A1A-44DB-8397-CC5392387B5E"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IMMDeviceCollection
+    {
+        [PreserveSig] int GetCount(out int count);
+        [PreserveSig] int Item(int index, out IMMDevice device);
+    }
+    [ComImport, Guid("D666063F-1587-4E43-81F1-B948E807363F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IMMDevice
+    {
+        [PreserveSig] int Activate(ref Guid iid, int clsCtx, IntPtr activationParams, [MarshalAs(UnmanagedType.IUnknown)] out object iface);
+    }
+    [ComImport, Guid("77AA99A0-1BD6-484F-8BC7-2C654C9A9B6F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IAudioSessionManager2
+    {
+        [PreserveSig] int GetAudioSessionControl(IntPtr guid, int flags, out IntPtr control);
+        [PreserveSig] int GetSimpleAudioVolume(IntPtr guid, int flags, out IntPtr volume);
+        [PreserveSig] int GetSessionEnumerator(out IAudioSessionEnumerator sessions);
+    }
+    [ComImport, Guid("E2F5BB11-0570-40CA-ACDD-3AA01277DEE8"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IAudioSessionEnumerator
+    {
+        [PreserveSig] int GetCount(out int count);
+        [PreserveSig] int GetSession(int index, out IAudioSessionControl2 session);
+    }
+    [ComImport, Guid("bfb7ff88-7239-4fc9-8fa2-07c950be9c6d"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IAudioSessionControl2
+    {
+        // IAudioSessionControl
+        [PreserveSig] int GetState(out int state);
+        [PreserveSig] int GetDisplayName(out IntPtr name);
+        [PreserveSig] int SetDisplayName(IntPtr name, IntPtr ctx);
+        [PreserveSig] int GetIconPath(out IntPtr path);
+        [PreserveSig] int SetIconPath(IntPtr path, IntPtr ctx);
+        [PreserveSig] int GetGroupingParam(out Guid g);
+        [PreserveSig] int SetGroupingParam(ref Guid g, IntPtr ctx);
+        [PreserveSig] int RegisterAudioSessionNotification(IntPtr n);
+        [PreserveSig] int UnregisterAudioSessionNotification(IntPtr n);
+        // IAudioSessionControl2
+        [PreserveSig] int GetSessionIdentifier(out IntPtr id);
+        [PreserveSig] int GetSessionInstanceIdentifier(out IntPtr id);
+        [PreserveSig] int GetProcessId(out uint pid);
+    }
+    [ComImport, Guid("87CE5498-68D6-44E5-9215-6DA47EF883D8"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface ISimpleAudioVolume
+    {
+        [PreserveSig] int SetMasterVolume(float level, ref Guid ctx);
+        [PreserveSig] int GetMasterVolume(out float level);
+        [PreserveSig] int SetMute(bool mute, ref Guid ctx);
+    }
+
+    /** Mute / unmute every audio session of a process on every playback device. Returns how many were changed. */
+    static int Mute(uint pid, bool mute)
+    {
+        int n = 0;
+        var en = (IMMDeviceEnumerator)new MMDeviceEnumerator();
+        IMMDeviceCollection devs;
+        if (en.EnumAudioEndpoints(0, 1, out devs) != 0) return 0; // render, active
+        int count;
+        devs.GetCount(out count);
+        Guid iid = typeof(IAudioSessionManager2).GUID;
+        Guid none = Guid.Empty;
+        for (int d = 0; d < count; d++)
+        {
+            IMMDevice dev;
+            if (devs.Item(d, out dev) != 0) continue;
+            object o;
+            if (dev.Activate(ref iid, 23, IntPtr.Zero, out o) != 0) continue; // CLSCTX_ALL
+            var mgr = (IAudioSessionManager2)o;
+            IAudioSessionEnumerator sessions;
+            if (mgr.GetSessionEnumerator(out sessions) != 0) continue;
+            int sc;
+            sessions.GetCount(out sc);
+            for (int i = 0; i < sc; i++)
+            {
+                IAudioSessionControl2 s;
+                if (sessions.GetSession(i, out s) != 0) continue;
+                uint p;
+                if (s.GetProcessId(out p) == 0 && p == pid)
+                {
+                    ((ISimpleAudioVolume)s).SetMute(mute, ref none);
+                    n++;
+                }
+            }
+        }
+        return n;
+    }
+
     // ---------------- main ----------------
     static void Main(string[] args)
     {
@@ -300,7 +401,7 @@ static class PadHelper
             if (a.Length == 0 || a[0].Length == 0) continue;
             try
             {
-                uint pid = a.Length > 1 ? uint.Parse(a[1]) : 0;
+                uint pid = a.Length > 1 && a[0] != "focushwnd" ? uint.Parse(a[1]) : 0;
                 switch (a[0])
                 {
                     case "quit": return;
@@ -313,7 +414,29 @@ static class PadHelper
                         }
                     case "close": Say(Close(pid) ? "ok close" : "err close no window"); break;
                     case "focus": Say(Focus(pid) ? "ok focus" : "err focus no window"); break;
+                    case "idle":
+                        {
+                            // ms since the last keyboard / mouse input (couch test waits until nobody uses the PC)
+                            var li = new LASTINPUTINFO();
+                            li.cbSize = (uint)Marshal.SizeOf(li);
+                            GetLastInputInfo(ref li);
+                            Say("idle " + unchecked((uint)Environment.TickCount - li.dwTime));
+                            break;
+                        }
+                    case "focushwnd":
+                        {
+                            // a window by its handle (Starstation's PS button menu: the same process owns two windows)
+                            long hwnd = a.Length > 1 ? long.Parse(a[1]) : 0;
+                            Say(hwnd != 0 && FocusHwnd(new IntPtr(hwnd)) ? "ok focushwnd" : "err focushwnd");
+                            break;
+                        }
                     case "keys": Say(a.Length > 2 && Keys(pid, a[2]) ? "ok keys" : "err keys " + (a.Length > 2 ? a[2] : "")); break;
+                    case "mute":
+                        {
+                            int n = Mute(pid, a.Length < 3 || a[2] != "0");
+                            Say(n > 0 ? "ok mute " + n : "err mute no audio yet");
+                            break;
+                        }
                     default: Say("err " + a[0] + " unknown"); break;
                 }
             }

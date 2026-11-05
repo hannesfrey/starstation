@@ -5,8 +5,9 @@ import { dir } from './paths'
 import { getConsole, getEmulator } from './presets'
 import { getGame } from './library/library'
 import { closeRunning, runningGame, runningPid } from './launcher'
-import { focusWindow, sendKeys } from './padhelper'
+import { focusHwnd, focusWindow, sendKeys } from './padhelper'
 import { notify } from './notify'
+import { couchMark } from './couchcheck'
 import { logger } from './log'
 import type { OverlayAction, OverlayState } from '../shared/types'
 
@@ -90,11 +91,15 @@ export function showOverlay(): void {
   // the display the game is on is usually the primary one
   w.setBounds(screen.getPrimaryDisplay().bounds)
   open = true
+  couchMark('menu')
   push()
   if (!HEADLESS) {
     w.show()
     w.setAlwaysOnTop(true, 'screen-saver')
     w.focus()
+    // Windows doesn't let a background app take the focus from the game: the pad helper hands it over,
+    // so the controller drives the menu (and the emulator pauses / stops reading the pad)
+    void focusHwnd(w.getNativeWindowHandle())
   }
   log.info('opened')
 }
@@ -135,6 +140,7 @@ export async function overlayAction(action: OverlayAction): Promise<{ ok: boolea
   log.info(`action ${action}`)
   switch (action) {
     case 'resume':
+      couchMark('resume')
       await hideOverlay(true)
       return { ok: true }
     case 'save-state':
@@ -155,6 +161,7 @@ export async function overlayAction(action: OverlayAction): Promise<{ ok: boolea
     }
     case 'save-quit':
     case 'quit':
+      if (action === 'save-quit') couchMark('savequit')
       await hideOverlay(false)
       await closeRunning(action === 'save-quit')
       return { ok: true }

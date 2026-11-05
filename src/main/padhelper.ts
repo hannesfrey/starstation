@@ -97,3 +97,20 @@ export async function sendKeys(pid: number, combo: string): Promise<boolean> {
 export function helperRunning(): boolean {
   return !!proc
 }
+
+/** Mute / unmute a process like the Windows volume mixer does (couch test: games stay silent). */
+export async function muteProcess(pid: number, mute = true): Promise<boolean> {
+  return (await ask(`mute ${pid} ${mute ? 1 : 0}`)).startsWith('ok')
+}
+
+/** Which process owns the window in front (couch test: does the game / Starstation have focus?). */
+export async function foregroundPid(): Promise<number | null> {
+  const line = await ask('fg')
+  return line.startsWith('fg ') ? Number(line.slice(3)) : null
+}
+
+/** Give a window of Starstation itself the focus (the PS button menu over a running game). */
+export async function focusHwnd(handle: Buffer): Promise<boolean> {
+  const hwnd = handle.length >= 8 ? handle.readBigUInt64LE(0) : BigInt(handle.readUInt32LE(0))
+  return (await ask(`focushwnd ${hwnd}`)).startsWith('ok')
+}

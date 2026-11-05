@@ -2,7 +2,7 @@ import type { UpdateState, AddGamesResult, AppState, CustomConsoleForm, PackageC
 import { formatPlayTime } from './model'
 import { compareVersions } from '../../../shared/semver'
 import { whatsNewFor } from '../../../shared/whatsnew'
-import type { StartNotes } from '../../../shared/types'
+import type { CouchStatus, StartNotes } from '../../../shared/types'
 
 /** Data some panels load on demand. */
 export interface PanelExtra {
@@ -34,6 +34,8 @@ export interface PanelExtra {
   update?: UpdateState
   /** Shown once after starting (crash, rescue, What's new). */
   notes?: StartNotes
+  /** Couch check progress (Settings → Diagnostics). */
+  couch?: CouchStatus
 }
 
 export interface PItem {
@@ -115,6 +117,7 @@ export interface PanelHandlers {
   releaseToEveryone: () => void
   markTested: (emulatorId: string) => void
   guideSeen: (keys: string[]) => void
+  couchSave: () => void
 }
 
 const onOff = (b: boolean) => (b ? 'On' : 'Off')
@@ -448,6 +451,7 @@ export function buildPanel(id: string, arg: string | undefined, state: AppState,
         items: [
           { key: 'msg', label: 'A zip with logs, settings and a summary of this PC. Logins (secrets.json), saves and games are never included.', info: true },
           { key: 'export', label: 'Export report…', run: () => h.exportReport() },
+          { key: 'couch', label: 'Couch check', value: 'test the PS button menu with your controller', run: () => (h.openPanel('couch-check'), 'keep') },
           { key: 'logs', label: 'Open logs folder', run: () => h.command('open-folder', 'logs') }
         ]
       }
@@ -723,6 +727,27 @@ export function buildPanel(id: string, arg: string | undefined, state: AppState,
       const w = x.notes?.whatsNew ?? whatsNewFor(state.info.version, compareVersions)
       if (!w) return null
       return { id, title: `All changes in ${state.info.version}`, items: w.details.map((line, i) => ({ key: `d${i}`, label: line, info: true })) }
+    }
+    case 'couch-check': {
+      const done = new Set(x.couch?.done ?? [])
+      const step = (key: string, label: string, ok: boolean): PItem => ({ key: `c-${key}`, label, value: ok ? '✓' : '—', info: true })
+      const items: PItem[] = [
+        { key: 'what', label: 'Do these with your controller only. Each step gets a ✓ when Starstation sees it happen.', info: true },
+        step('pad', 'Move around this menu with the controller', done.has('pad')),
+        step('launch', 'Start any game', done.has('launch')),
+        step('home', 'In the game, press the PS button', done.has('home')),
+        step('menu', 'The PS button menu opens over the game', done.has('menu')),
+        step('resume', 'Choose Resume: you are back in the game', done.has('resume')),
+        step('savequit', 'Press PS again and choose Save and quit', done.has('savequit')),
+        step('closed', 'The game closes', done.has('closed')),
+        step('back', 'Starstation is back in front', done.has('back'))
+      ]
+      const pads = (x.couch?.pads ?? []).filter((p) => !/^hid:0$/.test(p))
+      items.push({ key: 'pads', label: pads.length ? `The PS button watcher sees: ${pads.join(', ')}` : 'The PS button watcher sees no controller yet', info: true })
+      if (x.couch?.conflicts.gameBar) items.push({ key: 'gb', label: 'Xbox Game Bar may open with the PS button (see Health check).', info: true })
+      if (x.couch?.conflicts.steam) items.push({ key: 'st', label: 'Steam is running and may take the PS button (see Health check).', info: true })
+      items.push({ key: 'save', label: 'Save the result', value: `${done.size} of 8 done`, run: () => h.couchSave() })
+      return { id, title: 'Couch check', items }
     }
     case 'home-guide': {
       const c = x.notes?.homeConflicts ?? []

@@ -42,10 +42,11 @@ import { cancelTransfer, packageSize, receiveByCode, receiveFromFolder, sendByCo
 import { enablePending } from './mods'
 import { readJson } from './store'
 import { consoleInfos } from './consoles'
-import { launch, setLauncherWindow, runningGame, stopRunning, onBeforeLaunch, onAfterExit } from './launcher'
+import { launch, setLauncherWindow, runningGame, runningPid, stopRunning, onBeforeLaunch, onAfterExit } from './launcher'
 import { hideOverlay, overlayAction, overlayOpen, overlayState, setupOverlay, toggleOverlay } from './overlay'
-import { onHome, startPadHelper, stopPadHelper } from './padhelper'
+import { foregroundPid, onHome, startPadHelper, stopPadHelper } from './padhelper'
 import { loadGpuDrivers, markGuideSeen, newHomeConflicts } from './system'
+import { couchMark, couchStatus, saveCouchCheck, startCouchCheck } from './couchcheck'
 import type { OverlayAction } from '../shared/types'
 import { attachWindow, notify, send } from './notify'
 import { startDownloadWatcher } from './downloads'
@@ -56,7 +57,9 @@ redirectElectronPaths()
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
 /** Automated tests: never show a window or play sound on Hannes's screen. */
 const HEADLESS = process.env.STARSTATION_HEADLESS === '1'
-if (HEADLESS) app.commandLine.appendSwitch('mute-audio')
+/** scripts/couch-test.mjs: real games on screen, everything muted (Starstation and the games). */
+const COUCH_TEST = process.env.STARSTATION_COUCH_TEST === '1'
+if (HEADLESS || COUCH_TEST) app.commandLine.appendSwitch('mute-audio')
 const log = logger('main')
 protocol.registerSchemesAsPrivileged([
   { scheme: 'starstation-media', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }
@@ -437,10 +440,20 @@ function registerIpc(): void {
   ipcMain.handle('guide-seen', (_e, keys: string[]) => markGuideSeen(Array.isArray(keys) ? keys.map(String) : []))
   // ---- PS button menu (SPEC-v2 A) ----
   ipcMain.handle('overlay-state', () => overlayState())
+  ipcMain.handle('couch-start', () => startCouchCheck())
+  ipcMain.handle('couch-status', () => couchStatus())
+  ipcMain.handle('couch-pad', () => couchMark('pad'))
+  ipcMain.handle('couch-save', () => {
+    const f = saveCouchCheck()
+    notify({ kind: 'success', title: 'Couch check saved', detail: f, action: { label: 'Show file', command: 'show-file', arg: f } })
+    return f
+  })
   ipcMain.handle('overlay-action', (_e, a: OverlayAction) => overlayAction(a))
   ipcMain.handle('test-home', () => {
-    if (HEADLESS) toggleOverlay()
+    if (HEADLESS || COUCH_TEST) toggleOverlay()
   })
+  // couch test: who has the focus right now (the game, the PS button menu or Starstation)?
+  ipcMain.handle('test-fg', async () => (COUCH_TEST ? { fg: await foregroundPid(), emulator: runningPid(), starstation: process.pid } : null))
   ipcMain.handle('undo-update', (_e, to: string) => undoUpdate(String(to)))
   ipcMain.handle('release-everyone', async () => {
     const r = await releaseToEveryone()
@@ -817,7 +830,10 @@ app.whenReady().then(async () => {
   win.webContents.once('did-finish-load', () => setupOverlay(path.join(__dirname, '../preload/index.js'), (w) => loadPage(w, 'overlay')))
   startPadHelper()
   loadGpuDrivers()
-  onHome(() => toggleOverlay())
+  onHome(() => {
+    couchMark('home')
+    toggleOverlay()
+  })
   // scan after the window is up so startup stays fast (cache is shown first)
   win.webContents.once('did-finish-load', () => {
     setTimeout(() => scanAndArt(true), 50)

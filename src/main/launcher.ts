@@ -12,7 +12,8 @@ import { applyConsoleConfig } from './emuconfig'
 import { biosStatus } from './bios'
 import { getGame, updateStats, view } from './library/library'
 import { send, notify, holdNotices } from './notify'
-import { closeWindow } from './padhelper'
+import { closeWindow, muteProcess } from './padhelper'
+import { couchMark } from './couchcheck'
 import { logger } from './log'
 import { dir } from './paths'
 import type { LaunchResult, RunningGame } from '../shared/types'
@@ -164,7 +165,14 @@ export async function launch(
   }
   const startedAt = Date.now()
   running = { gameId, title: game!.title, startedAt, proc }
+  // couch test (scripts/couch-test.mjs): the game stays silent, like muting it in the Windows volume mixer
+  if (process.env.STARSTATION_MUTE_GAMES === '1' && proc.pid) {
+    const pid = proc.pid
+    const t = setInterval(() => void muteProcess(pid), 700)
+    proc.once('exit', () => clearInterval(t))
+  }
   holdNotices(true)
+  couchMark('launch')
   send('running', runningGame())
 
   return await new Promise<LaunchResult>((resolve) => {
@@ -192,6 +200,7 @@ export async function launch(
       running = null
       if (discard && game) await discardSessionResume(game, startedAt).catch((e) => log.warn('could not drop the resume state', e))
       holdNotices(false)
+      couchMark('closed')
       updateStats(gameId, (s) => ({
         ...s,
         playTime: s.playTime + seconds,
@@ -217,6 +226,7 @@ export async function launch(
 export function bringToFront(): void {
   const w = mainWindow
   if (!w || w.isDestroyed() || process.env.STARSTATION_HEADLESS === '1') return
+  couchMark('back')
   if (w.isMinimized()) w.restore()
   w.show()
   // Windows only lets the foreground app steal focus; briefly going always-on-top gets us back in front.

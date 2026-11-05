@@ -256,6 +256,7 @@ export function App() {
     void api.releaseToEveryone().then(() => api.updateState().then((update) => setExtra((x) => ({ ...x, update }))))
   }, [])
   const guideSeen = useCallback((keys: string[]) => void api.guideSeen(keys), [])
+  const couchSave = useCallback(() => void api.couchSave(), [])
   const markTested = useCallback((id: string) => {
     void api.markTested(id).then(() => api.emulators().then((emulators) => setExtra((x) => ({ ...x, emulators }))))
   }, [])
@@ -893,7 +894,8 @@ export function App() {
         undoUpdate,
         releaseToEveryone,
         markTested,
-        guideSeen
+        guideSeen,
+        couchSave
       },
       extra
     )
@@ -961,8 +963,24 @@ export function App() {
     releaseToEveryone,
     markTested,
     guideSeen,
+    couchSave,
     extra
   ])
+
+  // couch check: started when its panel opens; progress every second; controller moves in the menu count
+  const couchOpen = panels.some((p) => p.id === 'couch-check')
+  useEffect(() => {
+    if (!couchOpen) return
+    void api.couchStart()
+    const t = setInterval(() => void api.couchStatus().then((couch) => setExtra((x) => ({ ...x, couch }))), 1000)
+    const off = input.on((_a, source) => {
+      if (source === 'gamepad') void api.couchPad()
+    })
+    return () => {
+      clearInterval(t)
+      off()
+    }
+  }, [couchOpen])
 
   // once after starting (and after the boot animation): crash → offer safe mode, rescue note, What's new
   const notesTaken = useRef(false)

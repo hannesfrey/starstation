@@ -234,6 +234,11 @@ export interface StarstationApi {
   /** PS button menu (overlay window). */
   overlayState(): Promise<OverlayState>
   overlayAction(action: OverlayAction): Promise<{ ok: boolean; error?: string }>
+  /** Couch check: the one-time test with the user's own controller (Settings → Diagnostics). */
+  couchStart(): Promise<void>
+  couchStatus(): Promise<CouchStatus>
+  couchPad(): Promise<void>
+  couchSave(): Promise<string>
   /** Hidden tests only: act as if the PS button was pressed. */
   testHome(): Promise<void>
   gameDetails(gameId: string): Promise<GameDetails | null>
@@ -511,4 +516,13 @@ export interface PlayerPad {
   api: 'xinput' | 'sdl'
   index: number
   id?: string
+}
+
+export type CouchStep = 'pad' | 'launch' | 'home' | 'menu' | 'resume' | 'savequit' | 'closed' | 'back'
+export interface CouchStatus {
+  on: boolean
+  done: CouchStep[]
+  /** What the pad helper sees ("xinput:0", "hid:1" = PlayStation pads read directly). */
+  pads: string[]
+  conflicts: { steam: boolean; gameBar: boolean }
 }

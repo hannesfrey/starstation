@@ -163,3 +163,32 @@ test('Steam and Game Bar: a one-time guide, never a change to their settings', a
     delete process.env.STARSTATION_TEST_CONFLICTS
   }
 })
+
+test('couch check: the steps tick off as they happen, the result is saved', async () => {
+  test.setTimeout(60_000)
+  const files = makeFiles('couchcheck')
+  const presets = makePresets(files, 60_000, { quickResume: true })
+  writeSettings(files, { bootAnimation: false })
+  fs.mkdirSync(path.join(files, 'games', 'testcon'), { recursive: true })
+  fs.writeFileSync(path.join(files, 'games', 'testcon', 'Alpha.tst'), 'a')
+  const { app, page } = await launchApp(files, presets)
+  try {
+    const ov = await overlayPage(app)
+    await page.getByTestId('cat-settings').dispatchEvent('click')
+    await api(page, 'couchStart')
+    expect((await api<{ done: string[] }>(page, 'couchStatus')).done).toEqual([])
+    expect((await api<{ ok: boolean }>(page, 'launch', 'testcon:alpha.tst')).ok).toBe(true)
+    await api(page, 'testHome')
+    await ov.getByTestId('overlay-resume').click()
+    await api(page, 'testHome')
+    await ov.getByTestId('overlay-savequit').click()
+    await expect.poll(async () => (await api<{ running: unknown }>(page, 'getState')).running, { timeout: 15_000 }).toBeNull()
+    await api(page, 'couchStart') // opening the panel again keeps the progress
+    const st = await api<{ done: string[] }>(page, 'couchStatus')
+    expect(st.done).toEqual(expect.arrayContaining(['launch', 'menu', 'resume', 'savequit', 'closed']))
+    const f = await api<string>(page, 'couchSave')
+    expect(JSON.parse(fs.readFileSync(f, 'utf8')).done).toEqual(expect.arrayContaining(['launch', 'closed']))
+  } finally {
+    await app.close()
+  }
+})
