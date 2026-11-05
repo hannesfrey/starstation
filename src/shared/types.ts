@@ -88,6 +88,8 @@ export interface Game {
   romName?: string
   /** You picked your own cover or background. */
   customArt?: boolean
+  /** PS3 / Xbox 360 compatibility label. */
+  compat?: Compat
 }
 
 export interface GameStats {
@@ -540,4 +542,14 @@ export interface StorageInfo {
   /** Free / total bytes on the drive with Starstation. */
   free: number
   total: number
+}
+
+/** PS3 / Xbox 360: how well the game runs, from the emulator's public compatibility list. */
+export type CompatLabel = 'Runs well' | 'Playable' | 'Issues' | "Doesn't start"
+export interface Compat {
+  label: CompatLabel
+  source: 'RPCS3' | 'Xenia'
+  /** The list's own word (e.g. "Ingame", "gameplay"). */
+  status: string
+  url?: string
 }

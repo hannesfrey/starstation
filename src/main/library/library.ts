@@ -6,6 +6,7 @@ import { allConsoles, fill, vars, type ConsolePreset } from '../presets'
 import { cleanTitle, discSerial, n3dsTitleId, n64Header, nintendoDiscId, ps3FromFolder, ps3FromIso } from '../formats/gameid'
 import { parseSfo } from '../formats/sfo'
 import { x360TitleId } from '../formats/xdvdfs'
+import { compatFor } from '../compat'
 import { loadSerialDb, stripDisc } from './titledb'
 import { folderSize, scanConsole, type ScanEntry } from './scan'
 import { logger } from '../log'
@@ -33,10 +34,12 @@ export function loadLibrary(): void {
 export function view(): LibraryView {
   return {
     games: games.map(({ mtime: _m, ...g }) => {
+      const compat = compatFor(g)
+      const withCompat = compat ? { ...g, compat } : g
       // your own cover / background wins over found artwork, without replacing it
       const own = customArt(g)
-      if (!own.icon && !own.background) return g
-      return { ...g, icon: own.icon ?? g.icon, background: own.background ?? g.background, customArt: true }
+      if (!own.icon && !own.background) return withCompat
+      return { ...withCompat, icon: own.icon ?? g.icon, background: own.background ?? g.background, customArt: true }
     }),
     stats
   }

@@ -24,6 +24,7 @@ import { addGames } from './addgames'
 import { afterAdd, installPkg } from './convert'
 import { compressGame, compressOption, decompressGame } from './compress'
 import { storageInfo } from './storage'
+import { refreshCompat } from './compat'
 import { moveGameOptions } from './gameoptions'
 import { moveGameInCollections } from './collections'
 import { availableOptions, gameOptions, setGameOption } from './gameoptions'
@@ -761,6 +762,8 @@ function scanAndArt(atStart = false): void {
   const lib = rescan()
   send('library', lib)
   send('consoles', consoleInfos())
+  // PS3 / Xbox 360 compatibility labels, looked up slowly in the background
+  void refreshCompat(lib.games, () => send('library', view()))
   queueArtwork(
     lib.games,
     () => {

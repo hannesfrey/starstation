@@ -203,7 +203,13 @@ export function App() {
 
   /** ✕ on a game: offer Resume / Start fresh when a resume state exists, otherwise just play. */
   const launch = useCallback(
-    async (g: Game) => {
+    async (g: Game, anyway = false) => {
+      // the compatibility list says it doesn't start: say so first (the game stays in the list)
+      if (g.compat?.label === "Doesn't start" && !anyway) {
+        sfx.error()
+        setPanels([{ id: 'compat-warn', arg: g.id, index: 0 }])
+        return
+      }
       const c = state?.consoles.find((x) => x.id === g.console)
       if (c?.quickResume) {
         const d = await loadDetails(g.id)

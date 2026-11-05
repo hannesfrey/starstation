@@ -52,7 +52,8 @@ export function gameItem(g: Game, s?: GameStats, c?: ConsoleInfo): XItem {
   return {
     key: g.id,
     label: g.title,
-    sub: c ? `${c.short} · ${play}` : play,
+    // PS3 / Xbox 360: how well it runs, from the emulator's compatibility list
+    sub: [c?.short, play, g.compat ? (g.compat.label === "Doesn't start" ? "⚠ Doesn't start" : g.compat.label) : ''].filter(Boolean).join(' · '),
     icon: c?.icon ?? 'disc',
     art: g.icon,
     game: g,

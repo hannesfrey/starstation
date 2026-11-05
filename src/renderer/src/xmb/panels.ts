@@ -63,7 +63,7 @@ export interface Panel {
 export interface PanelHandlers {
   setSetting: <K extends keyof Settings>(k: K, v: Settings[K]) => void
   command: (cmd: string, arg?: string) => void
-  launch: (g: Game) => void
+  launch: (g: Game, anyway?: boolean) => void
   toggleFavorite: (g: Game) => void
   openPanel: (id: string, arg?: string) => void
   installEmulator: (id: string) => void
@@ -754,6 +754,21 @@ export function buildPanel(id: string, arg: string | undefined, state: AppState,
               ]
       }
     }
+    case 'compat-warn': {
+      const g = state.library.games.find((y) => y.id === arg)
+      if (!g?.compat) return null
+      const emu = g.compat.source
+      return {
+        id,
+        title: `${g.title} may not start`,
+        items: [
+          { key: 'what', label: `${emu}'s compatibility list says this game doesn't start yet ("${g.compat.status}").`, info: true },
+          { key: 'why', label: 'Emulators get better all the time; it may work with a newer version.', info: true },
+          { key: 'go', label: 'Start anyway', run: () => h.launch(g, true) },
+          { key: 'no', label: 'Cancel', run: () => undefined }
+        ]
+      }
+    }
     case 'storage': {
       const s = x.storage
       if (!s) return { id, title: 'Storage', items: [{ key: 'loading', label: 'Adding up…', info: true }] }
@@ -889,6 +904,7 @@ export function buildPanel(id: string, arg: string | undefined, state: AppState,
       items.push(
         { key: 'folders', label: 'Open folder…', run: () => (h.openPanel('folders', g.id), 'keep') },
         { key: 'info', label: 'Game info', run: () => (h.openPanel('info', g.id), 'keep') },
+        ...(g.compat ? [{ key: 'compat', label: `Compatibility: ${g.compat.label}`, value: `${g.compat.source} list: ${g.compat.status}`, info: true }] : []),
         { key: 'art', label: 'Refresh artwork', run: () => (h.refreshArtwork(g), 'keep') },
         ...(d?.compress
           ? [
