@@ -239,6 +239,9 @@ export interface StarstationApi {
   couchStatus(): Promise<CouchStatus>
   couchPad(): Promise<void>
   couchSave(): Promise<string>
+  /** Compress / decompress a game (lossless; the original goes to the Recycle Bin after a check). */
+  compressGame(gameId: string): Promise<{ ok: boolean; error?: string }>
+  storage(fresh?: boolean): Promise<StorageInfo>
   /** Hidden tests only: act as if the PS button was pressed. */
   testHome(): Promise<void>
   gameDetails(gameId: string): Promise<GameDetails | null>
@@ -286,6 +289,7 @@ export interface StarstationApi {
   on(channel: 'collections', cb: (c: Collection[]) => void): () => void
   on(channel: 'add-ask', cb: (ask: AddGamesResult['ask']) => void): () => void
   on(channel: 'overlay', cb: (s: OverlayState) => void): () => void
+  on(channel: 'compress-progress', cb: (p: { gameId: string; text: string }) => void): () => void
   on(channel: 'screenshots', cb: (s: Screenshot[]) => void): () => void
   on(channel: 'battery', cb: (b: BatteryInfo | null) => void): () => void
   on(channel: 'package-progress', cb: (p: PackageProgress) => void): () => void
@@ -326,6 +330,8 @@ export interface GameDetails {
   mods: { total: number; on: number; supported: boolean }
   /** Resume state kept from before the last "Start fresh". */
   previousResume: number | null
+  /** Triangle menu: Compress (to CHD / RVZ) or Decompress. */
+  compress?: { action: 'compress' | 'decompress'; format: string }
 }
 
 export interface ModInfo {
@@ -525,4 +531,13 @@ export interface CouchStatus {
   /** What the pad helper sees ("xinput:0", "hid:1" = PlayStation pads read directly). */
   pads: string[]
   conflicts: { steam: boolean; gameBar: boolean }
+}
+
+/** Settings → Storage: bytes per console. */
+export interface StorageInfo {
+  consoles: { id: string; name: string; short: string; games: number; saves: number; mods: number; media: number; emulator: number }[]
+  backups: number
+  /** Free / total bytes on the drive with Starstation. */
+  free: number
+  total: number
 }

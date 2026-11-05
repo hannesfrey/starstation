@@ -35,6 +35,15 @@ const files = [
     sha256: 'fc891dfa72f08e3838a2f8b7ec34a8e4d61678da1cc8fee879677f00bf114ce3',
     local: [],
     unzip: { 'artifacts/extract-xiso.exe': 'extract-xiso.exe', 'artifacts/LICENSE.TXT': 'extract-xiso-LICENSE.txt' }
+  },
+  {
+    // chdman from MAME 0.289 (official release, GPL-2.0+) to compress PS1/PS2 games to CHD (SPEC-v2 D).
+    // The release is a self-extracting 7z: only chdman.exe and the license are taken out of it.
+    name: 'mame0289b_x64.exe',
+    url: 'https://github.com/mamedev/mame/releases/download/mame0289/mame0289b_x64.exe',
+    sha256: 'a1aa7912168c9d1b05e611906bc21b8b9be3935822aead36d12a1da363150b7d',
+    local: [path.resolve(import.meta.dirname, '..', 'tools', 'cache', 'mame-dl', 'mame0289b_x64.exe')],
+    unpack7z: { 'chdman.exe': 'chdman.exe', COPYING: 'chdman-MAME-COPYING.txt' }
   }
 ]
 
@@ -42,7 +51,8 @@ const sha = (buf) => crypto.createHash('sha256').update(buf).digest('hex')
 
 for (const f of files) {
   const dst = path.join(bin, f.name)
-  if (f.unzip && Object.values(f.unzip).every((n) => fs.existsSync(path.join(bin, n)))) {
+  const outs = f.unzip ?? f.unpack7z
+  if (outs && Object.values(outs).every((n) => fs.existsSync(path.join(bin, n)))) {
     console.log(`${f.name}: unpacked files present`)
     continue
   }
@@ -52,7 +62,7 @@ for (const f of files) {
   }
   let buf = null
   try {
-    const r = await fetch(f.url, { signal: AbortSignal.timeout(30_000) })
+    const r = await fetch(f.url, { signal: AbortSignal.timeout(f.name.startsWith("mame") ? 600_000 : 30_000) })
     if (!r.ok) throw new Error(`HTTP ${r.status}`)
     buf = Buffer.from(await r.arrayBuffer())
   } catch (e) {
@@ -67,6 +77,14 @@ for (const f of files) {
     const tmp = fs.mkdtempSync(path.join(bin, '.unzip-'))
     execFileSync(path.join(process.env.SystemRoot ?? 'C:\Windows', 'System32', 'tar.exe'), ['-xf', dst, '-C', tmp])
     for (const [from, to] of Object.entries(f.unzip)) fs.copyFileSync(path.join(tmp, from), path.join(bin, to))
+    fs.rmSync(tmp, { recursive: true, force: true })
+    fs.rmSync(dst)
+  }
+  if (f.unpack7z) {
+    // self-extracting 7z (MAME): the bundled 7-Zip reads it like a .7z
+    const tmp = fs.mkdtempSync(path.join(bin, ".unpack-"))
+    execFileSync(path.join(bin, "7zr.exe"), ["x", "-y", `-o${tmp}`, dst, ...Object.keys(f.unpack7z)], { stdio: "ignore" })
+    for (const [from, to] of Object.entries(f.unpack7z)) fs.copyFileSync(path.join(tmp, from), path.join(bin, to))
     fs.rmSync(tmp, { recursive: true, force: true })
     fs.rmSync(dst)
   }

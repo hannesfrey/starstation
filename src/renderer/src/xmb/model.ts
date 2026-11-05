@@ -129,6 +129,7 @@ export function buildColumns(state: AppState, h: ModelHandlers, shots: Screensho
         kind: 'action',
         run: () => h.openPanel('library')
       },
+      { key: 'storage', label: 'Storage', sub: 'Disk space per console', icon: 'library', kind: 'action', run: () => h.openPanel('storage') },
       { key: 'health', label: 'Health check', sub: 'Emulators, BIOS, broken games, disk space', icon: 'health', kind: 'action', run: () => h.openPanel('health') },
       { key: 'ra', label: 'RetroAchievements', sub: 'Log in once for all emulators', icon: 'trophy', kind: 'action', run: () => h.openPanel('retroachievements') },
       { key: 'netplay', label: 'Netplay', sub: `Play online as "${settings.netplayNickname}"`, icon: 'network', kind: 'action', run: () => h.openPanel('netplay-settings') },

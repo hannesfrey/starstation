@@ -22,6 +22,10 @@ import { backupGame, gameFiles, listBackups, noteResumeVersion, ownSaves, previo
 import { createCollection, deleteCollection, listCollections, removeGameFromCollections, renameCollection, toggleInCollection } from './collections'
 import { addGames } from './addgames'
 import { afterAdd, installPkg } from './convert'
+import { compressGame, compressOption, decompressGame } from './compress'
+import { storageInfo } from './storage'
+import { moveGameOptions } from './gameoptions'
+import { moveGameInCollections } from './collections'
 import { availableOptions, gameOptions, setGameOption } from './gameoptions'
 import { padVars, reportPads } from './controllers'
 import { checkNow, startUpdater, updateState } from './updater'
@@ -30,7 +34,7 @@ import { gbModDetails, installGbMod, listGbMods, searchGames } from './gamebanan
 import { fetchArtwork, queueArtwork } from './artwork'
 import { listScreenshots } from './screenshots'
 import { readBattery } from './battery'
-import { reattachArtwork, setCustomArt } from './library/library'
+import { moveStats, reattachArtwork, setCustomArt } from './library/library'
 import { healthCheck } from './health'
 import { exportReport } from './diagnostics'
 import { lastUnlockCheck, raLogin, raLogout, raStatus, recentUnlocks } from './retroach'
@@ -440,6 +444,9 @@ function registerIpc(): void {
   ipcMain.handle('guide-seen', (_e, keys: string[]) => markGuideSeen(Array.isArray(keys) ? keys.map(String) : []))
   // ---- PS button menu (SPEC-v2 A) ----
   ipcMain.handle('overlay-state', () => overlayState())
+  // ---- library & storage (SPEC-v2 D) ----
+  ipcMain.handle('storage', (_e, fresh?: boolean) => storageInfo(!!fresh))
+  ipcMain.handle('compress-game', (_e, id: string) => doCompress(String(id)))
   ipcMain.handle('couch-start', () => startCouchCheck())
   ipcMain.handle('couch-status', () => couchStatus())
   ipcMain.handle('couch-pad', () => couchMark('pad'))
@@ -490,7 +497,7 @@ function registerIpc(): void {
     const g = getGame(id)
     if (!g) return null
     const ml = listMods(g)
-    return { mods: { total: ml.length, on: ml.filter((m) => m.enabled).length, supported: modSupport(g).targets.length > 0 }, options: gameOptions(g), available: availableOptions(g), resume: resumeInfo(g), backups: listBackups(g), ownSaves: ownSaves(g).length, canBackup: !!getConsole(g.console)?.backup?.length, previousResume: previousResume(g)?.savedAt ?? null }
+    return { mods: { total: ml.length, on: ml.filter((m) => m.enabled).length, supported: modSupport(g).targets.length > 0 }, options: gameOptions(g), available: availableOptions(g), resume: resumeInfo(g), backups: listBackups(g), ownSaves: ownSaves(g).length, canBackup: !!getConsole(g.console)?.backup?.length, previousResume: previousResume(g)?.savedAt ?? null, compress: compressOption(g) ?? undefined }
   })
   ipcMain.handle('backup-now', async (_e, id: string) => {
     const g = getGame(id)
@@ -636,6 +643,41 @@ function registerIpc(): void {
     return win.isFullScreen()
   })
   ipcMain.handle('quit', () => app.quit())
+}
+
+/** Compress or decompress one game (only one at a time; never while it runs). */
+let compressing: string | null = null
+async function doCompress(id: string): Promise<{ ok: boolean; error?: string }> {
+  const g = getGame(id)
+  if (!g) return { ok: false, error: 'Game not found' }
+  if (compressing) return { ok: false, error: 'Another game is being compressed right now.' }
+  if (runningGame()) return { ok: false, error: 'Close the game first.' }
+  const opt = compressOption(g)
+  if (!opt) return { ok: false, error: 'This game can’t be compressed.' }
+  compressing = id
+  const progress = (text: string) => send('compress-progress', { gameId: id, text })
+  try {
+    const r = opt.action === 'compress' ? await compressGame(g, progress, trash) : await decompressGame(g, progress, trash)
+    if (!r.ok) {
+      notify({ kind: 'error', title: opt.action === 'compress' ? 'Not compressed' : 'Not decompressed', detail: r.error })
+      return r
+    }
+    // the file has a new name: play time, favorite, collections and game options follow it
+    const lib = rescan()
+    const next = lib.games.find((x) => x.path.toLowerCase() === r.path.toLowerCase())
+    if (next && next.id !== id) {
+      moveStats(id, next.id)
+      moveGameOptions(id, next.id)
+      send('collections', moveGameInCollections(id, next.id))
+    }
+    send('library', view())
+    send('consoles', consoleInfos())
+    notify({ kind: 'success', title: opt.action === 'compress' ? 'Game compressed' : 'Game decompressed', detail: `${g.title}: ${path.basename(r.path)}. The old file is in the Recycle Bin.` })
+    return { ok: true }
+  } finally {
+    compressing = null
+    progress('')
+  }
 }
 
 /** Notification after a mod was added (or why not). */

@@ -2,7 +2,7 @@ import type { UpdateState, AddGamesResult, AppState, CustomConsoleForm, PackageC
 import { formatPlayTime } from './model'
 import { compareVersions } from '../../../shared/semver'
 import { whatsNewFor } from '../../../shared/whatsnew'
-import type { CouchStatus, StartNotes } from '../../../shared/types'
+import type { CouchStatus, StartNotes, StorageInfo } from '../../../shared/types'
 
 /** Data some panels load on demand. */
 export interface PanelExtra {
@@ -36,6 +36,9 @@ export interface PanelExtra {
   notes?: StartNotes
   /** Couch check progress (Settings → Diagnostics). */
   couch?: CouchStatus
+  /** Compress / decompress progress per game. */
+  compressing: Record<string, string>
+  storage?: StorageInfo
 }
 
 export interface PItem {
@@ -118,6 +121,7 @@ export interface PanelHandlers {
   markTested: (emulatorId: string) => void
   guideSeen: (keys: string[]) => void
   couchSave: () => void
+  compressGame: (g: Game) => void
 }
 
 const onOff = (b: boolean) => (b ? 'On' : 'Off')
@@ -728,6 +732,44 @@ export function buildPanel(id: string, arg: string | undefined, state: AppState,
       if (!w) return null
       return { id, title: `All changes in ${state.info.version}`, items: w.details.map((line, i) => ({ key: `d${i}`, label: line, info: true })) }
     }
+    case 'compress': {
+      const g = state.library.games.find((y) => y.id === arg)
+      const c = g && x.details[g.id]?.compress
+      if (!g || !c) return null
+      const busy = x.compressing[g.id]
+      return {
+        id,
+        title: c.action === 'compress' ? `Compress ${g.title}` : `Decompress ${g.title}`,
+        items:
+          c.action === 'compress'
+            ? [
+                { key: 'what', label: `Makes a smaller ${c.format} file. Lossless: the game runs exactly the same.`, info: true },
+                { key: 'safe', label: 'The original goes to the Recycle Bin only after the new file was checked against it.', info: true },
+                { key: 'time', label: 'Takes a few minutes; you can keep using Starstation (not this game).', info: true },
+                { key: 'go', label: busy || 'Compress now', disabled: !!busy, run: () => (h.compressGame(g), 'keep') }
+              ]
+            : [
+                { key: 'what', label: `Turns the compressed file back into ${c.format}, checked bit for bit where Starstation compressed it.`, info: true },
+                { key: 'go', label: busy || 'Decompress now', disabled: !!busy, run: () => (h.compressGame(g), 'keep') }
+              ]
+      }
+    }
+    case 'storage': {
+      const s = x.storage
+      if (!s) return { id, title: 'Storage', items: [{ key: 'loading', label: 'Adding up…', info: true }] }
+      const gb = (n: number) => (n >= 1024 ** 3 ? `${(n / 1024 ** 3).toFixed(1)} GB` : `${Math.max(0, Math.round(n / 1024 ** 2))} MB`)
+      const items: PItem[] = [{ key: 'free', label: `Free on this drive: ${gb(s.free)} of ${gb(s.total)}`, info: true }]
+      for (const c of s.consoles)
+        items.push({
+          key: `st-${c.id}`,
+          label: `${c.short}: ${gb(c.games + c.saves + c.mods + c.media + c.emulator)}`,
+          value: [`games ${gb(c.games)}`, c.saves ? `saves ${gb(c.saves)}` : '', c.mods ? `mods ${gb(c.mods)}` : '', c.emulator ? `emulator ${gb(c.emulator)}` : ''].filter(Boolean).join(' · '),
+          info: true
+        })
+      if (s.backups) items.push({ key: 'bk', label: `Save backups: ${gb(s.backups)}`, info: true })
+      items.push({ key: 'tip', label: 'PS1 / PS2 / GameCube / Wii games can be made smaller: game options → Compress.', info: true })
+      return { id, title: 'Storage', items }
+    }
     case 'couch-check': {
       const done = new Set(x.couch?.done ?? [])
       const step = (key: string, label: string, ok: boolean): PItem => ({ key: `c-${key}`, label, value: ok ? '✓' : '—', info: true })
@@ -848,6 +890,17 @@ export function buildPanel(id: string, arg: string | undefined, state: AppState,
         { key: 'folders', label: 'Open folder…', run: () => (h.openPanel('folders', g.id), 'keep') },
         { key: 'info', label: 'Game info', run: () => (h.openPanel('info', g.id), 'keep') },
         { key: 'art', label: 'Refresh artwork', run: () => (h.refreshArtwork(g), 'keep') },
+        ...(d?.compress
+          ? [
+              {
+                key: 'compress',
+                label: d.compress.action === 'compress' ? `Compress (${d.compress.format})` : `Decompress (${d.compress.format})`,
+                value: x.compressing[g.id] || undefined,
+                disabled: !!x.compressing[g.id],
+                run: () => (h.openPanel('compress', g.id), 'keep' as const)
+              }
+            ]
+          : []),
         { key: 'cover', label: 'Choose cover…', run: () => (h.customArt(g, 'icon'), 'keep') },
         { key: 'bgpick', label: 'Choose background…', run: () => (h.customArt(g, 'background'), 'keep') }
       )

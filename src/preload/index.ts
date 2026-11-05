@@ -43,6 +43,8 @@ const api = {
   overlayState: () => ipcRenderer.invoke('overlay-state'),
   overlayAction: (action: string) => ipcRenderer.invoke('overlay-action', action),
   testHome: () => ipcRenderer.invoke('test-home'),
+  compressGame: (gameId: string) => ipcRenderer.invoke('compress-game', gameId),
+  storage: (fresh?: boolean) => ipcRenderer.invoke('storage', fresh),
   couchStart: () => ipcRenderer.invoke('couch-start'),
   couchStatus: () => ipcRenderer.invoke('couch-status'),
   couchPad: () => ipcRenderer.invoke('couch-pad'),
@@ -83,7 +85,7 @@ const api = {
   quit: () => ipcRenderer.invoke('quit'),
   mediaUrl: (absPath: string) => `starstation-media://local/${encodeURIComponent(absPath)}`,
   on: (channel: string, cb: (payload: unknown) => void) => {
-    const allowed = ['notice', 'library', 'consoles', 'collections', 'screenshots', 'battery', 'package-progress', 'running', 'navigate', 'import-progress', 'emulator-progress', 'add-ask', 'overlay']
+    const allowed = ['notice', 'library', 'consoles', 'collections', 'screenshots', 'battery', 'package-progress', 'running', 'navigate', 'import-progress', 'emulator-progress', 'add-ask', 'overlay', 'compress-progress']
     if (!allowed.includes(channel)) throw new Error(`Unknown channel ${channel}`)
     const h = (_e: unknown, payload: unknown) => cb(payload)
     ipcRenderer.on(channel, h)

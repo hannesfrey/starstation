@@ -76,3 +76,12 @@ export function applyGameOptions(c: ConsolePreset, g: Game, extra: Record<string
   }
   return args
 }
+
+/** The game's file changed (compressed / decompressed): its graphics level, CRT filter and patches follow. */
+export function moveGameOptions(oldId: string, newId: string): void {
+  const list = all()
+  if (!list[oldId]) return
+  list[newId] = { ...list[oldId], ...(list[newId] ?? {}) }
+  delete list[oldId]
+  writeJson(file(), list)
+}

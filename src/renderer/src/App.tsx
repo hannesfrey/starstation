@@ -53,6 +53,7 @@ export function App() {
     details: {},
     mods: {},
     gb: { page: 1, more: false, detail: {} },
+    compressing: {},
     // everything except saves is ticked by default (spec 12)
     pkg: { choice: { emulators: true, bios: true, games: 'all', mods: true, settings: true, saves: false }, busy: false }
   })
@@ -108,6 +109,7 @@ export function App() {
         setExtra((x) => ({ ...x, pkg: { ...x.pkg, progress: p, busy: p.phase !== 'done' && p.phase !== 'error' ? x.pkg.busy : false } }))
       ),
       api.on('running', (running) => apply({ running })),
+      api.on('compress-progress', ({ gameId, text }) => setExtra((x) => ({ ...x, compressing: { ...x.compressing, [gameId]: text } }))),
       api.on('import-progress', (p) => setExtra((x) => ({ ...x, importProgress: p }))),
       api.on('emulator-progress', ({ id, text }) => setExtra((x) => ({ ...x, emuProgress: { ...x.emuProgress, [id]: text } }))),
       // a file from New downloads whose console is unclear
@@ -257,6 +259,12 @@ export function App() {
   }, [])
   const guideSeen = useCallback((keys: string[]) => void api.guideSeen(keys), [])
   const couchSave = useCallback(() => void api.couchSave(), [])
+  const compressGame = useCallback(
+    (g: Game) => {
+      void api.compressGame(g.id).then(() => loadDetails(g.id))
+    },
+    [loadDetails]
+  )
   const markTested = useCallback((id: string) => {
     void api.markTested(id).then(() => api.emulators().then((emulators) => setExtra((x) => ({ ...x, emulators }))))
   }, [])
@@ -289,6 +297,11 @@ export function App() {
     setPanels((p) => [...p, { id, arg, index: 0 }])
     if (arg && ['game', 'backups', 'delete'].includes(id)) void loadDetails(arg)
     if (id === 'about') void api.updateState().then((update) => setExtra((x) => ({ ...x, update })))
+    if (id === 'storage') {
+      setExtra((x) => ({ ...x, storage: undefined }))
+      void api.storage(true).then((storage) => setExtra((x) => ({ ...x, storage })))
+    }
+    if (id === 'compress' && arg) void loadDetails(arg)
     if (id === 'health') {
       setExtra((x) => ({ ...x, health: undefined }))
       void api.health().then((health) => setExtra((x) => ({ ...x, health })))
@@ -895,7 +908,8 @@ export function App() {
         releaseToEveryone,
         markTested,
         guideSeen,
-        couchSave
+        couchSave,
+        compressGame
       },
       extra
     )
@@ -964,6 +978,7 @@ export function App() {
     markTested,
     guideSeen,
     couchSave,
+    compressGame,
     extra
   ])
 

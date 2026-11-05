@@ -46,3 +46,8 @@ export function toggleInCollection(id: string, gameId: string): Collection[] {
 export function removeGameFromCollections(gameId: string): Collection[] {
   return save(listCollections().map((c) => ({ ...c, games: c.games.filter((g) => g !== gameId) })))
 }
+
+/** The game's file changed (compressed / decompressed): it stays in its collections. */
+export function moveGameInCollections(oldId: string, newId: string): Collection[] {
+  return save(listCollections().map((c) => ({ ...c, games: c.games.map((g) => (g === oldId ? newId : g)) })))
+}

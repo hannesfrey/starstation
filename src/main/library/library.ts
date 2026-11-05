@@ -275,3 +275,11 @@ export function forgetGame(id: string): void {
 export function toggleFavorite(id: string): GameStats {
   return updateStats(id, (s) => ({ ...s, favorite: !s.favorite }))
 }
+
+/** The game's file changed (compressed / decompressed): its play time and favorite move to the new id. */
+export function moveStats(oldId: string, newId: string): void {
+  if (oldId === newId || !stats[oldId]) return
+  const { [oldId]: s, ...rest } = stats
+  stats = { ...rest, [newId]: { ...s, ...(rest[newId] ?? {}) } }
+  writeJson(statsFile(), stats)
+}
