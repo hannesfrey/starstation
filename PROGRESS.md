@@ -4,8 +4,8 @@ Read SPEC.md first. This file tracks where the build stands and every small deci
 
 ## Current state
 
-- **Phase:** v1 done (v1.0.0 released 2026-11-02, fixes after it on main). **v2 build started 2026-11-05** from `SPEC-v2.md` — see "v2" below.
-- **Next step:** step 8 — release 2.0.0 as a pre-release (beta channel), final report to Hannes. After that: only Hannes presses "Release to everyone".
+- **Phase:** v2 done — 2.0.0 on the beta channel (2026-11-05). v1.0.0 is still what everyone else gets.
+- **Next step:** v2 is done and on the beta channel (2.0.0). Waiting for Hannes's test notes; only he presses "Release to everyone".
 
 ## v2 (SPEC-v2.md)
 
@@ -27,7 +27,7 @@ Read SPEC.md first. This file tracks where the build stands and every small deci
 - [x] 5. Mods (E) — done 2026-11-05, tag `v2-step-05-mods`
 - [x] 6. Console feel (C) — done 2026-11-05, tag `v2-step-06-feel`
 - [x] 7. Sharing (F) + rest of G (system settings, profiles, accessibility) — done 2026-11-05, tag `v2-step-07-sharing-profiles`
-- [ ] 8. Release v2 to beta + final report
+- [x] 8. Release v2 to beta + final report — 2.0.0 published 2026-11-05 as a GitHub pre-release (tag `v2.0.0`); Hannes's 1.9.0 picks it up the next time Starstation starts (it checks at start) and installs on close
 
 ### v2 step 2 — Safe updates + safe mode (2026-11-05)
 
