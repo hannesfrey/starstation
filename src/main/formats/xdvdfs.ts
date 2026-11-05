@@ -47,6 +47,26 @@ function findRootFile(fd: number, name: string): { pos: number; size: number } |
   return null
 }
 
+/**
+ * Original Xbox disc image layout: 'xiso' (file system right at the start, what xemu wants) or
+ * 'full' (a whole disc dump with the video partition in front, e.g. from Redump) — null if neither.
+ * xiso images must also have default.xbe in their root folder.
+ */
+export function xboxImageKind(file: string): 'xiso' | 'full' | null {
+  let fd: number | null = null
+  try {
+    fd = fs.openSync(file, 'r')
+    const at = (base: number) => read(fd!, base + 32 * SECTOR, 20).toString('latin1') === MAGIC
+    if (at(0)) return findRootFile(fd, 'default.xbe') ? 'xiso' : null
+    if (at(0x18300000)) return 'full'
+    return null
+  } catch {
+    return null
+  } finally {
+    if (fd !== null) fs.closeSync(fd)
+  }
+}
+
 /** Title ID from an XEX2 header (8 hex digits, e.g. "41560817"). */
 export function titleIdFromXex(head: Buffer): string | null {
   if (head.length < 24 || head.toString('latin1', 0, 4) !== 'XEX2') return null

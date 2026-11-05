@@ -26,6 +26,15 @@ const files = [
     sha256: '47b6c51aa4b4ae0370296926a33a0818338448ada38eb76519ad067932c61330',
     local: [path.resolve(import.meta.dirname, '..', 'tools', 'cache', 'croc-dl', 'croc.zip')],
     unzip: { 'croc.exe': 'croc.exe', LICENSE: 'croc-LICENSE.txt' }
+  },
+  {
+    // extract-xiso (XboxDev, BSD-style license) to turn full Xbox disc images into XISO for xemu (SPEC-v2 A)
+    // https://github.com/XboxDev/extract-xiso/releases — sha256 = the digest GitHub lists for the asset
+    name: 'extract-xiso-Win64_Release.zip',
+    url: 'https://github.com/XboxDev/extract-xiso/releases/download/build-202609111233/extract-xiso-Win64_Release.zip',
+    sha256: 'fc891dfa72f08e3838a2f8b7ec34a8e4d61678da1cc8fee879677f00bf114ce3',
+    local: [],
+    unzip: { 'artifacts/extract-xiso.exe': 'extract-xiso.exe', 'artifacts/LICENSE.TXT': 'extract-xiso-LICENSE.txt' }
   }
 ]
 

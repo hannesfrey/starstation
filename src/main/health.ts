@@ -5,7 +5,7 @@ import { allConsoles, getEmulator } from './presets'
 import { emulatorInstalled } from './emuconfig'
 import { biosStatus } from './bios'
 import { view } from './library/library'
-import { referencedFiles } from './formats/gameid'
+import { n3dsEncrypted, referencedFiles } from './formats/gameid'
 import { emulatorInfos } from './emulators'
 import { gpuDrivers, homeConflicts } from './system'
 import type { HealthIssue } from '../shared/types'
@@ -52,6 +52,7 @@ export function healthCheck(): HealthIssue[] {
       const missing = referencedFiles(g.path).filter((f) => !fs.existsSync(f))
       if (missing.length) problem = `${missing.length} file(s) it refers to are missing, e.g. ${path.basename(missing[0])}.`
     }
+    if (!problem && g.console === '3ds' && n3dsEncrypted(g.path)) problem = 'It is encrypted: Azahar only runs decrypted 3DS games (decrypt it on your own 3DS, e.g. with GodMode9).'
     if (problem) issues.push({ severity: 'warning', title: `${g.title} looks broken`, detail: problem, fix: { label: 'Open game folder', command: 'open-folder', arg: `game:${g.id}` } })
   }
 

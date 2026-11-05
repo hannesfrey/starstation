@@ -21,6 +21,7 @@ import { loadLibrary, rescan, view, toggleFavorite, getGame, forgetGame, updateS
 import { backupGame, gameFiles, listBackups, noteResumeVersion, ownSaves, previousResume, pruneBackups, restoreBackup, restorePreviousResume, resumeInfo, saveEntries } from './gamedata'
 import { createCollection, deleteCollection, listCollections, removeGameFromCollections, renameCollection, toggleInCollection } from './collections'
 import { addGames } from './addgames'
+import { afterAdd, installPkg } from './convert'
 import { availableOptions, gameOptions, setGameOption } from './gameoptions'
 import { padVars, reportPads } from './controllers'
 import { checkNow, startUpdater, updateState } from './updater'
@@ -639,7 +640,19 @@ function pushCollections<T>(list: T): T {
 }
 
 async function doAddGames(paths: string[], consoleId?: string): Promise<AddGamesResult> {
-  const r = await addGames(paths, consoleId)
+  // PS3 packages aren't games in a folder: they are installed into RPCS3
+  const pkgs = paths.filter((p) => /\.pkg$/i.test(p) && (!consoleId || consoleId === 'ps3'))
+  for (const p of pkgs) {
+    notify({ kind: 'info', title: 'Installing a PS3 package…', detail: `${path.basename(p)} — RPCS3 shows its progress.` })
+    notify(await installPkg(p, trash).catch((e) => ({ kind: 'error' as const, title: 'PS3 package not installed', detail: (e as Error).message })))
+  }
+  const r = await addGames(
+    paths.filter((p) => !pkgs.includes(p)),
+    consoleId
+  )
+  if (pkgs.length && !r.added.length) send('library', rescan())
+  // conversion on import: Xbox → XISO, multi-disc playlists, 3DS encryption check
+  if (r.added.length) for (const n of await afterAdd(r.added, trash).catch((e) => (log.warn('conversion after adding failed', e), []))) notify(n)
   if (r.added.length) {
     const lib = rescan()
     send('library', lib)

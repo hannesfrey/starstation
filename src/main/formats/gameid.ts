@@ -145,6 +145,31 @@ export function n3dsTitleId(file: string): string | null {
   }
 }
 
+/**
+ * 3DS cartridge dump (.3ds/.cci): is its first partition still encrypted? Azahar only runs decrypted games.
+ * NCSD header → partition 0 (NCCH); NCCH flags byte 7 bit 0x04 = "NoCrypto". null = not a cartridge dump.
+ */
+export function n3dsEncrypted(file: string): boolean | null {
+  if (!/\.(3ds|cci)$/i.test(file)) return null
+  try {
+    const fd = fs.openSync(file, 'r')
+    try {
+      const h = Buffer.alloc(0x200)
+      fs.readSync(fd, h, 0, 0x200, 0)
+      if (h.toString('latin1', 0x100, 0x104) !== 'NCSD') return null
+      const part0 = h.readUInt32LE(0x120) * 0x200
+      const n = Buffer.alloc(0x200)
+      fs.readSync(fd, n, 0, 0x200, part0)
+      if (n.toString('latin1', 0x100, 0x104) !== 'NCCH') return null
+      return (n[0x18f] & 0x04) === 0
+    } finally {
+      fs.closeSync(fd)
+    }
+  } catch {
+    return null
+  }
+}
+
 /** N64 ROM header (any byte order): internal name (texture pack folder) and 4-letter game code. */
 export function n64Header(file: string): { name: string; code: string } | null {
   if (!/\.(z64|n64|v64)$/i.test(file)) return null

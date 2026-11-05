@@ -20,7 +20,8 @@ export const NEW_DOWNLOADS = 'New downloads'
 
 /** Every file extension some console's games use (lower case, with dot). */
 export function gameExtensions(): Set<string> {
-  return new Set(allConsoles().flatMap((c) => c.extensions.map((e) => e.toLowerCase())))
+  // .pkg: PS3 packages are installed into RPCS3 when added (convert.ts)
+  return new Set([...allConsoles().flatMap((c) => c.extensions.map((e) => e.toLowerCase())), '.pkg'])
 }
 
 function readAt(file: string, pos: number, len: number): Buffer | null {
