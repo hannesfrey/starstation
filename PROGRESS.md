@@ -110,7 +110,7 @@ Flags checked on 2026-11-02 against current sources: Azahar `-f <file>` (citra_q
   - Xbox 360 Modern Warfare 2 (Xenia Canary, .iso): default.xex loaded, drawing while shaders compile.
   - PS1 Crash Bandicoot 2 and Xbox Halo 2: launch refused cleanly with "BIOS missing" + "Open BIOS folder" (Hannes has no PS1 BIOS / Xbox BIOS+HDD yet). **Fixed:** title showed "Halo 2.xiso" — `cleanTitle` drops .xiso/.nkit/.dec double endings (library cache version 3).
   - 2026-11-05: Hannes added SCPH1001.BIN (MD5 924e392e…, 512 KB). PS1 Crash Bandicoot 2 (DuckStation, .cue) booted; resume state SCUS-94154_resume.sav written on close.
-  - 2026-11-05: Xbox HDD image `bios\xbox\xbox_hdd.qcow2` downloaded from xemu-project/xemu-dashboard release v20260516-0955 (sha256 matched). Still missing: MCPX boot ROM + modified flash BIOS (copyrighted, must come from Hannes's own Xbox; none found on the PC).
+  - 2026-11-05: Xbox HDD image `bios\xbox\xbox_hdd.qcow2` downloaded from xemu-project/xemu-dashboard release v20260516-0955 (sha256 matched). Hannes then added the MCPX (MD5 d49c52a4…, matches xemu docs) and Complex_4627.bin. Xbox Halo 2 (xemu 0.8.139) booted: it wrote ~500 MB of map cache to the HDD image. `bios\xbox` tidied at Hannes's request to mcpx_1.0.bin, Complex_4627.bin, xbox_hdd.qcow2, eeprom.bin; the extra pack (zips, older HDD image, Complex v1.03, old xemu zip, XISO tool) went to the Recycle Bin.
   - Still without games: NES, SNES, 3DS.
 
 ### Step 6 — Game experience (done 2026-11-02, tag `step-06-game`)
