@@ -255,6 +255,7 @@ export function App() {
   const releaseToEveryone = useCallback(() => {
     void api.releaseToEveryone().then(() => api.updateState().then((update) => setExtra((x) => ({ ...x, update }))))
   }, [])
+  const guideSeen = useCallback((keys: string[]) => void api.guideSeen(keys), [])
   const markTested = useCallback((id: string) => {
     void api.markTested(id).then(() => api.emulators().then((emulators) => setExtra((x) => ({ ...x, emulators }))))
   }, [])
@@ -891,7 +892,8 @@ export function App() {
         setSafeMode,
         undoUpdate,
         releaseToEveryone,
-        markTested
+        markTested,
+        guideSeen
       },
       extra
     )
@@ -958,6 +960,7 @@ export function App() {
     undoUpdate,
     releaseToEveryone,
     markTested,
+    guideSeen,
     extra
   ])
 
@@ -974,8 +977,12 @@ export function App() {
           title: `Back on version ${notes.rescued.to}`,
           detail: `Version ${notes.rescued.from} closed unexpectedly twice right after updating, so Starstation went back. It is skipped until a newer version comes out.`
         })
-      if (notes.crashed) setPanels((p) => [...p, { id: 'crashed', index: 0 }])
-      else if (notes.whatsNew) setPanels((p) => [...p, { id: 'whats-new', index: 0 }])
+      // one after the other: the question on top, the guide underneath
+      const queue: string[] = []
+      if (notes.homeConflicts?.length) queue.push('home-guide')
+      if (notes.crashed) queue.push('crashed')
+      else if (notes.whatsNew) queue.push('whats-new')
+      if (queue.length) setPanels((p) => [...p, ...queue.map((id) => ({ id, index: 0 }))])
     })
   }, [booting, state, wizard, notify])
 

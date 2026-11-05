@@ -134,3 +134,32 @@ test('controller assignment: with 2 controllers, ✕ decides who is player 1 and
     await app.close()
   }
 })
+
+test('Steam and Game Bar: a one-time guide, never a change to their settings', async () => {
+  const files = makeFiles('conflicts')
+  writeSettings(files, { bootAnimation: false })
+  process.env.STARSTATION_TEST_CONFLICTS = 'steam,gamebar'
+  let { app, page } = await launchApp(files)
+  try {
+    await expect(page.getByTestId('panel-home-guide')).toBeVisible()
+    await expect(page.getByTestId('panel-home-guide')).toContainText('Xbox Game Bar')
+    await expect(page.getByTestId('panel-home-guide')).toContainText('Guide button focuses Steam')
+    await page.getByTestId('pitem-ok').dblclick()
+    await expect(page.getByTestId('panel-home-guide')).toHaveCount(0)
+    await expect.poll(() => fs.existsSync(path.join(files, 'config', 'guides.json'))).toBe(true)
+    // the health check keeps listing it
+    const issues = await api<{ title: string }[]>(page, 'health')
+    expect(issues.map((i) => i.title)).toEqual(expect.arrayContaining(['Xbox Game Bar takes the PS / Home button', 'Steam is running']))
+  } finally {
+    await app.close()
+  }
+  ;({ app, page } = await launchApp(files))
+  try {
+    await expect(page.getByTestId('xmb')).toBeVisible()
+    await page.waitForTimeout(800)
+    await expect(page.getByTestId('panel-home-guide')).toHaveCount(0) // shown once
+  } finally {
+    await app.close()
+    delete process.env.STARSTATION_TEST_CONFLICTS
+  }
+})

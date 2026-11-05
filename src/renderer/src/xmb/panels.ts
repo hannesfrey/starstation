@@ -114,6 +114,7 @@ export interface PanelHandlers {
   undoUpdate: (to: string) => void
   releaseToEveryone: () => void
   markTested: (emulatorId: string) => void
+  guideSeen: (keys: string[]) => void
 }
 
 const onOff = (b: boolean) => (b ? 'On' : 'Off')
@@ -722,6 +723,25 @@ export function buildPanel(id: string, arg: string | undefined, state: AppState,
       const w = x.notes?.whatsNew ?? whatsNewFor(state.info.version, compareVersions)
       if (!w) return null
       return { id, title: `All changes in ${state.info.version}`, items: w.details.map((line, i) => ({ key: `d${i}`, label: line, info: true })) }
+    }
+    case 'home-guide': {
+      const c = x.notes?.homeConflicts ?? []
+      const items: PItem[] = [{ key: 'what', label: 'During a game the PS button opens Starstation’s menu. Other apps can take that button first:', info: true }]
+      if (c.includes('gameBar'))
+        items.push(
+          { key: 'gb', label: 'Xbox Game Bar: Windows Settings → Gaming → Xbox Game Bar', info: true },
+          { key: 'gb2', label: 'switch off “Open Xbox Game Bar using this button on a controller”.', info: true }
+        )
+      if (c.includes('steam'))
+        items.push(
+          { key: 'st', label: 'Steam: Settings → Controller → switch off “Guide button focuses Steam”,', info: true },
+          { key: 'st2', label: 'or close Steam while you play here.', info: true }
+        )
+      items.push(
+        { key: 'own', label: 'Starstation never changes other apps’ settings. The health check lists this again.', info: true },
+        { key: 'ok', label: 'OK', run: () => h.guideSeen(c) }
+      )
+      return { id, title: 'The PS button', items }
     }
     case 'crashed':
       return {

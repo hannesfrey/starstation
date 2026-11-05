@@ -14,6 +14,9 @@ $env:ELECTRON_BUILDER_CACHE = "$SS_TOOLS\cache\electron-builder"
 $env:PLAYWRIGHT_BROWSERS_PATH = "$SS_TOOLS\cache\playwright"
 $env:PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = '1'
 $env:GH_CONFIG_DIR = "$SS_TOOLS\gh-config"
+# tools that keep files in %LOCALAPPDATA% / %APPDATA% (vitest, npm logs) write here instead
+$env:LOCALAPPDATA = "$SS_TOOLS\cache\localappdata"
+$env:APPDATA = "$SS_TOOLS\cache\appdata"
 $env:TEMP = "$SS_TOOLS\cache\temp"
 $env:TMP = "$SS_TOOLS\cache\temp"
-New-Item -ItemType Directory -Force $env:TEMP | Out-Null
+New-Item -ItemType Directory -Force $env:TEMP, $env:LOCALAPPDATA, $env:APPDATA | Out-Null

@@ -22,3 +22,8 @@ title.keys
 
 # Bundled helper binaries are downloaded by scripts/fetch-bin.mjs
 resources/bin/
+
+# Microsoft VC++ runtime for the installer (downloaded by scripts/fetch-bin.mjs)
+build/vc_redist.x64.exe
+build/vc_redist.x64.exe.part
+build/vcredist.nsh

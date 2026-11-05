@@ -78,3 +78,36 @@ for (const src of fs.readdirSync(nativeDir).filter((n) => n.endsWith('.cs'))) {
   execFileSync(csc, ['-nologo', '-optimize+', '-platform:x64', '-target:exe', `-out:${exe}`, from], { stdio: 'inherit' })
   console.log(`${path.basename(exe)}: built`)
 }
+
+// Microsoft Visual C++ 2015–2022 runtime (x64) for the installer (SPEC-v2 A: most emulators need it).
+// The official link always gives the newest build, so it can't be pinned by hash: the file must carry a valid
+// Microsoft Authenticode signature instead. Its version goes into build\vcredist.nsh (installed only if older/missing).
+const vcDst = path.resolve(import.meta.dirname, '..', 'build', 'vc_redist.x64.exe')
+const vcNsh = path.resolve(import.meta.dirname, '..', 'build', 'vcredist.nsh')
+const signedByMicrosoft = (file) => {
+  const ps = path.join(process.env.SystemRoot ?? 'C:\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
+  const out = execFileSync(ps, ['-NoProfile', '-Command', `$s = Get-AuthenticodeSignature -LiteralPath '${file}'; "$($s.Status)|$($s.SignerCertificate.Subject)"`], { encoding: 'utf8' }).trim()
+  return /^Valid\|.*O=Microsoft Corporation/.test(out)
+}
+const fileVersion = (file) => {
+  const ps = path.join(process.env.SystemRoot ?? 'C:\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
+  return execFileSync(ps, ['-NoProfile', '-Command', `(Get-Item -LiteralPath '${file}').VersionInfo.FileVersion`], { encoding: 'utf8' }).trim()
+}
+if (!fs.existsSync(vcDst) || Date.now() - fs.statSync(vcDst).mtimeMs > 30 * 24 * 3600_000) {
+  try {
+    const r = await fetch('https://aka.ms/vs/17/release/vc_redist.x64.exe', { signal: AbortSignal.timeout(120_000) })
+    if (!r.ok) throw new Error(`HTTP ${r.status}`)
+    fs.writeFileSync(`${vcDst}.part`, Buffer.from(await r.arrayBuffer()))
+    if (!signedByMicrosoft(`${vcDst}.part`)) throw new Error('not signed by Microsoft')
+    fs.renameSync(`${vcDst}.part`, vcDst)
+  } catch (e) {
+    fs.rmSync(`${vcDst}.part`, { force: true })
+    if (!fs.existsSync(vcDst)) throw new Error(`vc_redist.x64.exe: ${e.message}`)
+    console.warn(`vc_redist.x64.exe: download failed (${e.message}), keeping the one from before`)
+  }
+}
+if (!signedByMicrosoft(vcDst)) throw new Error('vc_redist.x64.exe: signature check failed')
+const [vMaj, vMin, vBld] = fileVersion(vcDst).split('.').map(Number)
+// electron-builder includes installer.nsh twice (installer + uninstaller): define once
+fs.writeFileSync(vcNsh, `; written by scripts/fetch-bin.mjs: version of the bundled build/vc_redist.x64.exe\n!ifndef VCREDIST_MINOR\n!define VCREDIST_MAJOR ${vMaj}\n!define VCREDIST_MINOR ${vMin}\n!define VCREDIST_BLD ${vBld}\n!endif\n`)
+console.log(`vc_redist.x64.exe: ${vMaj}.${vMin}.${vBld}, signed by Microsoft`)

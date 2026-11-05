@@ -7,6 +7,7 @@ import { biosStatus } from './bios'
 import { view } from './library/library'
 import { referencedFiles } from './formats/gameid'
 import { emulatorInfos } from './emulators'
+import { gpuDrivers, homeConflicts } from './system'
 import type { HealthIssue } from '../shared/types'
 
 /** Settings → Health check: everything that would stop a game from starting, each with a fix or an instruction. */
@@ -71,6 +72,33 @@ export function healthCheck(): HealthIssue[] {
   // OneDrive syncing the folder would upload every game and fight over open saves
   if (/\\OneDrive[^\\]*\\/i.test(filesDir() + '\\'))
     issues.push({ severity: 'warning', title: 'Starstation is inside OneDrive', detail: 'OneDrive would upload all games and can lock saves while a game runs. Move the Starstation folder out of OneDrive.' })
+
+  // the PS / Home button has to reach Starstation's menu during games
+  const hc = homeConflicts()
+  if (hc.gameBar)
+    issues.push({
+      severity: 'warning',
+      title: 'Xbox Game Bar takes the PS / Home button',
+      detail: 'Windows Settings → Gaming → Xbox Game Bar: switch off "Open Xbox Game Bar using this button on a controller". Starstation doesn’t change it for you.'
+    })
+  if (hc.steam)
+    issues.push({
+      severity: 'info',
+      title: 'Steam is running',
+      detail: 'Steam can take the PS / Home button: in Steam → Settings → Controller, switch off "Guide button focuses Steam" — or close Steam while you play here.'
+    })
+
+  // old graphics drivers are the most common reason for crashes and glitches in PS3 / Xbox 360 / Switch-era emulators
+  const limit = Date.now() - 548 * 24 * 3600_000 // about 18 months
+  for (const g of gpuDrivers()) {
+    if (!g.date || /basic display|remote|virtual|parsec|meta/i.test(g.name)) continue
+    if (Date.parse(g.date) < limit)
+      issues.push({
+        severity: 'warning',
+        title: 'Old graphics driver',
+        detail: `${g.name}: driver from ${g.date}. Get the newest one from the NVIDIA, AMD or Intel website.`
+      })
+  }
 
   return issues
 }

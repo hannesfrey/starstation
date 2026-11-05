@@ -44,6 +44,7 @@ import { consoleInfos } from './consoles'
 import { launch, setLauncherWindow, runningGame, stopRunning, onBeforeLaunch, onAfterExit } from './launcher'
 import { hideOverlay, overlayAction, overlayOpen, overlayState, setupOverlay, toggleOverlay } from './overlay'
 import { onHome, startPadHelper, stopPadHelper } from './padhelper'
+import { loadGpuDrivers, markGuideSeen, newHomeConflicts } from './system'
 import type { OverlayAction } from '../shared/types'
 import { attachWindow, notify, send } from './notify'
 import { startDownloadWatcher } from './downloads'
@@ -432,6 +433,7 @@ function registerIpc(): void {
   ipcMain.handle('update-check', () => checkNow(notify))
   // ---- safe updates + safe mode (SPEC-v2 B, G) ----
   ipcMain.handle('start-notes', () => takeStartNotes())
+  ipcMain.handle('guide-seen', (_e, keys: string[]) => markGuideSeen(Array.isArray(keys) ? keys.map(String) : []))
   // ---- PS button menu (SPEC-v2 A) ----
   ipcMain.handle('overlay-state', () => overlayState())
   ipcMain.handle('overlay-action', (_e, a: OverlayAction) => overlayAction(a))
@@ -766,7 +768,8 @@ function takeStartNotes(): StartNotes {
       // after a rescue the rescue note explains it; no safe-mode question on top
       crashed: !!session?.crashedLastTime && !inSafeMode() && !rescued,
       rescued,
-      whatsNew: w ?? undefined
+      whatsNew: w ?? undefined,
+      homeConflicts: HEADLESS && !process.env.STARSTATION_TEST_CONFLICTS ? [] : newHomeConflicts()
     }
     return startNotes
   }
@@ -800,6 +803,7 @@ app.whenReady().then(async () => {
   // the PS button menu window comes after the menu has loaded (keeps start-up fast)
   win.webContents.once('did-finish-load', () => setupOverlay(path.join(__dirname, '../preload/index.js'), (w) => loadPage(w, 'overlay')))
   startPadHelper()
+  loadGpuDrivers()
   onHome(() => toggleOverlay())
   // scan after the window is up so startup stays fast (cache is shown first)
   win.webContents.once('did-finish-load', () => {

@@ -39,6 +39,7 @@ const api = {
   releaseToEveryone: () => ipcRenderer.invoke('release-everyone'),
   markTested: (id: string) => ipcRenderer.invoke('emulator-mark-tested', id),
   setSafeMode: (on: boolean) => ipcRenderer.invoke('safe-mode', on),
+  guideSeen: (keys: string[]) => ipcRenderer.invoke('guide-seen', keys),
   overlayState: () => ipcRenderer.invoke('overlay-state'),
   overlayAction: (action: string) => ipcRenderer.invoke('overlay-action', action),
   testHome: () => ipcRenderer.invoke('test-home'),

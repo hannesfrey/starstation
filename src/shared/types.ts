@@ -229,6 +229,8 @@ export interface StarstationApi {
   markTested(emulatorId: string): Promise<{ ok: boolean; error?: string }>
   /** Enter / leave safe mode (the menu starts again). */
   setSafeMode(on: boolean): Promise<{ ok: boolean; error?: string }>
+  /** The one-time guide (Steam / Game Bar and the PS button) was read. */
+  guideSeen(keys: string[]): Promise<void>
   /** PS button menu (overlay window). */
   overlayState(): Promise<OverlayState>
   overlayAction(action: OverlayAction): Promise<{ ok: boolean; error?: string }>
@@ -474,6 +476,8 @@ export interface StartNotes {
   crashed: boolean
   rescued?: { from: string; to: string }
   whatsNew?: { version: string; summary: string[]; details: string[] }
+  /** Apps that take the PS / Home button and whose guide wasn't shown yet. */
+  homeConflicts?: ('steam' | 'gameBar')[]
 }
 
 export interface Collection {

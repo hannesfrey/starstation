@@ -31,7 +31,27 @@
   FunctionEnd
 !macroend
 
+!include "${BUILD_RESOURCES_DIR}\vcredist.nsh"
+
 !macro customInstall
+  ; Microsoft Visual C++ 2015-2022 runtime (x64): most emulators need it. Only when it's missing or older than
+  ; the bundled one; its own installer asks Windows for permission (the one change outside the Starstation folder
+  ; Hannes allowed for the installer, SPEC-v2 A).
+  SetRegView 64
+  ReadRegDWORD $R2 HKLM "SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64" "Installed"
+  ReadRegDWORD $R3 HKLM "SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64" "Minor"
+  SetRegView 32
+  ${If} $R2 == 1
+  ${AndIf} $R3 >= ${VCREDIST_MINOR}
+    DetailPrint "Visual C++ runtime 14.$R3 is already installed"
+  ${Else}
+    InitPluginsDir
+    File "/oname=$PLUGINSDIR\vc_redist.x64.exe" "${BUILD_RESOURCES_DIR}\vc_redist.x64.exe"
+    DetailPrint "Installing the Visual C++ runtime 14.${VCREDIST_MINOR}"
+    ExecWait '"$PLUGINSDIR\vc_redist.x64.exe" /install /quiet /norestart' $R4
+    DetailPrint "Visual C++ runtime installer: exit code $R4"
+  ${EndIf}
+
   ; shortcut in the Starstation folder (two levels above Files\app)
   StrCpy $R1 "$INSTDIR" -10
   CreateShortCut "$R1\Starstation.lnk" "$INSTDIR\${APP_EXECUTABLE_FILENAME}" "" "$INSTDIR\${APP_EXECUTABLE_FILENAME}" 0
