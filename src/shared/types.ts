@@ -22,6 +22,12 @@ export interface Settings {
   artworkAuto: boolean
   /** Unpack and sort games saved to games\New downloads. */
   sortDownloads: boolean
+  /** TV mode: everything bigger, for playing from the couch. */
+  tvMode: boolean
+  /** Menu colours: "monthly" (changes every month), a fixed colour, or "starvis" (night sky). */
+  theme: string
+  /** A short gameplay clip after resting on a game for about 2 seconds. */
+  videoPreviews: boolean
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -38,7 +44,10 @@ export const DEFAULT_SETTINGS: Settings = {
   netplayRelay: 'madrid',
   bootAnimation: true,
   artworkAuto: true,
-  sortDownloads: true
+  sortDownloads: true,
+  tvMode: false,
+  theme: 'monthly',
+  videoPreviews: true
 }
 
 export type ConsoleIcon = 'cartridge' | 'cartridge-wide' | 'cartridge-n64' | 'disc' | 'disc-mini' | 'handheld' | 'box' | 'box-360' | 'remote'
@@ -252,6 +261,18 @@ export interface StarstationApi {
   storage(fresh?: boolean): Promise<StorageInfo>
   /** A file inside Files\ (a game manual), as bytes. */
   readMedia(path: string): Promise<Uint8Array | null>
+  /** Nexus Mods: a "Download with mod manager" link (normally from Windows; here for tests and Settings). */
+  nxmOpen(url: string): Promise<void>
+  nexusStatus(): Promise<{ key: boolean; registered: boolean; patches: { pcsx2?: string; rpcs3?: string } }>
+  /** Community patch collections (PCSX2, RPCS3): only when the user asks. */
+  updatePatches(): Promise<{ done: string[]; errors: string[] }>
+  /** Trophies column: Starstation's trophies + RetroAchievements of the last 30 days. */
+  trophies(): Promise<{ list: Trophy[]; ra: Achievement[] }>
+  wallpapers(): Promise<Wallpapers>
+  /** kind "own" or "console:<id>"; file null = remove (a file path only in hidden tests, else a file dialog). */
+  setWallpaper(kind: string, file?: string | null): Promise<{ ok: boolean; error?: string }>
+  power(action: 'sleep' | 'shutdown'): Promise<void>
+  nexusInstall(url: string, gameId: string): Promise<{ ok: boolean; error?: string }>
   /** Hidden tests only: act as if the PS button was pressed. */
   testHome(): Promise<void>
   gameDetails(gameId: string): Promise<GameDetails | null>
@@ -300,6 +321,9 @@ export interface StarstationApi {
   on(channel: 'add-ask', cb: (ask: AddGamesResult['ask']) => void): () => void
   on(channel: 'overlay', cb: (s: OverlayState) => void): () => void
   on(channel: 'compress-progress', cb: (p: { gameId: string; text: string }) => void): () => void
+  on(channel: 'nexus-request', cb: (r: NexusRequest) => void): () => void
+  on(channel: 'trophies', cb: (t: { list: Trophy[]; ra: Achievement[] }) => void): () => void
+  on(channel: 'wallpapers', cb: (w: Wallpapers) => void): () => void
   on(channel: 'screenshots', cb: (s: Screenshot[]) => void): () => void
   on(channel: 'battery', cb: (b: BatteryInfo | null) => void): () => void
   on(channel: 'package-progress', cb: (p: PackageProgress) => void): () => void
@@ -354,6 +378,8 @@ export interface ModInfo {
   files: number
   source: 'file' | 'gamebanana' | 'nexus'
   image?: string
+  /** Installed by hand: the mod's instructions and where its files are. */
+  manual?: { lines: string[]; folder: string }
 }
 
 export interface ModsView {
@@ -563,4 +589,32 @@ export interface Compat {
   /** The list's own word (e.g. "Ingame", "gameplay"). */
   status: string
   url?: string
+}
+
+/** A Nexus Mods "Download with mod manager" link waiting for the user to pick the game. */
+export interface NexusRequest {
+  url: string
+  modName: string
+  summary?: string
+  picture?: string
+  /** The game on Nexus (its own name; Starstation's game is picked by the user). */
+  gameName: string
+  fileName?: string
+}
+
+/** A Starstation trophy (Trophies column). */
+export interface Trophy {
+  id: string
+  name: string
+  description: string
+  tier: 'bronze' | 'silver' | 'gold' | 'platinum'
+  /** [done, needed] for trophies that count up. */
+  progress?: [number, number]
+  unlockedAt?: number
+}
+
+/** Backgrounds: the user's own picture, and one per console (shown on that console's column). */
+export interface Wallpapers {
+  own?: string
+  consoles: Record<string, string>
 }

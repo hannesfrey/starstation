@@ -99,7 +99,8 @@ export function showOverlay(): void {
     w.focus()
     // Windows doesn't let a background app take the focus from the game: the pad helper hands it over,
     // so the controller drives the menu (and the emulator pauses / stops reading the pad)
-    void focusHwnd(w.getNativeWindowHandle())
+    // a moment after showing, so Windows has the window ready to take the focus
+    setTimeout(() => void focusHwnd(w.getNativeWindowHandle()), 80)
   }
   log.info('opened')
 }
@@ -108,8 +109,11 @@ export function showOverlay(): void {
 export async function hideOverlay(resume: boolean): Promise<void> {
   open = false
   push()
-  if (win && !win.isDestroyed() && !HEADLESS) win.hide()
   const pid = runningPid()
+  // the game gets the focus first, then the menu goes: hiding it first would let Windows hand the focus to
+  // Starstation's own main window instead
+  if (resume && pid && !HEADLESS) await focusWindow(pid)
+  if (win && !win.isDestroyed() && !HEADLESS) win.hide()
   if (resume && pid && !HEADLESS) await focusWindow(pid)
 }
 

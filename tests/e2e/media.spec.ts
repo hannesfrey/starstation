@@ -67,7 +67,7 @@ test('artwork is fetched from libretro thumbnails; Photo column shows screenshot
     const shots = await api<{ title: string; consoleName: string }[]>(page, 'screenshots')
     expect(shots.map((s) => s.title)).toEqual(['Newer Game', 'Older Game'])
     expect(shots[0].consoleName).toBe('PS2')
-    await page.getByTestId('cat-photo').click()
+    await page.getByTestId('cat-photo').dispatchEvent('click')
     const items = page.getByTestId('items')
     await expect(items.getByText('Newer Game')).toBeVisible()
     await page.keyboard.press('ArrowDown')

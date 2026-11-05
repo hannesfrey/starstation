@@ -24,6 +24,10 @@ import { addGames } from './addgames'
 import { afterAdd, installPkg } from './convert'
 import { compressGame, compressOption, decompressGame } from './compress'
 import { storageInfo } from './storage'
+import { describeNxm, downloadNxm, nexusKey, nxmFromArgs, registerNxm } from './nexus'
+import { patchStatus, updatePatches } from './patchsets'
+import { noteFirst, trophies } from './trophies'
+import { power, setWallpaper, wallpapers } from './consolefeel'
 import { refreshCompat } from './compat'
 import { moveGameOptions } from './gameoptions'
 import { moveGameInCollections } from './collections'
@@ -55,7 +59,7 @@ import { couchMark, couchStatus, saveCouchCheck, startCouchCheck } from './couch
 import type { OverlayAction } from '../shared/types'
 import { attachWindow, notify, send } from './notify'
 import { startDownloadWatcher } from './downloads'
-import type { AddGamesResult, AppState, CustomConsoleForm, EmulatorInfo, GameDetails, NetplayRoom, PackageChoice, PackageProgress, PlayerPad, Settings, StartNotes } from '../shared/types'
+import type { Achievement, AddGamesResult, AppState, CustomConsoleForm, EmulatorInfo, GameDetails, NetplayRoom, PackageChoice, PackageProgress, PlayerPad, Settings, StartNotes, Trophy } from '../shared/types'
 
 // ---- before ready: keep everything inside Files\ ----
 redirectElectronPaths()
@@ -75,6 +79,12 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 let win: BrowserWindow | null = null
+
+/** TV mode: the whole menu (and the PS button menu) a quarter bigger, for reading from the couch. */
+function applyTvMode(): void {
+  const f = getSettings().tvMode ? 1.25 : 1
+  for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.setZoomFactor(f)
+}
 
 function createWindow(): BrowserWindow {
   const s = getSettings()
@@ -114,6 +124,7 @@ function createWindow(): BrowserWindow {
     if (d.reason !== 'clean-exit') app.exit(1)
   })
   loadPage(w)
+  w.webContents.on('did-finish-load', () => applyTvMode())
   return w
 }
 
@@ -214,6 +225,9 @@ async function runCommand(command: string, arg?: string): Promise<void> {
       // only official pages from presets are passed here
       if (arg && /^https:\/\//.test(arg)) await shell.openExternal(arg)
       return
+    case 'quit':
+      app.quit()
+      return
     default:
       log.warn(`unknown command ${command}`)
   }
@@ -299,6 +313,7 @@ function registerIpc(): void {
     const s = setSetting(key, value as never)
     if (key === 'showEmptyConsoles') send('consoles', consoleInfos())
     if (key === 'startWithWindows' && app.isPackaged) app.setLoginItemSettings({ openAtLogin: !!value })
+    if (key === 'tvMode') applyTvMode()
     return s
   })
   ipcMain.handle('rescan', () => {
@@ -312,6 +327,7 @@ function registerIpc(): void {
     // controller assignment: player N → that pad, in every emulator's own way (controllers.ts)
     const order = Array.isArray(pads) ? pads.filter((p) => (p.api === 'xinput' || p.api === 'sdl') && Number.isInteger(p.index)).slice(0, 4) : []
     const vars = { ...(order.length ? padVars(order) : {}), ...(online ? netplayVars('host' in online) : {}) }
+    if (online) noteFirst('netplay')
     return launch(id, mode === 'resume' ? 'resume' : 'fresh', [], { args: online ? netplayArgs(online) : [], vars })
   })
   ipcMain.handle('health', () => healthCheck())
@@ -447,6 +463,51 @@ function registerIpc(): void {
   ipcMain.handle('overlay-state', () => overlayState())
   // ---- library & storage (SPEC-v2 D) ----
   ipcMain.handle('storage', (_e, fresh?: boolean) => storageInfo(!!fresh))
+  ipcMain.handle('trophies', () => trophyView())
+  // ---- console feel (SPEC-v2 C) ----
+  ipcMain.handle('wallpapers', () => wallpapers())
+  ipcMain.handle('wallpaper-set', async (_e, kind: string, file?: string | null) => {
+    let src: string | null = HEADLESS && typeof file === 'string' ? file : null
+    if (file === null) src = null
+    else if (!src) {
+      const pick = await dialog.showOpenDialog(win!, { title: 'Choose a picture', properties: ['openFile'], filters: [{ name: 'Pictures', extensions: ['png', 'jpg', 'jpeg'] }] })
+      if (pick.canceled || !pick.filePaths[0]) return { ok: false }
+      src = pick.filePaths[0]
+    }
+    const r = setWallpaper(String(kind), src)
+    if (r.ok) send('wallpapers', wallpapers())
+    return r
+  })
+  ipcMain.handle('power', (_e, action: string) => {
+    if (action === 'sleep' || action === 'shutdown') power(action)
+  })
+  // ---- Nexus Mods ----
+  ipcMain.handle('nxm-open', (_e, url: string) => openNxm(String(url)))
+  ipcMain.handle('nexus-status', () => ({ key: !!nexusKey(), registered: registerNxm(), patches: patchStatus() }))
+  ipcMain.handle('update-patches', async () => {
+    const r = await updatePatches()
+    notify(
+      r.errors.length
+        ? { kind: 'error', title: 'Some patches were not updated', detail: r.errors.join(' · ') }
+        : { kind: 'success', title: 'Patches updated', detail: r.done.join(' · ') }
+    )
+    return r
+  })
+  ipcMain.handle('nexus-install', async (_e, url: string, gameId: string) => {
+    const g = getGame(String(gameId))
+    if (!g) return { ok: false, error: 'Game not found' }
+    try {
+      const req = await describeNxm(String(url))
+      notify({ kind: 'info', title: 'Downloading from Nexus Mods…', detail: req.modName })
+      const file = await downloadNxm(String(url))
+      const r = await addMod(g, file, { name: req.modName, description: req.summary, source: { type: 'nexus', ref: String(url) } }).then(modAdded(g))
+      await fs.promises.rm(file, { force: true })
+      return r
+    } catch (e) {
+      notify({ kind: 'error', title: 'Nexus Mods mod not installed', detail: (e as Error).message })
+      return { ok: false, error: (e as Error).message }
+    }
+  })
   ipcMain.handle('read-media', async (_e, p: string) => {
     // only files inside Files\ (manuals in media\artwork), and not huge ones
     const abs = path.resolve(String(p))
@@ -695,10 +756,31 @@ async function doCompress(id: string): Promise<{ ok: boolean; error?: string }> 
   }
 }
 
+/** Trophies earned just now: a notice each (held while a game runs), and the column updates. */
+const TIER_NAME = { bronze: 'Bronze', silver: 'Silver', gold: 'Gold', platinum: 'Platinum' }
+function checkTrophies(): void {
+  const { fresh } = trophies()
+  for (const t of fresh) notify({ kind: 'achievement', title: `Trophy unlocked: ${t.name}`, detail: `${TIER_NAME[t.tier]} · ${t.description}` })
+  if (fresh.length) void trophyView().then((v) => send('trophies', v))
+}
+
+/** RetroAchievements of the last 30 days for the Trophies column (asked at most every 10 minutes). */
+let raCache: { at: number; list: Achievement[] } | null = null
+async function trophyView(): Promise<{ list: Trophy[]; ra: Achievement[] }> {
+  if (raStatus().hasApiKey && (!raCache || Date.now() - raCache.at > 600_000)) {
+    raCache = { at: Date.now(), list: await recentUnlocks(30 * 24 * 60).catch(() => raCache?.list ?? []) }
+  }
+  return { list: trophies().list, ra: raCache?.list ?? [] }
+}
+
 /** Notification after a mod was added (or why not). */
 function modAdded(g: { title: string }) {
   return <T extends { ok: boolean; mod?: { name: string }; error?: string; ask?: unknown }>(r: T): T => {
-    if (r.ok && r.mod) notify({ kind: 'mod', title: 'Mod installed', detail: `${r.mod.name} · ${g.title}` })
+    if (r.ok && r.mod) {
+      notify({ kind: 'mod', title: 'Mod installed', detail: `${r.mod.name} · ${g.title}` })
+      noteFirst('mod')
+      checkTrophies()
+    }
     else if (!r.ok && r.error && r.error !== 'Cancelled.') notify({ kind: 'error', title: 'Mod not added', detail: r.error })
     return r
   }
@@ -776,6 +858,7 @@ function scanAndArt(atStart = false): void {
   const lib = rescan()
   send('library', lib)
   send('consoles', consoleInfos())
+  checkTrophies() // e.g. "Collector" after games were added
   // PS3 / Xbox 360 compatibility labels, looked up slowly in the background
   void refreshCompat(lib.games, () => send('library', view()))
   queueArtwork(
@@ -813,6 +896,13 @@ function registerHooks(): void {
     lastUnlockCheck(Date.now())
     for (const a of list.slice(0, 3)) notify({ kind: 'achievement', title: `Achievement unlocked: ${a.title}`, detail: a.description })
     if (list.length > 3) notify({ kind: 'achievement', title: `${list.length - 3} more achievements unlocked`, detail: g.title })
+  })
+  onAfterExit(() => checkTrophies())
+  onAfterExit(() => {
+    // Nexus links that came in during the game
+    const waiting = nxmWaiting
+    nxmWaiting = []
+    for (const u of waiting) void openNxm(u)
   })
   onAfterExit(() => {
     // the game is gone: so is its menu
@@ -861,12 +951,34 @@ function takeStartNotes(): StartNotes {
   return { safeMode: inSafeMode(), crashed: false }
 }
 
-app.on('second-instance', () => {
-  if (win) {
+app.on('second-instance', (_e, argv) => {
+  // a Nexus Mods "Download with mod manager" click starts a second Starstation with an nxm:// link
+  const nxm = nxmFromArgs(argv)
+  if (nxm) return void openNxm(nxm)
+  if (win && !runningGame()) {
     if (win.isMinimized()) win.restore()
     win.focus()
   }
 })
+
+/** Ask which game a Nexus mod is for (after the game, if one is running: never over it). */
+let nxmWaiting: string[] = []
+async function openNxm(url: string): Promise<void> {
+  if (runningGame()) {
+    nxmWaiting.push(url)
+    return
+  }
+  try {
+    const req = await describeNxm(url)
+    send('nexus-request', req)
+    if (win && !HEADLESS) {
+      if (win.isMinimized()) win.restore()
+      win.focus()
+    }
+  } catch (e) {
+    notify({ kind: 'error', title: 'Nexus Mods download not started', detail: (e as Error).message })
+  }
+}
 
 app.whenReady().then(async () => {
   ensureDataDirs()
@@ -898,6 +1010,10 @@ app.whenReady().then(async () => {
     setTimeout(() => scanAndArt(true), 50)
     startBatteryPolling()
     startUpdater(notify)
+    // Nexus Mods: nxm:// links open Starstation (only with an API key); a link it was started with
+    registerNxm()
+    const startNxm = nxmFromArgs(process.argv)
+    if (startNxm) void openNxm(startNxm)
     startDownloadWatcher({
       addGames: (paths) => doAddGames(paths),
       trash,

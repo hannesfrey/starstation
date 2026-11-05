@@ -37,6 +37,8 @@ interface ModEntry {
   addedAt: number
   /** Patch-file mod: the patched copy of the game that starts while the mod is on. */
   patch?: { launch: string; kind: string }
+  /** Can't be placed automatically: its instructions (readme) are shown; the user installs it by hand. */
+  manual?: { readme: string[] }
 }
 
 interface ModState {
@@ -80,7 +82,8 @@ export function listMods(g: Game): ModInfo[] {
     id: m.id,
     name: m.name,
     description: m.description,
-    target: m.patch ? 'Patched copy of the game' : (targetsOf(c).find((t) => t.id === m.target)?.label ?? m.target),
+    target: m.patch ? 'Patched copy of the game' : m.manual ? 'Install by hand' : (targetsOf(c).find((t) => t.id === m.target)?.label ?? m.target),
+    manual: m.manual ? { lines: m.manual.readme, folder: path.join(modsRoot(g), m.id) } : undefined,
     enabled: m.enabled,
     files: m.files.length,
     source: m.source.type,
@@ -169,10 +172,7 @@ export async function addMod(
     await fsp.rm(tmp, { recursive: true, force: true })
     return r
   }
-  if (!support.targets.length) {
-    await fsp.rm(tmp, { recursive: true, force: true })
-    return { ok: false, error: support.reason ?? 'No mod support.' }
-  }
+  void support
   writeJson(path.join(tmp, '.pending.json'), { name, ...opts })
   return finishAdd(g, pending, opts.target)
 }
@@ -194,6 +194,8 @@ export async function finishAdd(g: Game, pending: string, targetId?: string): Pr
     return { ok: false, error: 'The mod is empty.' }
   }
   const targets = targetsOf(getConsole(g.console)).filter((t) => targetDir(g, t))
+  // nowhere Starstation knows to put it (or the user said "none of these"): keep it, show its instructions
+  if (targetId === 'manual' || !targets.length) return keepManual(g, tmp, content, files, meta)
   let t = targets.find((x) => x.id === targetId)
   if (!t) {
     const ranked = targets.map((x) => ({ x, n: score(x, files) })).sort((a, b) => b.n - a.n)
@@ -260,6 +262,7 @@ export async function setModEnabled(g: Game, id: string, on: boolean, winner?: '
   const st = load(g)
   const m = st.mods.find((x) => x.id === id)
   if (!m) return { ok: false, error: 'Mod not found.' }
+  if (m.manual) return { ok: false, error: 'This mod is installed by hand: its instructions are in Mods → the mod.' }
   if (m.patch) {
     // a patched copy: only one can start at a time
     if (on && !fs.existsSync(m.patch.launch)) return { ok: false, error: 'The patched copy is missing. Add the patch again.' }
@@ -394,6 +397,38 @@ export function setGamebananaGame(g: Game, id: number): void {
   const st = load(g)
   st.gamebananaGame = id
   save(g, st)
+}
+
+// ---------- manual mods (SPEC-v2 E) ----------
+
+async function keepManual(
+  g: Game,
+  tmp: string,
+  content: string,
+  files: string[],
+  meta: { name: string; description?: string; image?: string; source?: ModEntry['source'] }
+): Promise<AddModResult> {
+  const root = modsRoot(g)
+  const st = load(g)
+  let id = meta.name.replace(/[^\w.-]+/g, '_').slice(0, 40) || 'mod'
+  while (st.mods.some((m) => m.id === id) || fs.existsSync(path.join(root, id))) id += '_'
+  // the mod's own instructions: the first readme-like file
+  const readmeFile = files.find((f) => /(^|\/)(read ?me|install|instructions)[^/]*\.(txt|md|nfo)$/i.test(f)) ?? files.find((f) => /\.(txt|md|nfo)$/i.test(f))
+  let readme: string[] = []
+  if (readmeFile)
+    readme = fs
+      .readFileSync(path.join(content, readmeFile), 'utf8')
+      .split(/\r?\n/)
+      .map((l) => l.replace(/[#*>`]/g, '').trim())
+      .filter(Boolean)
+      .slice(0, 30)
+  if (!readme.length) readme = ['This mod came without instructions.', `Its files: ${files.slice(0, 5).join(', ')}${files.length > 5 ? ' …' : ''}`]
+  await fsp.rm(path.join(tmp, '.pending.json'), { force: true })
+  await fsp.rename(tmp, path.join(root, id))
+  st.mods.push({ id, name: meta.name, description: meta.description, target: 'manual', enabled: false, files, placement: [], source: meta.source ?? { type: 'file' }, image: meta.image, addedAt: Date.now(), manual: { readme } })
+  save(g, st)
+  log.info(`${g.id}: kept mod ${id} to install by hand`)
+  return { ok: true, mod: listMods(g).find((m) => m.id === id)! }
 }
 
 // ---------- patch-file mods (SPEC-v2 E) ----------

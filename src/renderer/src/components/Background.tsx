@@ -20,6 +20,25 @@ export function monthColor(d = new Date()): [number, number, number] {
   return MONTH_COLORS[d.getMonth()]
 }
 
+/** Fixed colour themes (Settings → Theme & display); "monthly" follows the month, "starvis" is a night sky. */
+export const THEMES: Record<string, { label: string; color?: [number, number, number] }> = {
+  monthly: { label: 'Changes every month' },
+  blue: { label: 'Blue', color: [50, 110, 200] },
+  teal: { label: 'Teal', color: [40, 160, 170] },
+  green: { label: 'Green', color: [70, 160, 90] },
+  gold: { label: 'Gold', color: [178, 150, 60] },
+  red: { label: 'Red', color: [175, 45, 55] },
+  violet: { label: 'Violet', color: [130, 90, 190] },
+  black: { label: 'Black', color: [44, 46, 54] },
+  starvis: { label: 'Starvis (night sky)', color: [26, 34, 82] }
+}
+
+/** A fixed sky of stars for the Starvis theme (same every start). */
+const STARS = Array.from({ length: 220 }, (_, i) => {
+  const r = (n: number) => ((Math.sin(i * 12.9898 + n * 78.233) * 43758.5453) % 1 + 1) % 1
+  return { x: r(1), y: r(2) * 0.85, size: 0.4 + r(3) * 1.4, phase: r(4) * Math.PI * 2, speed: 0.3 + r(5) * 0.9 }
+})
+
 /** Darker at night, brightest around midday. */
 function dayFactor(d = new Date()): number {
   const h = d.getHours() + d.getMinutes() / 60
@@ -29,14 +48,18 @@ function dayFactor(d = new Date()): number {
 interface Props {
   paused: boolean
   dim: boolean
+  /** Settings → Theme ("monthly" if not set). */
+  theme?: string
 }
 
-export function Background({ paused, dim }: Props) {
+export function Background({ paused, dim, theme = 'monthly' }: Props) {
   const ref = useRef<HTMLCanvasElement>(null)
   const pausedRef = useRef(paused)
   const dimRef = useRef(dim)
+  const themeRef = useRef(theme)
   pausedRef.current = paused
   dimRef.current = dim
+  themeRef.current = theme
 
   useEffect(() => {
     const canvas = ref.current!
@@ -61,8 +84,9 @@ export function Background({ paused, dim }: Props) {
       t += (dt / 1000) * (dimRef.current ? 0.25 : 1)
       const w = canvas.width
       const h = canvas.height
-      const [r, g, b] = monthColor()
-      const k = dayFactor() * (dimRef.current ? 0.35 : 1)
+      const starvis = themeRef.current === 'starvis'
+      const [r, g, b] = THEMES[themeRef.current]?.color ?? monthColor()
+      const k = (starvis ? 1 : dayFactor()) * (dimRef.current ? 0.35 : 1)
 
       const bg = ctx.createLinearGradient(0, 0, w * 0.3, h)
       bg.addColorStop(0, `rgb(${(r * k) | 0},${(g * k) | 0},${(b * k) | 0})`)
@@ -71,6 +95,18 @@ export function Background({ paused, dim }: Props) {
       ctx.globalCompositeOperation = 'source-over'
       ctx.fillStyle = bg
       ctx.fillRect(0, 0, w, h)
+
+      // Starvis: a quiet night sky — twinkling stars over the gradient
+      if (starvis) {
+        ctx.globalCompositeOperation = 'lighter'
+        for (const s of STARS) {
+          const a = (0.35 + 0.65 * (0.5 + 0.5 * Math.sin(t * s.speed + s.phase))) * (dimRef.current ? 0.4 : 1)
+          ctx.fillStyle = `rgba(235,240,255,${a.toFixed(3)})`
+          ctx.beginPath()
+          ctx.arc(s.x * w, s.y * h, s.size * (w / 1600), 0, Math.PI * 2)
+          ctx.fill()
+        }
+      }
 
       // flowing ribbons
       ctx.globalCompositeOperation = 'lighter'

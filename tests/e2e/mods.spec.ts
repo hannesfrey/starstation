@@ -112,7 +112,7 @@ test('mods: add, place, switch on/off, conflicts, user files and GameBanana', as
 
     // emulator setting follows: texture replacements on at launch
     expect((await api<{ ok: boolean }>(page, 'launch', gid, 'fresh')).ok).toBe(true)
-    await expect(page.getByTestId('running')).toHaveCount(0, { timeout: 15_000 })
+    await expect.poll(async () => (await api<{ running: unknown }>(page, 'getState')).running, { timeout: 15_000 }).toBeNull()
     expect(fs.readFileSync(path.join(emu, 'gfx.ini'), 'utf8')).toContain('LoadTextureReplacements = true')
 
     // ---- a second pack touching the same file → conflict, user picks the winner

@@ -190,23 +190,58 @@ static class PadHelper
         return list;
     }
 
+    [StructLayout(LayoutKind.Sequential)] struct RECT { public int Left, Top, Right, Bottom; }
+    [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr h, out RECT r);
+
+    /** The emulator's game window: its biggest visible window (Dolphin also has a small game-list window). */
     static bool Focus(uint pid)
     {
         var w = Windows(pid);
         if (w.Count == 0) return false;
-        return FocusHwnd(w[0]);
+        IntPtr best = w[0];
+        long area = -1;
+        foreach (var h in w)
+        {
+            RECT r;
+            if (!GetWindowRect(h, out r)) continue;
+            long a = (long)(r.Right - r.Left) * (r.Bottom - r.Top);
+            if (a > area) { area = a; best = h; }
+        }
+        return FocusHwnd(best);
     }
 
+    [DllImport("user32.dll")] static extern bool AttachThreadInput(uint a, uint b, bool attach);
+    [DllImport("user32.dll")] static extern bool BringWindowToTop(IntPtr h);
+    [DllImport("kernel32.dll")] static extern uint GetCurrentThreadId();
+
+    /**
+     * Windows only lets the app in front hand over the focus. Tried up to 3 times until the window really is
+     * in front: joining the front window's input queue, then a tap of Alt (lifts the lock), then asking again.
+     */
     static bool FocusHwnd(IntPtr h)
     {
         if (IsIconic(h)) ShowWindow(h, 9); // SW_RESTORE
-        // Windows only lets the foreground app hand over focus: a tap of Alt lifts that lock
         AllowSetForegroundWindow(-1);
-        Key(0x12, false);
-        Key(0x12, true);
-        SetForegroundWindow(h);
-        Thread.Sleep(60);
-        return true;
+        for (int i = 0; i < 3; i++)
+        {
+            IntPtr fg = GetForegroundWindow();
+            if (fg == h) return true;
+            uint dummy;
+            uint fgThread = GetWindowThreadProcessId(fg, out dummy);
+            uint me = GetCurrentThreadId();
+            bool joined = fgThread != 0 && fgThread != me && AttachThreadInput(me, fgThread, true);
+            BringWindowToTop(h);
+            SetForegroundWindow(h);
+            if (joined) AttachThreadInput(me, fgThread, false);
+            Thread.Sleep(40);
+            if (GetForegroundWindow() == h) return true;
+            Key(0x12, false);
+            Key(0x12, true);
+            SetForegroundWindow(h);
+            Thread.Sleep(80);
+            if (GetForegroundWindow() == h) return true;
+        }
+        return GetForegroundWindow() == h;
     }
 
     static void Key(ushort vk, bool up)

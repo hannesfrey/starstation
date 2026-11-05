@@ -15,9 +15,9 @@ import { Notices } from './components/Notices'
 import { KeyHints, type GlyphButton } from './components/Glyph'
 import { Xmb } from './xmb/Xmb'
 import { PanelView } from './xmb/PanelView'
-import { buildColumns, type XItem } from './xmb/model'
+import { buildColumns, type XItem, type TrophiesView } from './xmb/model'
 import { buildPanel, type Panel, type PanelExtra } from './xmb/panels'
-import type { AddGamesResult, AppState, BatteryInfo, CustomConsoleForm, NetplayRoom, Game, LaunchResult, ModAddResult, Notice, PlayerPad, Screenshot, Settings } from '../../shared/types'
+import type { AddGamesResult, AppState, BatteryInfo, CustomConsoleForm, NetplayRoom, Game, LaunchResult, ModAddResult, Notice, PlayerPad, Screenshot, Settings, Wallpapers } from '../../shared/types'
 
 const byTitle = (a: Game, b: Game) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base', numeric: true })
 
@@ -65,6 +65,9 @@ export function App() {
   const [photo, setPhoto] = useState<number | null>(null)
   const [battery, setBattery] = useState<BatteryInfo | null>(null)
   const [padTest, setPadTest] = useState(false)
+  const [trophyData, setTrophyData] = useState<TrophiesView | undefined>(undefined)
+  const [walls, setWalls] = useState<Wallpapers>({ consoles: {} })
+  const [preview, setPreview] = useState<string | null>(null)
   const [manual, setManual] = useState<{ file: string; title: string } | null>(null)
   const closeManual = useCallback(() => setManual(null), [])
   const openManual = useCallback((g: Game) => {
@@ -94,6 +97,11 @@ export function App() {
       else setState((s) => (s ? { ...s, ...patch } : s))
     }
     void api.screenshots().then(setShots)
+    void api.trophies().then(setTrophyData)
+    void api.wallpapers().then((w) => {
+      setWalls(w)
+      setExtra((x) => ({ ...x, wallpapers: w }))
+    })
     api.getState().then((s) => {
       loaded = true
       setState({ ...s, ...early })
@@ -118,6 +126,16 @@ export function App() {
       ),
       api.on('running', (running) => apply({ running })),
       api.on('compress-progress', ({ gameId, text }) => setExtra((x) => ({ ...x, compressing: { ...x.compressing, [gameId]: text } }))),
+      // a Nexus Mods download link: ask which game it is for
+      api.on('trophies', (t) => setTrophyData(t)),
+      api.on('wallpapers', (w) => {
+        setWalls(w)
+        setExtra((x) => ({ ...x, wallpapers: w }))
+      }),
+      api.on('nexus-request', (nexus) => {
+        setExtra((x) => ({ ...x, nexus }))
+        setPanels((p) => [...p.filter((q) => q.id !== 'nexus'), { id: 'nexus', index: 0 }])
+      }),
       api.on('import-progress', (p) => setExtra((x) => ({ ...x, importProgress: p }))),
       api.on('emulator-progress', ({ id, text }) => setExtra((x) => ({ ...x, emuProgress: { ...x.emuProgress, [id]: text } }))),
       // a file from New downloads whose console is unclear
@@ -313,6 +331,7 @@ export function App() {
     // the game's options show its mod profile too
     if (arg && id === 'game') void api.mods(arg).then((v) => v && setExtra((x) => ({ ...x, mods: { ...x.mods, [arg]: v } })))
     if (id === 'about') void api.updateState().then((update) => setExtra((x) => ({ ...x, update })))
+    if (id === 'mod-sources') void api.nexusStatus().then((nexusStatus) => setExtra((x) => ({ ...x, nexusStatus })))
     if (id === 'storage') {
       setExtra((x) => ({ ...x, storage: undefined }))
       void api.storage(true).then((storage) => setExtra((x) => ({ ...x, storage })))
@@ -390,7 +409,9 @@ export function App() {
         return
       }
       setPanels((p) => p.filter((q) => q.id !== 'mod-place'))
-      void loadMods(gid)
+      // kept to install by hand: show its instructions right away
+      if (r.ok && r.mod.manual) void loadMods(gid).then(() => setPanels((p) => [...p, { id: 'mod-manual', arg: `${gid}|${r.mod.id}`, index: 0 }]))
+      else void loadMods(gid)
     },
     [loadMods]
   )
@@ -410,6 +431,32 @@ export function App() {
     },
     [loadMods]
   )
+  const nexusInstall = useCallback(
+    (url: string, g: Game) => {
+      setPanels((p) => p.filter((q) => q.id !== 'nexus'))
+      void api.nexusInstall(url, g.id).then(() => loadMods(g.id))
+    },
+    [loadMods]
+  )
+  const setWallpaper = useCallback(
+    (kind: string, remove?: boolean) => {
+      void api.setWallpaper(kind, remove ? null : undefined).then((r) => {
+        if (!r.ok && r.error) notify({ kind: 'error', title: 'Picture not used', detail: r.error })
+      })
+    },
+    [notify]
+  )
+  const power = useCallback((action: 'sleep' | 'shutdown') => {
+    setPanels([])
+    void api.power(action)
+  }, [])
+  const updatePatches = useCallback(() => {
+    setExtra((x) => ({ ...x, patchesBusy: true }))
+    void api.updatePatches().finally(() => {
+      setExtra((x) => ({ ...x, patchesBusy: false }))
+      void api.nexusStatus().then((nexusStatus) => setExtra((x) => ({ ...x, nexusStatus })))
+    })
+  }, [])
   const newModProfile = useCallback((g: Game) => {
     setEntry({ kind: 'field', title: 'Profile name', value: '', row: 0, col: 0, focus: 'keys', result: 0, target: `profile:${g.id}` })
   }, [])
@@ -819,9 +866,9 @@ export function App() {
             newCollection: () => openEntry('new-collection'),
             openPhoto: (i) => setPhoto(i),
             newConsole: () => newConsoleRef.current()
-          }, shots)
+          }, shots, trophyData)
         : [],
-    [state, openPanel, command, openSearch, openEntry, shots]
+    [state, openPanel, command, openSearch, openEntry, shots, trophyData]
   )
 
   // initial column: first console with games, otherwise Settings
@@ -954,7 +1001,11 @@ export function App() {
         openManual,
         modProfile,
         modProfileDelete,
-        newModProfile
+        newModProfile,
+        nexusInstall,
+        updatePatches,
+        setWallpaper,
+        power
       },
       extra
     )
@@ -1028,6 +1079,10 @@ export function App() {
     modProfile,
     modProfileDelete,
     newModProfile,
+    nexusInstall,
+    updatePatches,
+    setWallpaper,
+    power,
     extra
   ])
 
@@ -1384,11 +1439,37 @@ export function App() {
           ...(folderStack.length ? ([['back', 'Back']] as [GlyphButton, string][]) : [])
         ]
 
+  // video preview: resting on a game for about 2 seconds plays its clip (if it has one); moving on stops it
+  const clip = state?.settings.videoPreviews && !running ? current?.game?.video : undefined
+  useEffect(() => {
+    setPreview(null)
+    if (!clip) return
+    const t = setTimeout(() => setPreview(clip), 2000)
+    return () => clearTimeout(t)
+  }, [clip])
+
   const bgArt = !activePanel && !entry && current?.game?.background
+  // a console's own wallpaper on its column, else the user's picture (none in safe mode)
+  const wallpaper = (column && walls.consoles[column.id]) || walls.own
   return (
     <div className={`app ${idle ? 'idle' : ''} ${running ? 'running' : ''}`}>
-      <Background paused={!!running} dim={idle} />
-      {bgArt && <div className="game-bg" style={{ backgroundImage: `url("${api.mediaUrl(bgArt)}")` }} />}
+      <Background paused={!!running} dim={idle} theme={state?.settings.theme} />
+      {wallpaper && <div className="wallpaper" key={wallpaper} style={{ backgroundImage: `url("${api.mediaUrl(wallpaper)}")` }} data-testid="wallpaper" />}
+      {bgArt && !preview && <div className="game-bg" style={{ backgroundImage: `url("${api.mediaUrl(bgArt)}")` }} />}
+      {preview && !activePanel && !entry && (
+        <video
+          className="game-video"
+          key={preview}
+          src={api.mediaUrl(preview)}
+          autoPlay
+          loop
+          muted={!state?.settings.sounds}
+          data-testid="game-video"
+          ref={(v) => {
+            if (v) v.volume = 0.25 // quiet: it plays under the menu
+          }}
+        />
+      )}
       {booting ? (
         <Boot onDone={() => setBooting(false)} onSafeMode={() => setSafeMode(true)} />
       ) : (

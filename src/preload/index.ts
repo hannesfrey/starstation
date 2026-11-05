@@ -49,6 +49,14 @@ const api = {
   modProfileDelete: (gameId: string, profileId: string) => ipcRenderer.invoke('mod-profile-delete', gameId, profileId),
   storage: (fresh?: boolean) => ipcRenderer.invoke('storage', fresh),
   readMedia: (p: string) => ipcRenderer.invoke('read-media', p),
+  nxmOpen: (url: string) => ipcRenderer.invoke('nxm-open', url),
+  nexusStatus: () => ipcRenderer.invoke('nexus-status'),
+  updatePatches: () => ipcRenderer.invoke('update-patches'),
+  trophies: () => ipcRenderer.invoke('trophies'),
+  wallpapers: () => ipcRenderer.invoke('wallpapers'),
+  setWallpaper: (kind: string, file?: string | null) => ipcRenderer.invoke('wallpaper-set', kind, file),
+  power: (action: string) => ipcRenderer.invoke('power', action),
+  nexusInstall: (url: string, gameId: string) => ipcRenderer.invoke('nexus-install', url, gameId),
   couchStart: () => ipcRenderer.invoke('couch-start'),
   couchStatus: () => ipcRenderer.invoke('couch-status'),
   couchPad: () => ipcRenderer.invoke('couch-pad'),
@@ -89,7 +97,7 @@ const api = {
   quit: () => ipcRenderer.invoke('quit'),
   mediaUrl: (absPath: string) => `starstation-media://local/${encodeURIComponent(absPath)}`,
   on: (channel: string, cb: (payload: unknown) => void) => {
-    const allowed = ['notice', 'library', 'consoles', 'collections', 'screenshots', 'battery', 'package-progress', 'running', 'navigate', 'import-progress', 'emulator-progress', 'add-ask', 'overlay', 'compress-progress']
+    const allowed = ['notice', 'library', 'consoles', 'collections', 'screenshots', 'battery', 'package-progress', 'running', 'navigate', 'import-progress', 'emulator-progress', 'add-ask', 'overlay', 'compress-progress', 'nexus-request', 'trophies', 'wallpapers']
     if (!allowed.includes(channel)) throw new Error(`Unknown channel ${channel}`)
     const h = (_e: unknown, payload: unknown) => cb(payload)
     ipcRenderer.on(channel, h)

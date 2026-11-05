@@ -4,7 +4,8 @@
 //
 //   source ./env.sh && node scripts/couch-test.mjs [console …] [--secs 30]
 //
-// Windows appear on screen; Starstation and every game are muted (STARSTATION_MUTE_GAMES). It runs in its own
+// Windows appear on screen; Starstation and every game are muted (STARSTATION_MUTE_GAMES). A console where another
+// program took the focus (someone using the PC) is tried again 10 minutes later, up to 3 times. It runs in its own
 // Files folder (tools\cache\couch\Files) whose emulators / bios / games are links to the real ones, so saves
 // and settings of the real Starstation are not touched (emulator configs point back at the real folders on
 // the next normal start, as every start re-applies them). Results: tools\cache\couch\results.json + screenshots.
@@ -65,7 +66,6 @@ function screenshot(file) {
 }
 
 fs.mkdirSync(OUT, { recursive: true })
-await waitIdle() // nothing opens while someone is using the PC
 setup()
 const app = await electron.launch({
   executablePath: path.join(SOURCE, 'node_modules', 'electron', 'dist', 'electron.exe'),
@@ -82,14 +82,15 @@ try {
   const api = (fn, ...args) => page.evaluate(([f, a]) => window.starstation[f](...a), [fn, args])
   const st = await api('getState')
   const consoles = [...new Set(st.library.games.map((g) => g.console))].filter((c) => !only.length || only.includes(c))
-  for (const c of [...consoles, ...consoles]) {
-    // second round: only consoles whose first try had a problem (not refused ones, e.g. missing BIOS)
+  // up to 3 rounds: a console is tried again when another program had the focus (someone using the PC)
+  for (const c of [...consoles, ...consoles, ...consoles]) {
     const tries = results.filter((x) => x.console === c)
-    if (tries.length >= 2 || (tries[0] && (tries[0].result === 'ok' || tries[0].result?.startsWith('refused')))) continue
-    if (idleMs() < 120_000) {
-      // someone came back: get out of the way until they're gone again
+    const last = tries[tries.length - 1]
+    if (last && last.result !== 'disturbed') continue
+    if (last) {
+      console.log(`${c}: another program had the focus, trying again in 10 minutes`)
       await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().forEach((w) => w.minimize()))
-      await waitIdle()
+      await sleep(10 * 60_000)
       await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().forEach((w) => !w.webContents.getURL().includes('#overlay') && w.restore()))
       await sleep(1500)
     }
@@ -145,7 +146,9 @@ try {
       const d = await api('gameDetails', g.id)
       r.steps.resumeSaved = !!d?.resume && d.resume.savedAt >= started - 1000
     }
-    r.result = Object.values(r.steps).every(Boolean) ? 'ok' : 'problem'
+    // focus steps that failed because some other program (not the game, not Starstation) was in front: try again later
+    const others = (r.focus ?? []).filter((n) => !/^(electron|starstation|pcsx2|duckstation|rpcs3|retroarch|dolphin|azahar|xemu|xenia)/i.test(n))
+    r.result = Object.values(r.steps).every(Boolean) ? 'ok' : others.length ? 'disturbed' : 'problem'
     console.log(JSON.stringify(r))
     await sleep(2000)
   }

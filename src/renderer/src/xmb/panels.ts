@@ -2,7 +2,8 @@ import type { UpdateState, AddGamesResult, AppState, CustomConsoleForm, PackageC
 import { formatPlayTime } from './model'
 import { compareVersions } from '../../../shared/semver'
 import { whatsNewFor } from '../../../shared/whatsnew'
-import type { CouchStatus, StartNotes, StorageInfo } from '../../../shared/types'
+import type { CouchStatus, NexusRequest, StartNotes, StorageInfo, Wallpapers } from '../../../shared/types'
+import { THEMES } from '../components/Background'
 
 /** Data some panels load on demand. */
 export interface PanelExtra {
@@ -39,6 +40,11 @@ export interface PanelExtra {
   /** Compress / decompress progress per game. */
   compressing: Record<string, string>
   storage?: StorageInfo
+  /** Nexus Mods link waiting for "Which game is this for?" */
+  nexus?: NexusRequest
+  nexusStatus?: { key: boolean; registered: boolean; patches: { pcsx2?: string; rpcs3?: string } }
+  patchesBusy?: boolean
+  wallpapers?: Wallpapers
 }
 
 export interface PItem {
@@ -126,9 +132,14 @@ export interface PanelHandlers {
   modProfile: (g: Game, profileId: string) => void
   modProfileDelete: (g: Game, profileId: string) => void
   newModProfile: (g: Game) => void
+  nexusInstall: (url: string, g: Game) => void
+  updatePatches: () => void
+  setWallpaper: (kind: string, remove?: boolean) => void
+  power: (action: 'sleep' | 'shutdown') => void
 }
 
 const onOff = (b: boolean) => (b ? 'On' : 'Off')
+const running = (s: AppState) => !!s.running
 const LEVELS: GraphicsLevel[] = ['original', 'enhanced', 'max']
 export const LEVEL_LABEL: Record<GraphicsLevel, string> = { original: 'Original', enhanced: 'Enhanced', max: 'Max' }
 const nextLevel = (l: GraphicsLevel) => LEVELS[(LEVELS.indexOf(l) + 1) % LEVELS.length]
@@ -898,7 +909,7 @@ export function buildPanel(id: string, arg: string | undefined, state: AppState,
           value: d ? `${d.backups.length}` : undefined,
           run: () => (h.openPanel('backups', g.id), 'keep')
         })
-      if (d?.mods.supported ?? true)
+      // always: patch files and mods installed by hand work for every console
         items.push({
           key: 'mods',
           label: 'Mods',
@@ -1069,7 +1080,12 @@ export function buildPanel(id: string, arg: string | undefined, state: AppState,
       if (v.mods.length)
         items.push({ key: 'profile', label: 'Mod profile', value: v.profiles.find((p) => p.id === v.active)?.name ?? 'Custom', run: () => (h.openPanel('mod-profiles', g.id), 'keep') })
       for (const m of v.mods)
-        items.push({ key: `mod-${m.id}`, label: m.name, value: m.enabled ? 'On' : 'Off', run: () => (h.openPanel('mod', `${g.id}|${m.id}`), 'keep') })
+        items.push({
+          key: `mod-${m.id}`,
+          label: m.name,
+          value: m.manual ? 'by hand' : m.enabled ? 'On' : 'Off',
+          run: () => (h.openPanel(m.manual ? 'mod-manual' : 'mod', `${g.id}|${m.id}`), 'keep')
+        })
       if (!v.mods.length && !v.reason) items.push({ key: 'none', label: 'No mods yet. Add a file or folder, or drag one onto this window.', info: true })
       // patch files (.ips .bps .ppf .xdelta) work for every game
       items.push({ key: 'add-file', label: 'Add mod from file…', value: v.targets.length ? undefined : 'patch files: .ips .bps .ppf .xdelta', run: () => (h.modAddDialog(g, false), 'keep') })
@@ -1079,6 +1095,132 @@ export function buildPanel(id: string, arg: string | undefined, state: AppState,
       }
       items.push({ key: 'open', label: 'Open mods folder', run: () => h.command('open-folder', `mods:${g.console}`) })
       return { id, title: `Mods · ${g.title}`, items }
+    }
+    case 'nexus': {
+      const n = x.nexus
+      if (!n) return null
+      // games whose names share the most words with the Nexus game come first
+      const words = (s: string) => new Set(s.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter((w) => w.length > 1))
+      const want = words(n.gameName)
+      const ranked = state.library.games
+        .map((g) => ({ g, n: [...words(g.title)].filter((w) => want.has(w)).length }))
+        .sort((a, b) => b.n - a.n || a.g.title.localeCompare(b.g.title))
+        .slice(0, 15)
+      return {
+        id,
+        title: `Nexus Mods · ${n.modName}`,
+        image: n.picture,
+        items: [
+          ...(n.summary ? [{ key: 'sum', label: n.summary, info: true }] : []),
+          { key: 'from', label: `On Nexus Mods for: ${n.gameName}${n.fileName ? ` · ${n.fileName}` : ''}`, info: true },
+          { key: 'ask', label: 'Which game is this mod for?', info: true },
+          ...ranked.map(({ g }) => ({ key: `nx-${g.id}`, label: g.title, value: state.consoles.find((c) => c.id === g.console)?.short, run: () => h.nexusInstall(n.url, g) }))
+        ]
+      }
+    }
+    case 'display': {
+      const keys = Object.keys(THEMES)
+      const w = x.wallpapers
+      return {
+        id,
+        title: 'Theme & display',
+        items: [
+          ...(state.info.safeMode ? [{ key: 'safe', label: 'Safe mode: themes and pictures are off until you leave it.', info: true }] : []),
+          { key: 'theme', label: 'Theme', value: THEMES[s.theme]?.label ?? s.theme, run: () => (h.setSetting('theme', keys[(keys.indexOf(s.theme) + 1) % keys.length]), 'keep') },
+          { key: 'tv', label: 'TV mode', value: s.tvMode ? 'On: everything bigger' : 'Off', run: () => (h.setSetting('tvMode', !s.tvMode), 'keep') },
+          { key: 'video', label: 'Video previews', value: s.videoPreviews ? 'On (after 2 s on a game)' : 'Off', run: () => (h.setSetting('videoPreviews', !s.videoPreviews), 'keep') },
+          { key: 'own', label: 'Background picture', value: w?.own ? 'your picture' : 'none', run: () => (h.setWallpaper('own'), 'keep') },
+          ...(w?.own ? [{ key: 'own-off', label: 'Remove background picture', run: () => (h.setWallpaper('own', true), 'keep' as const) }] : []),
+          { key: 'consoles', label: 'Wallpaper per console…', run: () => (h.openPanel('wallpapers'), 'keep') }
+        ]
+      }
+    }
+    case 'wallpapers': {
+      const w = x.wallpapers
+      const withGames = state.consoles.filter((c) => c.gameCount > 0)
+      return {
+        id,
+        title: 'Wallpaper per console',
+        items: [
+          { key: 'what', label: 'Shown on that console’s column. Pick a picture, or press again to remove it.', info: true },
+          ...withGames.map((c) => ({
+            key: `wp-${c.id}`,
+            label: c.name,
+            value: w?.consoles[c.id] ? 'your picture (✕ to remove)' : 'none',
+            run: () => (h.setWallpaper(`console:${c.id}`, !!w?.consoles[c.id]), 'keep' as const)
+          }))
+        ]
+      }
+    }
+    case 'power':
+      return {
+        id,
+        title: 'Power',
+        items: [
+          { key: 'sleep', label: 'Sleep', value: 'the PC sleeps; a key or the power button wakes it', run: () => h.power('sleep') },
+          { key: 'off', label: 'Turn off PC', run: () => (h.openPanel('power-off'), 'keep') },
+          { key: 'quit', label: 'Quit Starstation', run: () => h.command('quit') }
+        ]
+      }
+    case 'power-off':
+      return {
+        id,
+        title: 'Turn off the PC?',
+        items: [
+          { key: 'what', label: running(state) ? 'A game is still running: close it first.' : 'Windows shuts down right away.', info: true },
+          { key: 'go', label: 'Turn off PC', disabled: running(state), run: () => h.power('shutdown') },
+          { key: 'no', label: 'Cancel', run: () => undefined }
+        ]
+      }
+    case 'mod-sources': {
+      const s = x.nexusStatus
+      return {
+        id,
+        title: 'Mod sources',
+        items: [
+          { key: 'gb', label: 'GameBanana: built in — game options → Mods → Browse GameBanana', info: true },
+          {
+            key: 'nx',
+            label: s?.key ? 'Nexus Mods: ready' : 'Nexus Mods: needs your free API key',
+            value: s?.key ? (s.registered ? '“Download with mod manager” opens Starstation' : 'links open the installed Starstation') : undefined,
+            info: true
+          },
+          ...(s?.key
+            ? []
+            : [
+                { key: 'nx1', label: 'nexusmods.com → your account → API keys: copy the personal key,', info: true },
+                { key: 'nx2', label: 'then put it into secrets.json under "nexus" → "apiKey".', info: true }
+              ]),
+          { key: 'site', label: 'Open nexusmods.com', run: () => h.command('open-url', 'https://www.nexusmods.com') },
+          {
+            key: 'patches',
+            label: x.patchesBusy ? 'Updating patches…' : 'Update patches',
+            value: `widescreen, 60 fps and fixes for PCSX2 + RPCS3${s?.patches.pcsx2 || s?.patches.rpcs3 ? ` · last ${formatDate(Date.parse(s.patches.pcsx2 ?? s.patches.rpcs3 ?? ''))}` : ''}`,
+            disabled: !!x.patchesBusy,
+            run: () => (h.updatePatches(), 'keep')
+          },
+          { key: 'dolphin', label: 'Dolphin’s own game patches come with Dolphin updates.', info: true },
+          { key: 'secrets', label: 'Open secrets.json', run: () => h.command('open-secrets') }
+        ]
+      }
+    }
+    case 'mod-manual': {
+      const [gid, mid] = (arg ?? '').split('|')
+      const g = state.library.games.find((y) => y.id === gid)
+      const m = g && x.mods[g.id]?.mods.find((y) => y.id === mid)
+      if (!g || !m?.manual) return null
+      const emu = state.consoles.find((c) => c.id === g.console)?.emulatorId
+      return {
+        id,
+        title: `${m.name} · install by hand`,
+        items: [
+          { key: 'why', label: 'Starstation can’t tell where this mod goes. Its own instructions:', info: true },
+          ...m.manual.lines.map((l, i) => ({ key: `l${i}`, label: l, info: true })),
+          { key: 'files', label: 'Open the mod’s files', run: () => h.command('open-path', m.manual!.folder) },
+          ...(emu ? [{ key: 'target', label: 'Open the emulator folder', run: () => h.command('open-folder', `emulators:${emu}`) }] : []),
+          { key: 'del', label: 'Delete this mod', run: () => h.modDelete(g, m.id) }
+        ]
+      }
     }
     case 'mod-profiles': {
       const g = state.library.games.find((y) => y.id === arg)
@@ -1146,6 +1288,7 @@ export function buildPanel(id: string, arg: string | undefined, state: AppState,
         items: [
           { key: 'msg', label: `Starstation isn't sure what kind of mod "${q.name}" is.`, info: true },
           ...q.targets.map((t) => ({ key: `t-${t.id}`, label: t.label, run: () => (h.modPlace(q.gameId, q.pending, t.id), 'keep' as const) })),
+          { key: 'manual', label: 'None of these: keep it and show its instructions', run: () => (h.modPlace(q.gameId, q.pending, 'manual'), 'keep' as const) },
           { key: 'cancel', label: 'Cancel', run: () => (h.modPlace(q.gameId, q.pending, ''), 'keep' as const) }
         ]
       }

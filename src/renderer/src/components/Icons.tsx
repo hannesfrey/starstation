@@ -3,6 +3,18 @@ import type { ReactElement } from 'react'
 /** Original line icons (no console logos). 64×64 viewBox, white strokes. */
 const S = { fill: 'none', stroke: 'currentColor', strokeWidth: 2.6, strokeLinecap: 'round', strokeLinejoin: 'round' } as const
 
+/** A trophy cup filled with its tier's colour (our own drawing). */
+function TrophyCup({ fill, glow }: { fill: string; glow?: boolean }) {
+  return (
+    <g>
+      {glow && <circle cx="32" cy="24" r="22" fill={fill} opacity={0.18} />}
+      <path d="M20 10h24v14a12 12 0 0 1-24 0z" fill={fill} stroke={fill} strokeWidth={2} strokeLinejoin="round" />
+      <path d="M20 16h-8c0 8 4 12 8 12M44 16h8c0 8-4 12-8 12M32 36v10M22 54h20" fill="none" stroke={fill} strokeWidth={2.6} strokeLinecap="round" />
+      <path d="M26 46h12v8H26z" fill={fill} />
+    </g>
+  )
+}
+
 const shapes: Record<string, ReactElement> = {
   settings: (
     <g {...S}>
@@ -149,6 +161,16 @@ const shapes: Record<string, ReactElement> = {
   ),
   trophy: (
     <g {...S}>
+      <path d="M20 10h24v14a12 12 0 0 1-24 0zM20 16h-8c0 8 4 12 8 12M44 16h8c0 8-4 12-8 12M32 36v10M22 54h20M26 46h12v8H26z" />
+    </g>
+  ),
+  // trophies by tier: the same cup, filled in its own metal colour (locked: outline only, faint)
+  'trophy-bronze': <TrophyCup fill="#c98a52" />,
+  'trophy-silver': <TrophyCup fill="#cfd6df" />,
+  'trophy-gold': <TrophyCup fill="#f2c94c" />,
+  'trophy-platinum': <TrophyCup fill="#bfe6ff" glow />,
+  'trophy-locked': (
+    <g {...S} opacity={0.35}>
       <path d="M20 10h24v14a12 12 0 0 1-24 0zM20 16h-8c0 8 4 12 8 12M44 16h8c0 8-4 12-8 12M32 36v10M22 54h20M26 46h12v8H26z" />
     </g>
   ),

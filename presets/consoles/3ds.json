@@ -71,7 +71,11 @@
           "Shortcuts\\Main%20Window\\Capture%20Screenshot\\KeySeq\\default": "false",
           "Shortcuts\\Main%20Window\\Capture%20Screenshot\\KeySeq": "F12",
           "pauseWhenInBackground": "true",
-          "pauseWhenInBackground\\default": "false"
+          "pauseWhenInBackground\\default": "false",
+          "confirmClose": "false",
+          "confirmClose\\default": "false",
+          "saveStateWarning": "false",
+          "saveStateWarning\\default": "false"
         }
       },
       "spacing": "=",
