@@ -4,8 +4,30 @@ Read SPEC.md first. This file tracks where the build stands and every small deci
 
 ## Current state
 
-- **Phase:** All 12 steps done; v1.0.0 released 2026-11-02. **Playable milestone reached 2026-11-02:** Hannes's setup is imported and Midnight Club 3 boots from Starstation (PS2).
-- **Next step:** Hannes adds games via `Files\games\New downloads` and tests with the checklist at the end of this file; fixes and new presets go into 1.0.x releases (`npm run release` needs GH_TOKEN; create/push the tag first).
+- **Phase:** v1 done (v1.0.0 released 2026-11-02, fixes after it on main). **v2 build started 2026-11-05** from `SPEC-v2.md` — see "v2" below.
+- **Next step:** v2 step 2 — Safe updates (SPEC-v2 Section B) + safe mode (Section G). Step 1 (v1 test notes) is empty: Hannes said "Nothing broke".
+
+## v2 (SPEC-v2.md)
+
+### Decisions from Hannes at the v2 kickoff (2026-11-05)
+
+- **v1 test notes:** nothing broke → step 1 has nothing to fix.
+- **Allowed outside Files\ (each only when needed, always logged):** VC++/DirectX runtimes installed by the installer; a controller translation driver only for emulators that fail the controller check; the `nxm://` link handler for Nexus (HKCU); changing Windows audio output / display mode / Bluetooth pairing from Starstation's own menu when the user picks it.
+- **Visible tests:** couch tests may show game windows at any time, game sound muted.
+- **Install:** install the first v2 beta on Hannes's PC (Desktop\Starstation) and point his shortcut at it; Files\ stays as it is.
+- **Hannes will create (not blocking):** ScreenScraper account + developer API credentials (videos, manuals), Nexus Mods account + personal API key → `Files\config\secrets.json`.
+- **My choices:** "Release to everyone" uses the GitHub login already on this PC (`tools\gh-config`); beta versions are `2.0.0-beta.N`; existing saves stay where they are and become Hannes's first profile (nothing moved); ScreenScraper dev credentials go into the installer at build time, never into the repo. Hannes's controller is a DualShock 3 through the SCP driver (shows as an Xbox 360 pad), so on his PC no translation driver is expected.
+
+### v2 steps
+
+- [x] 1. Fix v1 test notes — none.
+- [ ] 2. Safe updates (B) + safe mode (G)
+- [ ] 3. Couch-ready core (A) — milestone: "Couch-ready version on beta"
+- [ ] 4. Library & storage (D)
+- [ ] 5. Mods (E)
+- [ ] 6. Console feel (C)
+- [ ] 7. Sharing (F) + rest of G (system settings, profiles, accessibility)
+- [ ] 8. Release v2 to beta + final report
 
 ## How to work on it
 
