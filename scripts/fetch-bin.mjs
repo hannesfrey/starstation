@@ -37,6 +37,14 @@ const files = [
     unzip: { 'artifacts/extract-xiso.exe': 'extract-xiso.exe', 'artifacts/LICENSE.TXT': 'extract-xiso-LICENSE.txt' }
   },
   {
+    // xdelta3 3.2.2 (Apache-2.0) to apply .xdelta / .vcdiff patch mods (SPEC-v2 E) — https://github.com/jmacd/xdelta/releases
+    name: 'xdelta3-3.2.2-windows-x86_64.zip',
+    url: 'https://github.com/jmacd/xdelta/releases/download/v3.2.2/xdelta3-3.2.2-windows-x86_64.zip',
+    sha256: 'd48f7651d86b78fdca397057b46601f89131f37219675df736db70af44ec3379',
+    local: [path.resolve(import.meta.dirname, '..', 'tools', 'cache', 'xd', 'x.zip')],
+    unzip: { 'xdelta3-3.2.2-windows-x86_64/xdelta3.exe': 'xdelta3.exe', 'xdelta3-3.2.2-windows-x86_64/README.md': 'xdelta3-README.md' }
+  },
+  {
     // chdman from MAME 0.289 (official release, GPL-2.0+) to compress PS1/PS2 games to CHD (SPEC-v2 D).
     // The release is a self-extracting 7z: only chdman.exe and the license are taken out of it.
     name: 'mame0289b_x64.exe',

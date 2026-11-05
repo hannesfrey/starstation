@@ -4,7 +4,7 @@ import type { BrowserWindow } from 'electron'
 import { getConsole, getEmulator, emulatorDir, emulatorExe, fill } from './presets'
 import { discardSessionResume, gameVars, keepPreviousResume, resumeLaunch, snapshotResume } from './gamedata'
 import { applyGameOptions, optionVars } from './gameoptions'
-import { applyModSettings, modVars } from './mods'
+import { applyModSettings, modVars, patchedLaunch } from './mods'
 import { suspendModsFor } from './safemode'
 import { raVars } from './retroach'
 import { applyStep } from './emuconfig'
@@ -90,7 +90,9 @@ export function buildCommand(gameId: string, extraArgs: string[] = [], resumeArg
     }
   if (!fs.existsSync(game.launchPath))
     return { ok: false, error: 'The game file was moved or deleted.', fix: { label: 'Rescan library', command: 'rescan' } }
-  const v = gameVars(game)
+  // a patch mod that is on: its patched copy starts instead (same game, same saves)
+  const patched = patchedLaunch(game)
+  const v = gameVars(game, patched ? { launch: patched } : {})
   const base = c.launch.args.map((a) => fill(a, v))
   base.splice(resumeAt, 0, ...resumeArgs)
   const args = [...base, ...extraArgs].filter((a) => a !== '')

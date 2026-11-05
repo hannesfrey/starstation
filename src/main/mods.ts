@@ -8,6 +8,8 @@ import { applyStep } from './emuconfig'
 import { artKey } from './library/library'
 import { backupGame, fillStrict, gameVars } from './gamedata'
 import { extract } from './emulators'
+import { makePatchedCopy, patchKind } from './patchmods'
+import { PatchError } from './formats/patch'
 import { logger } from './log'
 import type { Game, ModInfo } from '../shared/types'
 
@@ -30,9 +32,11 @@ interface ModEntry {
   /** Paths inside the mod folder, and where each one goes inside the target folder. */
   files: string[]
   placement: string[]
-  source: { type: 'file' | 'gamebanana'; ref?: string }
+  source: { type: 'file' | 'gamebanana' | 'nexus'; ref?: string }
   image?: string
   addedAt: number
+  /** Patch-file mod: the patched copy of the game that starts while the mod is on. */
+  patch?: { launch: string; kind: string }
 }
 
 interface ModState {
@@ -76,7 +80,7 @@ export function listMods(g: Game): ModInfo[] {
     id: m.id,
     name: m.name,
     description: m.description,
-    target: targetsOf(c).find((t) => t.id === m.target)?.label ?? m.target,
+    target: m.patch ? 'Patched copy of the game' : (targetsOf(c).find((t) => t.id === m.target)?.label ?? m.target),
     enabled: m.enabled,
     files: m.files.length,
     source: m.source.type,
@@ -139,8 +143,9 @@ export async function addMod(
   src: string,
   opts: { name?: string; target?: string; description?: string; image?: string; source?: ModEntry['source'] } = {}
 ): Promise<AddModResult> {
+  // a patch file (.ips / .bps / .ppf / .xdelta): a patched copy of the game, for every console
+  if (!fs.statSync(src).isDirectory() && patchKind(src)) return addPatchMod(g, src, opts)
   const support = modSupport(g)
-  if (!support.targets.length) return { ok: false, error: support.reason ?? 'No mod support.' }
   const root = modsRoot(g)
   const pending = `.incoming-${Date.now()}`
   const tmp = path.join(root, pending)
@@ -154,6 +159,19 @@ export async function addMod(
   } catch (e) {
     await fsp.rm(tmp, { recursive: true, force: true })
     return { ok: false, error: ext === '.rar' ? 'This RAR file could not be unpacked. Unpack it yourself and add the folder.' : (e as Error).message }
+  }
+  // an archive with just a patch (and maybe a readme) in it
+  const inside = walk(tmp)
+  const patches = inside.filter((f) => patchKind(path.join(tmp, f)))
+  const rest = inside.filter((f) => !patches.includes(f) && !/\.(txt|md|nfo|pdf|png|jpe?g|url|htm|html)$/i.test(f))
+  if (patches.length === 1 && !rest.length) {
+    const r = await addPatchMod(g, path.join(tmp, patches[0]), { ...opts, name: opts.name ?? name })
+    await fsp.rm(tmp, { recursive: true, force: true })
+    return r
+  }
+  if (!support.targets.length) {
+    await fsp.rm(tmp, { recursive: true, force: true })
+    return { ok: false, error: support.reason ?? 'No mod support.' }
   }
   writeJson(path.join(tmp, '.pending.json'), { name, ...opts })
   return finishAdd(g, pending, opts.target)
@@ -242,6 +260,18 @@ export async function setModEnabled(g: Game, id: string, on: boolean, winner?: '
   const st = load(g)
   const m = st.mods.find((x) => x.id === id)
   if (!m) return { ok: false, error: 'Mod not found.' }
+  if (m.patch) {
+    // a patched copy: only one can start at a time
+    if (on && !fs.existsSync(m.patch.launch)) return { ok: false, error: 'The patched copy is missing. Add the patch again.' }
+    if (on && !m.everEnabled) {
+      await backupGame(g, 'before-mod').catch((e) => log.warn('backup before mod failed', e))
+      m.everEnabled = true
+    }
+    for (const x of st.mods) if (x.patch) x.enabled = on && x.id === id ? true : x.id === id ? false : on ? false : x.enabled
+    save(g, st)
+    log.info(`${g.id}: patch mod ${id} ${on ? 'on' : 'off'}`)
+    return { ok: true, skipped: 0 }
+  }
   const t = targetsOf(getConsole(g.console)).find((x) => x.id === m.target)
   const base = t && targetDir(g, t)
   if (!t || !base) return { ok: false, error: "Starstation can't tell where this mod goes for this game." }
@@ -364,6 +394,53 @@ export function setGamebananaGame(g: Game, id: number): void {
   const st = load(g)
   st.gamebananaGame = id
   save(g, st)
+}
+
+// ---------- patch-file mods (SPEC-v2 E) ----------
+
+async function addPatchMod(g: Game, patchFile: string, opts: { name?: string; description?: string; source?: ModEntry['source'] }): Promise<AddModResult> {
+  const root = modsRoot(g)
+  const st = load(g)
+  const name = opts.name ?? path.basename(patchFile, path.extname(patchFile))
+  let id = name.replace(/[^\w.-]+/g, '_').slice(0, 40) || 'patch'
+  while (st.mods.some((m) => m.id === id) || fs.existsSync(path.join(root, id))) id += '_'
+  const dir = path.join(root, id)
+  const work = path.join(root, `.patch-${Date.now()}`)
+  await fsp.mkdir(work, { recursive: true })
+  try {
+    await fsp.mkdir(dir, { recursive: true })
+    await fsp.copyFile(patchFile, path.join(dir, path.basename(patchFile)))
+    const launch = await makePatchedCopy(g, patchFile, path.join(dir, 'patched'), work)
+    const entry: ModEntry = {
+      id,
+      name,
+      description: opts.description,
+      target: 'patch',
+      enabled: false,
+      files: [],
+      placement: [],
+      source: opts.source ?? { type: 'file' },
+      addedAt: Date.now(),
+      patch: { launch, kind: patchKind(patchFile) ?? 'patch' }
+    }
+    const now = load(g)
+    now.mods.push(entry)
+    save(g, now)
+    log.info(`${g.id}: added patch mod ${id}`)
+    return { ok: true, mod: listMods(g).find((m) => m.id === id)! }
+  } catch (e) {
+    await fsp.rm(dir, { recursive: true, force: true })
+    log.warn(`${g.id}: patch failed`, e)
+    return { ok: false, error: e instanceof PatchError ? `The patch can't be used: ${e.message}.` : (e as Error).message }
+  } finally {
+    await fsp.rm(work, { recursive: true, force: true })
+  }
+}
+
+/** The file to start instead of the game while a patch mod is on (null = the game itself). */
+export function patchedLaunch(g: Game): string | null {
+  const m = load(g).mods.find((x) => x.patch && x.enabled)
+  return m?.patch && fs.existsSync(m.patch.launch) ? m.patch.launch : null
 }
 
 // ---------- mod profiles (SPEC-v2 E) ----------

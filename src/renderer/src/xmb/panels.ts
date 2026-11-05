@@ -1065,14 +1065,15 @@ export function buildPanel(id: string, arg: string | undefined, state: AppState,
       const v = x.mods[g.id]
       if (!v) return { id, title: 'Mods', items: [{ key: 'loading', label: 'Loading…', info: true }] }
       const items: PItem[] = []
-      if (v.reason) items.push({ key: 'reason', label: v.reason, info: true })
+      if (v.reason) items.push({ key: 'reason', label: `${v.reason} Patch files still work.`, info: true })
       if (v.mods.length)
         items.push({ key: 'profile', label: 'Mod profile', value: v.profiles.find((p) => p.id === v.active)?.name ?? 'Custom', run: () => (h.openPanel('mod-profiles', g.id), 'keep') })
       for (const m of v.mods)
         items.push({ key: `mod-${m.id}`, label: m.name, value: m.enabled ? 'On' : 'Off', run: () => (h.openPanel('mod', `${g.id}|${m.id}`), 'keep') })
       if (!v.mods.length && !v.reason) items.push({ key: 'none', label: 'No mods yet. Add a file or folder, or drag one onto this window.', info: true })
+      // patch files (.ips .bps .ppf .xdelta) work for every game
+      items.push({ key: 'add-file', label: 'Add mod from file…', value: v.targets.length ? undefined : 'patch files: .ips .bps .ppf .xdelta', run: () => (h.modAddDialog(g, false), 'keep') })
       if (v.targets.length) {
-        items.push({ key: 'add-file', label: 'Add mod from file…', run: () => (h.modAddDialog(g, false), 'keep') })
         items.push({ key: 'add-folder', label: 'Add mod folder…', run: () => (h.modAddDialog(g, true), 'keep') })
         if (v.gamebanana) items.push({ key: 'gb', label: 'Browse GameBanana…', run: () => (h.gbOpen(g), 'keep') })
       }

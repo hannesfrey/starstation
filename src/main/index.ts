@@ -614,7 +614,7 @@ function registerIpc(): void {
     const pick = await dialog.showOpenDialog(win!, {
       title: folder ? 'Choose a mod folder' : 'Choose a mod file',
       properties: [folder ? 'openDirectory' : 'openFile'],
-      ...(folder ? {} : { filters: [{ name: 'Mods', extensions: ['zip', '7z', 'rar', 'pnach', 'png', 'dds', 'ips'] }, { name: 'All files', extensions: ['*'] }] })
+      ...(folder ? {} : { filters: [{ name: 'Mods', extensions: ['zip', '7z', 'rar', 'pnach', 'png', 'dds', 'ips', 'bps', 'ppf', 'xdelta', 'vcdiff'] }, { name: 'All files', extensions: ['*'] }] })
     })
     if (pick.canceled || !pick.filePaths[0]) return null
     return addMod(g, pick.filePaths[0]).then(modAdded(g))

@@ -352,7 +352,7 @@ export interface ModInfo {
   target: string
   enabled: boolean
   files: number
-  source: 'file' | 'gamebanana'
+  source: 'file' | 'gamebanana' | 'nexus'
   image?: string
 }
 
