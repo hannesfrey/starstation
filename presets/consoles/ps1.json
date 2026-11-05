@@ -162,6 +162,35 @@
             "{padshot}",
             "{padshare}"
           ]
+        },
+        "Pad2": {
+          "Type": "AnalogController",
+          "Up": "{pad2}/DPadUp",
+          "Right": "{pad2}/DPadRight",
+          "Down": "{pad2}/DPadDown",
+          "Left": "{pad2}/DPadLeft",
+          "Triangle": "{pad2}/Y",
+          "Circle": "{pad2}/B",
+          "Cross": "{pad2}/A",
+          "Square": "{pad2}/X",
+          "Select": "{pad2}/Back",
+          "Start": "{pad2}/Start",
+          "L1": "{pad2}/LeftShoulder",
+          "L2": "{pad2}/+LeftTrigger",
+          "R1": "{pad2}/RightShoulder",
+          "R2": "{pad2}/+RightTrigger",
+          "L3": "{pad2}/LeftStick",
+          "R3": "{pad2}/RightStick",
+          "LUp": "{pad2}/-LeftY",
+          "LRight": "{pad2}/+LeftX",
+          "LDown": "{pad2}/+LeftY",
+          "LLeft": "{pad2}/-LeftX",
+          "RUp": "{pad2}/-RightY",
+          "RRight": "{pad2}/+RightX",
+          "RDown": "{pad2}/+RightY",
+          "RLeft": "{pad2}/-RightX",
+          "LargeMotor": "{pad2}/LargeMotor",
+          "SmallMotor": "{pad2}/SmallMotor"
         }
       }
     }

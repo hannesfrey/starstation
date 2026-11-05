@@ -41,7 +41,7 @@ export function gameVars(g: Game, extra: Record<string, string> = {}): Record<st
  */
 export function fillStrict(template: string, v: Record<string, string>): string | null {
   let ok = true
-  const out = template.replace(/\{([a-z]+)(:\/)?\}/g, (_m, key: string, fwd?: string) => {
+  const out = template.replace(/\{([a-zA-Z][a-zA-Z0-9]*)(:\/)?\}/g, (_m, key: string, fwd?: string) => {
     const val = v[key]
     if (!val) {
       ok = false

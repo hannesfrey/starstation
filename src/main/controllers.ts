@@ -1,11 +1,13 @@
 import { dir } from './paths'
 import { readJson, writeJson } from './store'
 import { logger } from './log'
+import type { PlayerPad } from '../shared/types'
 
 /**
- * Which controller API the emulators should listen to for player 1.
+ * Which controller API the emulators listen to, and which pad is which player.
  * XInput covers Xbox pads and PlayStation pads behind a driver (DS3 via SCP/DsHidMini, DS4Windows).
  * Without any XInput pad, SDL is used (DualShock 4 / DualSense / Switch Pro plugged in directly).
+ * Every emulator reads one of the two directly, so PlayStation pads need no translation driver (SPEC-v2 A).
  */
 
 const log = logger('controllers')
@@ -16,6 +18,7 @@ interface Known {
   pads: string[]
   updatedAt?: string
 }
+
 
 const IGNORED = /wheel|g29|g920|g923|driving|racing|pedal|throttle|hotas|flight|joystick|rudder|shifter/i
 
@@ -34,16 +37,55 @@ export function reportPads(ids: string[]): void {
   log.info(`controllers: ${api} (${pads.join(', ')})`)
 }
 
-/** Placeholders for controller bindings in presets. */
-export function padVars(): Record<string, string> {
-  const sdl = known().api === 'sdl'
-  return {
-    // PCSX2 / DuckStation device prefix
-    pad: sdl ? 'SDL-0' : 'XInput-0',
+/** The name SDL (inside Dolphin) gives a PlayStation pad, from the Gamepad API id's vendor/product. */
+export function sdlName(id = ''): string {
+  const m = /Vendor:\s*([0-9a-f]{4})\s*Product:\s*([0-9a-f]{4})/i.exec(id)
+  const vp = m ? `${m[1]}:${m[2]}`.toLowerCase() : ''
+  if (/^054c:(05c4|09cc|0ba0)$/.test(vp)) return 'PS4 Controller'
+  if (/^054c:(0ce6|0df2)$/.test(vp)) return 'PS5 Controller'
+  if (/^054c:0268$/.test(vp)) return 'PS3 Controller'
+  if (/^057e:2009$/.test(vp)) return 'Nintendo Switch Pro Controller'
+  return 'PS4 Controller'
+}
+
+/**
+ * Placeholders for controller bindings in presets, for up to 4 players.
+ * Without a chosen order, player N uses device N-1 of the main API.
+ */
+export function padVars(order?: PlayerPad[]): Record<string, string> {
+  const k = known()
+  const sdl = k.api === 'sdl'
+  const players: PlayerPad[] = [0, 1, 2, 3].map((i) => order?.[i] ?? { api: k.api, index: i, id: sdl ? k.pads[i] : undefined })
+  const v: Record<string, string> = {
     // extra screenshot buttons (only SDL can see the PlayStation touchpad / Xbox Share button)
     padshot: sdl ? 'SDL-0/Touchpad' : '',
     padshare: sdl ? 'SDL-0/Misc1' : '',
     // RetroArch joypad driver
-    rajoypad: sdl ? 'sdl2' : 'xinput'
+    rajoypad: sdl ? 'sdl2' : 'xinput',
+    // Dolphin: face buttons are named by position in SDL (S = ✕ / A)
+    dolA: sdl ? '`Button S`' : '`Button A`',
+    dolB: sdl ? '`Button E`' : '`Button B`',
+    dolX: sdl ? '`Button W`' : '`Button X`',
+    dolY: sdl ? '`Button N`' : '`Button Y`',
+    players: String(Math.max(1, order?.length ?? 1))
   }
+  players.forEach((p, i) => {
+    const n = i === 0 ? '' : String(i + 1)
+    const has = !order || i < order.length
+    // PCSX2 / DuckStation device prefix
+    v[`pad${n}`] = `${p.api === 'sdl' ? 'SDL' : 'XInput'}-${p.index}`
+    // RetroArch device index
+    v[`rapad${i + 1}`] = String(p.index)
+    // Dolphin device
+    v[`dolpad${i + 1}`] = p.api === 'sdl' ? `SDL/${p.index}/${sdlName(p.id)}` : `XInput/${p.index}/Gamepad`
+    // Dolphin GameCube port: 6 = standard controller, 0 = nothing plugged in (port 1 always has one)
+    v[`gcport${i + 1}`] = i === 0 || (order && has) ? '6' : '0'
+    // Dolphin Wii Remote: 1 = emulated remote on, 0 = off
+    v[`wiisrc${i + 1}`] = i === 0 || (order && has) ? '1' : '0'
+    // RPCS3: its own DualShock 4 / DualSense handlers for PlayStation pads, XInput otherwise
+    const ps5 = p.api === 'sdl' && sdlName(p.id) === 'PS5 Controller'
+    v[`ps3handler${i + 1}`] = p.api === 'sdl' ? (ps5 ? 'DualSense' : 'DualShock 4') : 'XInput'
+    v[`ps3device${i + 1}`] = p.api === 'sdl' ? `${ps5 ? 'DualSense' : 'DS4'} Pad #${p.index + 1}` : `XInput Pad #${p.index + 1}`
+  })
+  return v
 }

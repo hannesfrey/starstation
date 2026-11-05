@@ -27,6 +27,11 @@ export type ConfigStep =
   | { type: 'write'; file: string; lines: string[]; ifMissing?: boolean }
   /** Folder link (junction) for emulators whose saves can't be redirected. */
   | { type: 'link'; path: string; target: string }
+  /**
+   * RPCS3 input config (YAML): "Player N Input:" → Handler + Device for players 1..upTo.
+   * A player whose handler changes loses its old button list, so RPCS3 uses its defaults for the new pad type.
+   */
+  | { type: 'yaml-players'; file: string; players: { Handler: string; Device: string }[]; upTo: string }
 
 export interface BiosFile {
   label: string
@@ -249,7 +254,7 @@ export function vars(c: ConsolePreset, extra: Record<string, string> = {}): Reco
 
 /** Replace {name} placeholders. Paths keep Windows separators unless the key ends with ":/" (forward). */
 export function fill(template: string, v: Record<string, string>): string {
-  return template.replace(/\{([a-z]+)(:\/)?\}/g, (m, key: string, fwd?: string) => {
+  return template.replace(/\{([a-zA-Z][a-zA-Z0-9]*)(:\/)?\}/g, (m, key: string, fwd?: string) => {
     if (!(key in v)) return m
     if (!v[key]) return ''
     // only real paths are normalized (bindings like "SDL-0/Touchpad" keep their slash)

@@ -107,3 +107,35 @@ export function setKvValues(text: string, set: Record<string, string>, sep: stri
 function escapeRe(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
+
+/**
+ * RPCS3's input config: set "Handler" and "Device" under "Player N Input:" (top-level YAML blocks).
+ * Same handler: only the device line changes (the user's button list stays).
+ * Other handler: the block becomes just Handler + Device; RPCS3 fills in that pad type's default buttons.
+ */
+export function setYamlPlayers(text: string, players: { Handler: string; Device: string }[]): string {
+  const eol = text.includes('\r\n') ? '\r\n' : '\n'
+  const lines = text.length ? text.split(/\r?\n/) : []
+  if (lines.length && lines[lines.length - 1] === '') lines.pop()
+  players.forEach((pl, i) => {
+    const head = `Player ${i + 1} Input:`
+    const start = lines.findIndex((l) => l.trimEnd() === head)
+    const block = [head, `  Handler: ${pl.Handler}`, `  Device: ${pl.Device}`]
+    if (start < 0) {
+      lines.push(...block)
+      return
+    }
+    let end = start + 1
+    while (end < lines.length && (lines[end].startsWith(' ') || lines[end] === '')) end++
+    const handlerAt = lines.slice(start + 1, end).findIndex((l) => /^ {2}Handler:/.test(l))
+    const sameHandler = handlerAt >= 0 && lines[start + 1 + handlerAt].replace(/^ {2}Handler:\s*/, '').trim() === pl.Handler
+    if (!sameHandler) {
+      lines.splice(start, end - start, ...block)
+      return
+    }
+    const deviceAt = lines.slice(start + 1, end).findIndex((l) => /^ {2}Device:/.test(l))
+    if (deviceAt >= 0) lines[start + 1 + deviceAt] = `  Device: ${pl.Device}`
+    else lines.splice(start + 2 + handlerAt, 0, `  Device: ${pl.Device}`)
+  })
+  return lines.join(eol) + eol
+}

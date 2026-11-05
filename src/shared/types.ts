@@ -193,7 +193,8 @@ export interface StarstationApi {
   getState(): Promise<AppState>
   setSetting<K extends keyof Settings>(key: K, value: Settings[K]): Promise<Settings>
   rescan(): Promise<LibraryView>
-  launch(gameId: string, mode?: 'fresh' | 'resume', netplay?: { host: true } | { join: NetplayRoom }): Promise<LaunchResult>
+  /** pads: the player order chosen on the assignment screen (none = the usual order). */
+  launch(gameId: string, mode?: 'fresh' | 'resume', netplay?: { host: true } | { join: NetplayRoom }, pads?: PlayerPad[]): Promise<LaunchResult>
   health(): Promise<HealthIssue[]>
   exportReport(): Promise<string | null>
   raStatus(): Promise<{ loggedIn: boolean; username?: string; hasPassword: boolean; hasApiKey: boolean }>
@@ -500,3 +501,10 @@ export interface OverlayState {
   quickResume: boolean
 }
 export type OverlayAction = 'resume' | 'save-state' | 'load-state' | 'screenshot' | 'save-quit' | 'quit'
+
+/** Controller assignment: one player's pad (API + device number in it). */
+export interface PlayerPad {
+  api: 'xinput' | 'sdl'
+  index: number
+  id?: string
+}

@@ -22,7 +22,7 @@ import { backupGame, gameFiles, listBackups, noteResumeVersion, ownSaves, previo
 import { createCollection, deleteCollection, listCollections, removeGameFromCollections, renameCollection, toggleInCollection } from './collections'
 import { addGames } from './addgames'
 import { availableOptions, gameOptions, setGameOption } from './gameoptions'
-import { reportPads } from './controllers'
+import { padVars, reportPads } from './controllers'
 import { checkNow, startUpdater, updateState } from './updater'
 import { addMod, deleteMod, finishAdd, gamebananaGame, listMods, modSupport, setGamebananaGame, setModEnabled } from './mods'
 import { gbModDetails, installGbMod, listGbMods, searchGames } from './gamebanana'
@@ -47,7 +47,7 @@ import { onHome, startPadHelper, stopPadHelper } from './padhelper'
 import type { OverlayAction } from '../shared/types'
 import { attachWindow, notify, send } from './notify'
 import { startDownloadWatcher } from './downloads'
-import type { AddGamesResult, AppState, CustomConsoleForm, EmulatorInfo, GameDetails, NetplayRoom, PackageChoice, PackageProgress, Settings, StartNotes } from '../shared/types'
+import type { AddGamesResult, AppState, CustomConsoleForm, EmulatorInfo, GameDetails, NetplayRoom, PackageChoice, PackageProgress, PlayerPad, Settings, StartNotes } from '../shared/types'
 
 // ---- before ready: keep everything inside Files\ ----
 redirectElectronPaths()
@@ -296,10 +296,13 @@ function registerIpc(): void {
     send('consoles', consoleInfos())
     return l
   })
-  ipcMain.handle('launch', (_e, id: string, mode?: 'fresh' | 'resume', np?: { host: true } | { join: NetplayRoom }) => {
+  ipcMain.handle('launch', (_e, id: string, mode?: 'fresh' | 'resume', np?: { host: true } | { join: NetplayRoom }, pads?: PlayerPad[]) => {
     const g = getGame(id)
     const online = np && g && getConsole(g.console)?.netplay ? np : undefined
-    return launch(id, mode === 'resume' ? 'resume' : 'fresh', [], online ? { args: netplayArgs(online), vars: netplayVars('host' in online) } : {})
+    // controller assignment: player N → that pad, in every emulator's own way (controllers.ts)
+    const order = Array.isArray(pads) ? pads.filter((p) => (p.api === 'xinput' || p.api === 'sdl') && Number.isInteger(p.index)).slice(0, 4) : []
+    const vars = { ...(order.length ? padVars(order) : {}), ...(online ? netplayVars('host' in online) : {}) }
+    return launch(id, mode === 'resume' ? 'resume' : 'fresh', [], { args: online ? netplayArgs(online) : [], vars })
   })
   ipcMain.handle('health', () => healthCheck())
   ipcMain.handle('export-report', async () => {

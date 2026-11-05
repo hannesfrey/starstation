@@ -67,7 +67,6 @@
         "savestate_auto_load = \"{resume}\"",
         "input_joypad_driver = \"{rajoypad}\"",
         "input_autodetect_enable = \"true\"",
-        "input_player1_joypad_index = \"0\"",
         "input_screenshot = \"f12\"",
         "config_save_on_exit = \"false\"",
         "video_driver = \"d3d11\"",
@@ -81,7 +80,11 @@
         "video_windowed_fullscreen = \"true\"",
         "input_save_state = \"f2\"",
         "input_load_state = \"f4\"",
-        "input_menu_toggle_gamepad_combo = \"0\""
+        "input_menu_toggle_gamepad_combo = \"0\"",
+        "input_player1_joypad_index = \"{rapad1}\"",
+        "input_player2_joypad_index = \"{rapad2}\"",
+        "input_player3_joypad_index = \"{rapad3}\"",
+        "input_player4_joypad_index = \"{rapad4}\""
       ]
     },
     {

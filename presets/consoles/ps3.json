@@ -118,14 +118,27 @@
   ],
   "controls": [
     {
-      "type": "write",
-      "ifMissing": true,
+      "type": "yaml-players",
       "file": "{emu}/config/input_configs/global/Default.yml",
-      "lines": [
-        "Player 1 Input:",
-        "  Handler: XInput",
-        "  Device: \"XInput Pad #1\""
-      ]
+      "players": [
+        {
+          "Handler": "{ps3handler1}",
+          "Device": "\"{ps3device1}\""
+        },
+        {
+          "Handler": "{ps3handler2}",
+          "Device": "\"{ps3device2}\""
+        },
+        {
+          "Handler": "{ps3handler3}",
+          "Device": "\"{ps3device3}\""
+        },
+        {
+          "Handler": "{ps3handler4}",
+          "Device": "\"{ps3device4}\""
+        }
+      ],
+      "upTo": "{players}"
     }
   ],
   "graphics": {

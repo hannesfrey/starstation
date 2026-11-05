@@ -8,6 +8,7 @@ import { TextEntry, KEY_ROWS, clampCol, type EntryState, type EntryResult } from
 import { music, sfx } from './sound'
 import { Background } from './components/Background'
 import { Boot } from './components/Boot'
+import { PlayerAssign, menuPads } from './components/PlayerAssign'
 import { TopBar } from './components/TopBar'
 import { Notices } from './components/Notices'
 import { KeyHints, type GlyphButton } from './components/Glyph'
@@ -15,7 +16,7 @@ import { Xmb } from './xmb/Xmb'
 import { PanelView } from './xmb/PanelView'
 import { buildColumns, type XItem } from './xmb/model'
 import { buildPanel, type Panel, type PanelExtra } from './xmb/panels'
-import type { AddGamesResult, AppState, BatteryInfo, CustomConsoleForm, NetplayRoom, Game, LaunchResult, ModAddResult, Notice, Screenshot, Settings } from '../../shared/types'
+import type { AddGamesResult, AppState, BatteryInfo, CustomConsoleForm, NetplayRoom, Game, LaunchResult, ModAddResult, Notice, PlayerPad, Screenshot, Settings } from '../../shared/types'
 
 const byTitle = (a: Game, b: Game) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base', numeric: true })
 
@@ -62,6 +63,7 @@ export function App() {
   const [photo, setPhoto] = useState<number | null>(null)
   const [battery, setBattery] = useState<BatteryInfo | null>(null)
   const [padTest, setPadTest] = useState(false)
+  const [assign, setAssign] = useState<{ title: string; max: number; resolve: (r: PlayerPad[] | null | 'cancel') => void } | null>(null)
   const newConsoleRef = useRef<() => void>(() => undefined)
   const [dragging, setDragging] = useState(false)
   const lastInput = useRef(Date.now())
@@ -181,7 +183,16 @@ export function App() {
       ])
       await new Promise((r) => setTimeout(r, 3500))
     }
-    const r = await api.launch(g.id, mode)
+    // 2+ controllers and a game for 2+ players: who is player 1, 2, …?
+    let pads: PlayerPad[] | undefined
+    const max = Math.min(4, g.players ?? 4)
+    if (menuPads().length >= 2 && max >= 2 && g.console !== '3ds') {
+      const r = await new Promise<PlayerPad[] | null | 'cancel'>((resolve) => setAssign({ title: g.title, max, resolve }))
+      setAssign(null)
+      if (r === 'cancel') return
+      pads = r ?? undefined
+    }
+    const r = await api.launch(g.id, mode, undefined, pads)
     if (!r.ok) {
       sfx.error()
       setErrorPanel({ title: `Can't start ${g.title}`, result: r, index: 1 })
@@ -1292,6 +1303,7 @@ export function App() {
       ) : (
         <>
           <TopBar pad={pad} battery={battery} />
+          {assign && <PlayerAssign title={assign.title} max={assign.max} onDone={assign.resolve} />}
           {state?.info.safeMode && (
             <div className="safe-badge" data-testid="safe-badge">
               Safe mode

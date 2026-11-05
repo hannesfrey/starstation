@@ -82,3 +82,55 @@ test('PS button menu: open over the game, Quit keeps the old resume state, Save 
     await app.close()
   }
 })
+
+test('controller assignment: with 2 controllers, ✕ decides who is player 1 and 2', async () => {
+  test.setTimeout(60_000)
+  const files = makeFiles('assign')
+  // the fake console writes the player mapping it was given into a file (like an emulator's input config)
+  const presets = makePresets(files, 800, { extra: { config: [{ type: 'write', file: '{emu}/players.txt', lines: ['{pad}', '{pad2}', '{players}', '{dolpad1}'] }] } })
+  writeSettings(files, { bootAnimation: false })
+  fs.mkdirSync(path.join(files, 'games', 'testcon'), { recursive: true })
+  fs.writeFileSync(path.join(files, 'games', 'testcon', 'Party Game.tst'), 'p')
+  const { app, page } = await launchApp(files, presets)
+  try {
+    await expect(page.getByTestId('game-info')).toContainText('Party Game')
+    // two controllers: an Xbox-style pad (XInput) and a DualShock 4 plugged in directly
+    await page.evaluate(() => {
+      const mk = (index: number, id: string) => ({ index, id, connected: true, mapping: 'standard', buttons: Array.from({ length: 17 }, () => ({ pressed: false, value: 0 })), axes: [0, 0, 0, 0] })
+      const pads = [mk(0, 'Xbox 360 Controller (XInput STANDARD GAMEPAD)'), mk(1, 'Wireless Controller (STANDARD GAMEPAD Vendor: 054c Product: 09cc)')]
+      ;(window as unknown as { fakePads: unknown[] }).fakePads = pads
+      navigator.getGamepads = () => pads as unknown as Gamepad[]
+    })
+    const press = (pad: number, button: number, down: boolean) =>
+      page.evaluate(([p, b, d]) => {
+        ;(window as unknown as { fakePads: { buttons: { pressed: boolean }[] }[] }).fakePads[p as number].buttons[b as number].pressed = d as boolean
+      }, [pad, button, down] as const)
+    await page.keyboard.press('Enter')
+    await expect(page.getByTestId('assign')).toBeVisible()
+    await expect(page.getByTestId('assign')).toContainText('Press ✕ for Player 1')
+    await page.waitForTimeout(200) // buttons already held when it opens (the ✕ that started the game) don't count
+    // the DualShock 4 presses ✕ first → player 1
+    await press(1, 0, true)
+    await expect(page.getByTestId('assign')).toContainText('Press ✕ for Player 2')
+    await press(1, 0, false)
+    await press(0, 0, true)
+    await expect(page.getByTestId('assign')).toHaveCount(0, { timeout: 5000 })
+    await expect.poll(() => fs.existsSync(path.join(files, '_fakeemu', 'players.txt')), { timeout: 5000 }).toBe(true)
+    const lines = fs.readFileSync(path.join(files, '_fakeemu', 'players.txt'), 'utf8').trim().split(/\r?\n/)
+    expect(lines).toEqual(['SDL-0', 'XInput-0', '2', 'SDL/0/PS4 Controller'])
+    await expect.poll(async () => (await api<{ running: unknown }>(page, 'getState')).running, { timeout: 10_000 }).toBeNull()
+
+    // ○ = the usual order (no question about players)
+    await press(0, 0, false)
+    fs.rmSync(path.join(files, '_fakeemu', 'players.txt'))
+    await page.keyboard.press('Enter')
+    await expect(page.getByTestId('assign')).toBeVisible()
+    await page.waitForTimeout(200)
+    await press(0, 1, true)
+    await expect(page.getByTestId('assign')).toHaveCount(0)
+    await expect.poll(() => fs.existsSync(path.join(files, '_fakeemu', 'players.txt')), { timeout: 5000 }).toBe(true)
+    expect(fs.readFileSync(path.join(files, '_fakeemu', 'players.txt'), 'utf8').trim().split(/\r?\n/)[2]).toBe('1')
+  } finally {
+    await app.close()
+  }
+})

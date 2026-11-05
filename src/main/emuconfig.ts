@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fill, getEmulator, emulatorDir, vars, type ConfigStep, type ConsolePreset } from './presets'
-import { getIniValue, setIniValues, setKvValues } from './ini'
+import { getIniValue, setIniValues, setKvValues, setYamlPlayers } from './ini'
 import { candidateBios } from './bios'
 import { dir } from './paths'
 import { logger } from './log'
@@ -83,6 +83,20 @@ export function applyStep(step: ConfigStep, v: Record<string, string>): void {
       ensureFolders(Object.values(set).flatMap((e) => Object.values(e).flat()))
       const before = fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : ''
       const after = setIniValues(before, set, step.spacing ?? ' = ')
+      if (after !== before) {
+        fs.mkdirSync(path.dirname(p), { recursive: true })
+        fs.writeFileSync(p, after)
+      }
+      return
+    }
+    case 'yaml-players': {
+      const p = fill(step.file, v)
+      const upTo = Math.max(1, Math.min(step.players.length, Number(fill(step.upTo, v)) || 1))
+      const before = fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : ''
+      const after = setYamlPlayers(
+        before,
+        step.players.slice(0, upTo).map((pl) => ({ Handler: fill(pl.Handler, v), Device: fill(pl.Device, v) }))
+      )
       if (after !== before) {
         fs.mkdirSync(path.dirname(p), { recursive: true })
         fs.writeFileSync(p, after)
