@@ -564,7 +564,8 @@ function registerIpc(): void {
     if (!r.ok) return r
     // everything that belongs to a profile is read again
     loadLibrary()
-    win?.webContents.reload()
+    // reload once the answer is back (reloading first could drop the answer)
+    setTimeout(() => win?.webContents.reload(), 50)
     return r
   })
   // ---- console feel (SPEC-v2 C) ----

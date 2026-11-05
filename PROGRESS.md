@@ -5,7 +5,7 @@ Read SPEC.md first. This file tracks where the build stands and every small deci
 ## Current state
 
 - **Phase:** v1 done (v1.0.0 released 2026-11-02, fixes after it on main). **v2 build started 2026-11-05** from `SPEC-v2.md` — see "v2" below.
-- **Next step:** finish step 3 (real couch test on every console, waiting for an idle PC → then beta 1.9.1 "couch-ready"), then step 5 — Mods (SPEC-v2 E).
+- **Next step:** step 8 — release 2.0.0 as a pre-release (beta channel), final report to Hannes. After that: only Hannes presses "Release to everyone".
 
 ## v2 (SPEC-v2.md)
 
@@ -22,11 +22,11 @@ Read SPEC.md first. This file tracks where the build stands and every small deci
 
 - [x] 1. Fix v1 test notes — none.
 - [x] 2. Safe updates (B) + safe mode (G) — done 2026-11-05, tag `v2-step-02-safe`, shipped as 1.9.0 (pre-release)
-- [ ] 3. Couch-ready core (A) — milestone: "Couch-ready version on beta"
+- [x] 3. Couch-ready core (A) — done 2026-11-05 (real couch test ok on all 9 consoles); ships in 2.0.0
 - [x] 4. Library & storage (D) — done 2026-11-05, tag `v2-step-04-library`
-- [ ] 5. Mods (E)
-- [ ] 6. Console feel (C)
-- [ ] 7. Sharing (F) + rest of G (system settings, profiles, accessibility)
+- [x] 5. Mods (E) — done 2026-11-05, tag `v2-step-05-mods`
+- [x] 6. Console feel (C) — done 2026-11-05, tag `v2-step-06-feel`
+- [x] 7. Sharing (F) + rest of G (system settings, profiles, accessibility) — done 2026-11-05, tag `v2-step-07-sharing-profiles`
 - [ ] 8. Release v2 to beta + final report
 
 ### v2 step 2 — Safe updates + safe mode (2026-11-05)
@@ -41,7 +41,7 @@ Read SPEC.md first. This file tracks where the build stands and every small deci
 - Tests: `tests/e2e/safe.spec.ts` (safe mode via ○ at boot, mods aside/back, crash question, What's new, rescue, undo), `tests/e2e/channel.spec.ts` (fake GitHub: channel, Release to everyone, tested emulators, Mark as tested), `tests/unit/releases.test.ts`.
 - Built-tools environment: always `source ./env.sh` (bash) / `. .\env.ps1`. On 2026-11-05 commands run without it created `AppData\Local\electron-builder`, `npm-cache`, `electron\Cache`, `vitest` (all mine, removed). env files now also redirect `LOCALAPPDATA`/`APPDATA` (vitest writes there).
 
-### v2 step 3 — Couch-ready core (2026-11-05, in progress: real couch test waits for an idle PC)
+### v2 step 3 — Couch-ready core (2026-11-05)
 
 - **Pad helper** (`native/padhelper.cs`, compiled at build time by `scripts/fetch-bin.mjs` with Windows' own C# 5 compiler → `resources\bin\padhelper.exe`): XInput guide button via `XInputGetStateEx` (ordinal 100), DualShock 4 / DualSense PS button over HID (USB + Bluetooth report layouts), close (WM_CLOSE) / focus / focus by window handle / send keys (scan codes) / mute a process (Core Audio, couch test only) / idle time. Hannes's DS3 via SCP shows as `xinput:0`.
 - **PS button menu** (`overlay.ts`, `Overlay.tsx`): its own transparent always-on-top window (`#overlay`), Resume · Save state · Load state · Screenshot (desktopCapturer, into the Photo column) · Controller settings · Save and quit (WM_CLOSE → emulator writes its resume state) · Quit without saving a state (resume state copied at launch is put back: `snapshotResume` / `discardSessionResume`). Focus: Windows refuses focus to a background app, so the helper hands it over (Alt-tap + SetForegroundWindow by HWND). Window not focused → controller wouldn't reach it.
@@ -54,6 +54,7 @@ Read SPEC.md first. This file tracks where the build stands and every small deci
 - **Conversion on import** (`convert.ts`): Xbox full disc dumps → XISO with extract-xiso (XboxDev, pinned zip). extract-xiso renames whatever it reads to `.old`, even on failure → it gets a **hard link**, the game is replaced only after the XISO checks out (layout + default.xbe). PS3 `.pkg` → `rpcs3 --installpkg`, success = a changed `dev_hdd0\game` folder, then the package goes to the Recycle Bin (untested with a real PKG: none on this PC). Multi-disc "(Disc N)" → `.m3u` for consoles that read playlists. 3DS `.3ds/.cci`: NCCH NoCrypto flag → "is encrypted" message + Health check.
 - **Couch test:** `scripts/couch-test.mjs` — real app on screen, Starstation and the games muted, own Files folder linked to the real emulators/bios/games; waits until the PC has been idle 2 min before opening anything (Windows also refuses focus while someone uses the PC). Per console: game has focus → PS → menu on top → Resume → game has focus → PS → Save and quit → closed → Starstation in front → resume state written. First PS2 run (Ace Combat 5): all steps ok except the menu's focus (fixed with focus-by-handle). **Couch check** (Settings → Diagnostics) for Hannes ticks the same steps off with his own controller and saves a report.
 - Tests: `overlay.spec.ts` (menu, Quit vs Save and quit, held notices, assignment with fake pads, Steam/Game Bar guide, couch check), `convert.spec.ts`, unit tests for xdvdfs / 3DS / RPCS3 YAML.
+- **Couch test results (final, 2026-11-05):** all 9 consoles ok on every step (PS1, PS2, PS3, GC, Wii, N64, 3DS, Xbox, Xbox 360). Fixes found by it: the menu window gets focus by handle with AttachThreadInput retries; the game is focused *before* the menu hides (else Resume left focus nowhere); Azahar closed only after 21 s because of its confirm dialog → `confirmClose=false`, `saveStateWarning=false`; the "PC idle 2 min" wait was dropped (constant input noise on this PC never let it start) — disturbed results get up to 3 more rounds 10 min apart instead; a just-started game is focused once a second until it has the focus (max 20 s), then left alone. PS1 and Xbox needed Hannes's BIOS files first (now in place).
 
 ### v2 step 4 — Library & storage (2026-11-05)
 
@@ -62,6 +63,32 @@ Read SPEC.md first. This file tracks where the build stands and every small deci
 - **Compatibility labels** (`compat.ts`): PS3 from `rpcs3.net/compatibility?api=v1&g=<serial>` (Playable → Runs well, Ingame → Playable, Intro → Issues, Loadable/Nothing → Doesn't start), Xbox 360 from GitHub issues of `xenia-canary/game-compatibility` (state-playable / gameplay / menus+intro / load+nothing+crash). Cached a week, looked up slowly (GitHub search: 10/min). Shown in the game line + options; "Doesn't start" stays listed and asks before starting. *Known per-game fixes* come with the patch collections in step 5.
 - **Manuals** (and the clips for step 6): one ScreenScraper `jeuInfos` call per game gives covers, screenshot, `manuel` (PDF) and `video-normalized` (MP4) → `manual.pdf` / `video.mp4` next to the artwork. Viewer `ManualViewer.tsx` (pdf.js 6.5, bundled; bytes come over IPC because the page may not fetch local files): ←/→ or L1/R1 pages, ✕ zoom, ↑↓ scroll, ○ close. Needs a ScreenScraper developer login: Hannes's (secrets.json), or built into the installer at build time (`resources\extra\screenscraper.json`, ignored by git). Hannes hasn't got one yet → manuals/clips appear once it's there.
 - Tests: `compress.spec.ts` (2-track CD, DVD, GameCube, bit-identical back, stats follow), `compat.spec.ts`, `manual.spec.ts`.
+
+### v2 step 5 — Mods (2026-11-05)
+
+- **Mod profiles** (`mods.ts`): Vanilla (all off) + saved sets per game, switched with one press in the △ menu; changing mods by hand shows "Custom".
+- **Patch-file mods** (`patchmods.ts`, `formats/patch.ts`): .ips / .bps / .ppf / .xdelta. A patched copy is made from the game (CHD/RVZ unpacked first) and starts instead of it when the mod is on (`patchedLaunch`, same game id → same saves). One patch mod at a time. xdelta3 3.2.2 bundled (official release, pinned hash).
+- **Nexus Mods** (`nexus.ts`): `nxm://` handler in HKCU (allowed by Hannes), personal API key from `secrets.json` (`nexus.apiKey`, still empty → shown as "add your key"). Settings → Mod sources.
+- **Update patches** (`patchsets.ts`): PCSX2 and RPCS3 patch collections (PCSX2's official pcsx2_patches release, RPCS3's own patch service), updated on "Update patches", each download checked against the hash its source publishes.
+- **Manual mods:** mods installed by hand keep their instructions text next to them and show in the list.
+- Tests: `mods2.spec.ts`, `patchmods.spec.ts`, `modsources.spec.ts`.
+
+### v2 step 6 — Console feel (2026-11-05)
+
+- **Trophies** (`trophies.ts`): Starstation's own (play time, library size, first mod / netplay) in bronze / silver / gold + platinum for all; RetroAchievements shown alongside when logged in. Trophies column in the menu.
+- **Video previews:** ScreenScraper `video-normalized` clip after resting ~2 s on a game (needs the dev login, see step 4). **TV mode** (bigger everything).
+- **Themes** (`Background.tsx` `THEMES`): monthly colours as before plus fixed ones. "Starvis" from the spec is read as a starry night sky (animated stars) — original design, no Sony assets. Safe mode uses the default theme.
+- **Wallpapers + power** (`consolefeel.ts`): own picture per menu background; Power menu: sleep (SetSuspendState) / shut down (`shutdown /s /t 0`).
+- Tests: `feel.spec.ts`.
+
+### v2 step 7 — Sharing, profiles, system settings, accessibility (2026-11-05)
+
+- **Profiles** (`profiles.ts`): Users column, "Who's playing" at start when there are 2+. Main profile keeps the old paths; others live in `config\profiles\<id>`. Own saves (`setSavesRoot`), play time, favorites, trophies, optional PIN. Saves *inside* emulators (preset link steps into {emu}, plus `bios\xbox\xbox_hdd.qcow2`) are swapped by rename with a journal (`config\profiles-switch.json`, finished on next start if interrupted) and a one-time backup to `backups\before-profiles`. Guest: cleared on switch or quit.
+- **Smart packages** (`packages.ts`): the receiving PC sends its inventory ({pcId, files rel→size}) over croc under `<code>-have`, or as "Starstation inventory.json" on a USB drive; the sender skips files with the same path and size. "Only new since last time" uses `sent.json` per pcId. Profiles travel under `profiles/<name>/`; the receiver picks merge / replace / keep both.
+- **System settings** (Settings → System; allowed by Hannes when the user picks them): sound output (IPolicyConfig), screen mode (ChangeDisplaySettingsEx, tested first, goes back after 15 s unless kept), Bluetooth controllers (scan / pair / remove via bthprops). All through the pad helper; helper answers are now matched by command name, so a slow answer can't land on another command.
+- **Accessibility:** text size (normal / large / larger), menu buttons remappable (moving an action onto a taken button swaps them).
+- No controller translation driver was needed (see step 3), so none is installed.
+- Tests: `profiles.spec.ts`, `packages2.spec.ts`, unit `buttons.test.ts`. Not testable here: real Bluetooth pairing (no pad in pairing mode), DS4/DualSense directly, real PKG install, Nexus/ScreenScraper with real accounts → Hannes's checklist.
 
 ## How to work on it
 

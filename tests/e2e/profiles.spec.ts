@@ -14,6 +14,15 @@ const api = <T>(page: Page, fn: string, ...args: unknown[]) =>
 type P = { id: string; name: string; active: boolean; main: boolean; guest: boolean; hasPin: boolean }
 
 /** After a switch the menu starts again: wait for it. */
+/** Switch profile and wait for the menu to reload. */
+async function switchTo(app: ElectronApplication, page: Page, id: string, pin?: string): Promise<Page> {
+  const load = page.waitForEvent('load')
+  const r = await api<{ ok: boolean; error?: string }>(page, 'profileSwitch', ...(pin === undefined ? [id] : [id, pin]))
+  expect(r.ok).toBe(true)
+  await load
+  return reloaded(app)
+}
+
 async function reloaded(app: ElectronApplication): Promise<Page> {
   const page = app.windows().find((w) => !w.url().includes('#overlay'))!
   await page.waitForLoadState('domcontentloaded')
@@ -47,7 +56,8 @@ test('profiles: own saves (also inside the emulator), own play time, PIN, guest 
   let page = app.windows().find((w) => !w.url().includes('#overlay'))!
   const gid = 'testcon:alpha.tst'
   const play = async () => {
-    expect((await api<{ ok: boolean }>(page, 'launch', gid)).ok).toBe(true)
+    // right after start (or a reload) the library scan may still be running: try again until the game is there
+    await expect.poll(async () => (await api<{ ok: boolean }>(page, 'launch', gid)).ok, { timeout: 10_000 }).toBe(true)
     await expect.poll(async () => (await api<{ running: unknown }>(page, 'getState')).running, { timeout: 10_000 }).toBeNull()
   }
   try {
@@ -65,8 +75,7 @@ test('profiles: own saves (also inside the emulator), own play time, PIN, guest 
     const sis = list.find((p) => p.name === 'Sis')!
     expect((await api<{ ok: boolean }>(page, 'profilePin', sis.id, '1234')).ok).toBe(true)
     expect((await api<{ ok: boolean; error?: string }>(page, 'profileSwitch', sis.id, '0000')).error).toContain('Wrong PIN')
-    expect((await api<{ ok: boolean }>(page, 'profileSwitch', sis.id, '1234')).ok).toBe(true)
-    page = await reloaded(app)
+    page = await switchTo(app, page, sis.id, '1234')
     // Sis starts with her own (empty) play time and favorites
     await expect.poll(async () => (await api<{ library: { stats: Record<string, unknown> } }>(page, 'getState')).library.stats[gid]).toBeUndefined()
     // the emulator's own saves were swapped: Sis's place is empty, Player 1's were put aside (+ a backup made once)
@@ -80,8 +89,7 @@ test('profiles: own saves (also inside the emulator), own play time, PIN, guest 
     expect((await api<{ library: { stats: Record<string, { playCount: number }> } }>(page, 'getState')).library.stats[gid].playCount).toBe(1)
 
     // back to Player 1: his saves and play time are back, Sis's wait in her folder
-    expect((await api<{ ok: boolean }>(page, 'profileSwitch', 'p1')).ok).toBe(true)
-    page = await reloaded(app)
+    page = await switchTo(app, page, 'p1')
     expect(fs.readFileSync(path.join(emu, 'internal', 'card.sav'), 'utf8')).toBe('main player progress')
     expect(fs.readFileSync(path.join(files, 'config', 'profiles', sis.id, 'emulator-saves', 'testcon-internal', 'card.sav'), 'utf8')).toBe('sis progress')
     await expect.poll(async () => (await api<{ library: { stats: Record<string, { playTime: number; favorite?: boolean }> } }>(page, 'getState')).library.stats[gid]?.favorite).toBe(true)
@@ -90,12 +98,10 @@ test('profiles: own saves (also inside the emulator), own play time, PIN, guest 
     expect((await api<P[]>(page, 'profiles')).find((p) => p.id === sis.id)!.hasPin).toBe(false)
 
     // Guest: starts empty, cleared when the session ends
-    expect((await api<{ ok: boolean }>(page, 'profileSwitch', 'guest')).ok).toBe(true)
-    page = await reloaded(app)
+    page = await switchTo(app, page, 'guest')
     await play()
     expect(fs.existsSync(path.join(files, 'config', 'profiles', 'guest', 'stats.json'))).toBe(true)
-    expect((await api<{ ok: boolean }>(page, 'profileSwitch', 'p1')).ok).toBe(true)
-    page = await reloaded(app)
+    page = await switchTo(app, page, 'p1')
     expect(fs.existsSync(path.join(files, 'config', 'profiles', 'guest'))).toBe(false)
     expect(fs.readFileSync(path.join(emu, 'internal', 'card.sav'), 'utf8')).toBe('main player progress')
   } finally {

@@ -12,7 +12,7 @@ import { applyConsoleConfig } from './emuconfig'
 import { biosStatus } from './bios'
 import { getGame, updateStats, view } from './library/library'
 import { send, notify, holdNotices } from './notify'
-import { closeWindow, muteProcess } from './padhelper'
+import { closeWindow, focusWindow, foregroundPid, muteProcess } from './padhelper'
 import { couchMark } from './couchcheck'
 import { logger } from './log'
 import { dir } from './paths'
@@ -167,6 +167,19 @@ export async function launch(
   }
   const startedAt = Date.now()
   running = { gameId, title: game!.title, startedAt, proc }
+  // the game's window gets the focus as soon as it shows up (Windows may keep it on another app otherwise);
+  // once it had it, Starstation leaves the focus alone
+  if (proc.pid && process.env.STARSTATION_HEADLESS !== '1') {
+    const pid = proc.pid
+    let tries = 0
+    const t = setInterval(() => {
+      if (!running || running.proc.pid !== pid || ++tries > 20) return clearInterval(t)
+      void foregroundPid().then(async (fg) => {
+        if (fg === pid) return clearInterval(t)
+        await focusWindow(pid)
+      })
+    }, 1000)
+  }
   // couch test (scripts/couch-test.mjs): the game stays silent, like muting it in the Windows volume mixer
   if (process.env.STARSTATION_MUTE_GAMES === '1' && proc.pid) {
     const pid = proc.pid
