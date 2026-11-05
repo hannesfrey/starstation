@@ -59,6 +59,34 @@ const BTN: Record<number, Action> = {
   14: 'left',
   15: 'right'
 }
+/** Settings → Accessibility: menu buttons can be moved (e.g. ○ to confirm). */
+let buttons: Record<number, Action> = { ...BTN }
+/** Remappable menu actions and the buttons they can go to (standard mapping indices). */
+export const REMAPPABLE: Action[] = ['confirm', 'back', 'options', 'search', 'select', 'start', 'l1', 'r1']
+export const BUTTON_NAMES: Record<number, string> = { 0: '✕', 1: '○', 2: '□', 3: '△', 4: 'L1', 5: 'R1', 8: 'Select', 9: 'Start' }
+
+/** Apply a remap ({action: button}). An action moved onto a taken button swaps with that button's action. */
+export function setButtonMap(map: Partial<Record<Action, number>>): void {
+  const next: Record<number, Action> = { ...BTN }
+  for (const [action, idx] of Object.entries(map) as [Action, number][]) {
+    if (!(idx in BUTTON_NAMES) || !REMAPPABLE.includes(action)) continue
+    const from = Number(Object.keys(next).find((k) => next[Number(k)] === action))
+    const other = next[idx]
+    next[idx] = action
+    if (!Number.isNaN(from) && from !== idx) {
+      if (other) next[from] = other
+      else delete next[from]
+    }
+  }
+  buttons = next
+}
+
+/** The button an action is on right now. */
+export function buttonFor(action: Action): number | undefined {
+  const k = Object.keys(buttons).find((i) => buttons[Number(i)] === action)
+  return k === undefined ? undefined : Number(k)
+}
+
 const DIRECTIONS = new Set<Action>(['up', 'down', 'left', 'right'])
 const REPEAT_DELAY = 380
 const REPEAT_RATE = 95
@@ -222,7 +250,7 @@ export class InputManager {
     for (const p of pads) {
       if (!p || !p.connected || !isMenuPad(p)) continue
       p.buttons.forEach((b, i) => {
-        const a = BTN[i]
+        const a = buttons[i]
         if (a && (b.pressed || b.value > 0.6)) pressed.add(`${p.index}:${a}`)
       })
       const [x = 0, y = 0] = p.axes

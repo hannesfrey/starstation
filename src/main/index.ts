@@ -54,7 +54,7 @@ import { readJson } from './store'
 import { consoleInfos } from './consoles'
 import { launch, setLauncherWindow, runningGame, runningPid, stopRunning, onBeforeLaunch, onAfterExit } from './launcher'
 import { hideOverlay, overlayAction, overlayOpen, overlayState, setupOverlay, toggleOverlay } from './overlay'
-import { foregroundPid, onHome, startPadHelper, stopPadHelper } from './padhelper'
+import { audioOutputs, bluetoothDevices, bluetoothPair, bluetoothRemove, displayModes, foregroundPid, onHome, setAudioOutput, setDisplayMode, startPadHelper, stopPadHelper } from './padhelper'
 import { loadGpuDrivers, markGuideSeen, newHomeConflicts } from './system'
 import { couchMark, couchStatus, saveCouchCheck, startCouchCheck } from './couchcheck'
 import type { OverlayAction } from '../shared/types'
@@ -496,6 +496,47 @@ function registerIpc(): void {
   // ---- library & storage (SPEC-v2 D) ----
   ipcMain.handle('storage', (_e, fresh?: boolean) => storageInfo(!!fresh))
   ipcMain.handle('trophies', () => trophyView())
+  // ---- system settings from the menu (SPEC-v2 G; Hannes allowed changing them when picked here) ----
+  ipcMain.handle('sys-audio', () => audioOutputs())
+  ipcMain.handle('sys-audio-set', async (_e, id: string) => {
+    const ok = await setAudioOutput(String(id))
+    log.info(`sound output → ${id}: ${ok}`)
+    return ok
+  })
+  ipcMain.handle('sys-display', () => displayModes())
+  let displayRevert: { timer: NodeJS.Timeout; back: { w: number; h: number; hz: number } } | null = null
+  ipcMain.handle('sys-display-set', async (_e, w: number, h: number, hz: number) => {
+    const before = (await displayModes()).find((m) => m.current)
+    if (!(await setDisplayMode(Number(w), Number(h), Number(hz), true))) return { ok: false, error: 'This screen doesn’t take that mode.' }
+    if (!(await setDisplayMode(Number(w), Number(h), Number(hz)))) return { ok: false, error: 'Windows didn’t change the screen.' }
+    log.info(`screen → ${w}×${h} @ ${hz} Hz (back in 15 s unless kept)`)
+    // like Windows: no answer within 15 s (a black screen, say) → back to how it was
+    if (displayRevert) clearTimeout(displayRevert.timer)
+    if (before)
+      displayRevert = {
+        back: before,
+        timer: setTimeout(() => {
+          void setDisplayMode(before.w, before.h, before.hz)
+          displayRevert = null
+          send('display-revert', null)
+          log.info('screen mode not confirmed: went back')
+        }, 15_000)
+      }
+    return { ok: true }
+  })
+  ipcMain.handle('sys-display-keep', async (_e, keep: boolean) => {
+    if (!displayRevert) return
+    clearTimeout(displayRevert.timer)
+    if (!keep) await setDisplayMode(displayRevert.back.w, displayRevert.back.h, displayRevert.back.hz)
+    displayRevert = null
+  })
+  ipcMain.handle('sys-bt', (_e, scan: boolean) => bluetoothDevices(!!scan))
+  ipcMain.handle('sys-bt-pair', async (_e, address: string) => {
+    const r = await bluetoothPair(String(address))
+    log.info(`bluetooth pair ${address}: ${r.ok ? 'ok' : r.error}`)
+    return r
+  })
+  ipcMain.handle('sys-bt-remove', (_e, address: string) => bluetoothRemove(String(address)))
   // ---- profiles (SPEC-v2 G) ----
   ipcMain.handle('profiles', () => listProfiles())
   ipcMain.handle('profile-add', (_e, name: string, icon?: string) => addProfile(String(name), icon ? String(icon) : undefined))

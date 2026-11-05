@@ -31,6 +31,11 @@ function png(w: number, h: number): Buffer {
   return Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(rows)), chunk('IEND', Buffer.alloc(0))])
 }
 
+/** Long lists only draw the items near the selection: move down until it is there. */
+async function scrollTo(page: Page, testId: string): Promise<void> {
+  for (let i = 0; i < 30 && !(await page.getByTestId(testId).count()); i++) await page.keyboard.press('ArrowDown')
+}
+
 type Trophy = { id: string; name: string; tier: string; unlockedAt?: number; progress?: [number, number] }
 
 test('trophies unlock as you play and mod; the Trophies column lists them', async () => {
@@ -122,6 +127,42 @@ test('themes, TV mode, wallpapers, video preview, power menu', async () => {
 
     await api(page, 'power', 'sleep')
     expect(JSON.parse(fs.readFileSync(path.join(files, 'config', 'test-power.json'), 'utf8')).action).toBe('sleep')
+  } finally {
+    await app.close()
+  }
+})
+
+test('accessibility: text size and moved menu buttons; system settings open with the controller', async () => {
+  const files = makeFiles('access')
+  writeSettings(files, { bootAnimation: false })
+  const { app, page } = await launchApp(files)
+  try {
+    await expect(page.getByTestId('xmb')).toBeVisible()
+    await page.getByTestId('cat-settings').dispatchEvent('click')
+    await scrollTo(page, 'item-access')
+    await page.getByTestId('item-access').dispatchEvent('click')
+    await page.keyboard.press('Enter')
+    await expect(page.getByTestId('panel-accessibility')).toBeVisible()
+    // ✕ is "select" until moved: one press moves it to ○
+    await expect(page.getByTestId('pitem-map-confirm')).toContainText('✕')
+    await page.getByTestId('pitem-map-confirm').dblclick()
+    await expect(page.getByTestId('pitem-map-confirm')).toContainText('○')
+    await expect(page.getByTestId('pitem-map-back')).toContainText('✕') // swapped, nothing lost
+    expect(JSON.parse((await api<{ settings: { buttonMap: string } }>(page, 'getState')).settings.buttonMap)).toEqual({ confirm: 1 })
+    // text size
+    await page.getByTestId('pitem-text').dblclick()
+    await expect(page.locator('.app.text-large')).toHaveCount(1)
+    // back to standard buttons
+    await page.getByTestId('pitem-reset').dblclick()
+    await expect(page.getByTestId('pitem-map-confirm')).toContainText('✕')
+    await page.keyboard.press('Escape')
+    // System: sound, screen, Bluetooth panels open (in hidden tests there is no helper: empty lists)
+    await scrollTo(page, 'item-system')
+    await page.getByTestId('item-system').dispatchEvent('click')
+    await page.keyboard.press('Enter')
+    await expect(page.getByTestId('panel-system')).toContainText('Bluetooth controllers')
+    await page.getByTestId('pitem-sound').dblclick()
+    await expect(page.getByTestId('panel-sound')).toContainText('No playback devices found')
   } finally {
     await app.close()
   }

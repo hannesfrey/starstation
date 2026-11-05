@@ -37,7 +37,9 @@ test('import copies and verifies everything, then moves only games', async () =>
   const { app, page } = await launchApp(files)
   delete process.env.STARSTATION_IMPORT_SOURCE
 
-  await page.keyboard.press('Home')
+  await page.getByTestId('cat-settings').dispatchEvent('click')
+  // further down the Settings list: move there first (only items near the selection are drawn)
+  for (let i = 0; i < 30 && !(await page.getByTestId('item-import').count()); i++) await page.keyboard.press('ArrowDown')
   await page.getByTestId('item-import').click()
   await page.keyboard.press('Enter')
   await expect(page.getByTestId('panel-import')).toContainText('Games: 1')

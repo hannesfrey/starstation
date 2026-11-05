@@ -46,8 +46,17 @@ export interface PanelExtra {
   patchesBusy?: boolean
   wallpapers?: Wallpapers
   profiles?: ProfileInfo[]
+  sys?: {
+    audio?: { id: string; name: string; default: boolean }[]
+    display?: { w: number; h: number; hz: number; current: boolean }[]
+    bt?: { address: string; name: string; connected: boolean; paired: boolean; cod: number }[]
+    btBusy?: string
+    keepLeft?: number
+  }
   /** Received package with profiles that exist here: how to bring each one in. */
   pkgAsk?: { profiles: string[]; folder?: string; choices: Record<string, ProfileMerge> }
+  /** Accessibility: the button each menu action is on now (✕, ○ …). */
+  buttonNames?: Record<string, string>
 }
 
 export interface PItem {
@@ -144,6 +153,13 @@ export interface PanelHandlers {
   pkgPrepareFolder: () => void
   pkgAskChoice: (name: string) => void
   pkgFinish: () => void
+  sysAudioSet: (id: string) => void
+  sysDisplaySet: (w: number, h: number, hz: number) => void
+  sysDisplayKeep: (keep: boolean) => void
+  sysBluetooth: (scan: boolean) => void
+  sysBluetoothPair: (address: string) => void
+  sysBluetoothRemove: (address: string) => void
+  remapButton: (action: string) => void
 }
 
 const onOff = (b: boolean) => (b ? 'On' : 'Off')
@@ -1148,6 +1164,99 @@ export function buildPanel(id: string, arg: string | undefined, state: AppState,
           { key: 'from', label: `On Nexus Mods for: ${n.gameName}${n.fileName ? ` · ${n.fileName}` : ''}`, info: true },
           { key: 'ask', label: 'Which game is this mod for?', info: true },
           ...ranked.map(({ g }) => ({ key: `nx-${g.id}`, label: g.title, value: state.consoles.find((c) => c.id === g.console)?.short, run: () => h.nexusInstall(n.url, g) }))
+        ]
+      }
+    }
+    case 'system':
+      return {
+        id,
+        title: 'System',
+        items: [
+          { key: 'what', label: 'Windows settings, from here with the controller.', info: true },
+          { key: 'sound', label: 'Sound output', value: x.sys?.audio?.find((a) => a.default)?.name, run: () => (h.openPanel('sound'), 'keep') },
+          { key: 'screen', label: 'Screen resolution and refresh rate', run: () => (h.openPanel('screen'), 'keep') },
+          { key: 'bt', label: 'Bluetooth controllers', run: () => (h.openPanel('bluetooth'), 'keep') }
+        ]
+      }
+    case 'sound': {
+      const list = x.sys?.audio
+      if (!list) return { id, title: 'Sound output', items: [{ key: 'loading', label: 'Looking…', info: true }] }
+      return {
+        id,
+        title: 'Sound output',
+        items: list.length
+          ? list.map((a) => ({ key: `snd-${a.id}`, label: a.name, value: a.default ? 'In use' : undefined, run: () => (h.sysAudioSet(a.id), 'keep' as const) }))
+          : [{ key: 'none', label: 'No playback devices found.', info: true }]
+      }
+    }
+    case 'screen': {
+      const list = x.sys?.display
+      if (!list) return { id, title: 'Screen', items: [{ key: 'loading', label: 'Looking…', info: true }] }
+      // the most common first: current resolution's refresh rates, then the bigger resolutions
+      const sorted = [...list].sort((a, b) => Number(b.current) - Number(a.current) || b.w * b.h - a.w * a.h || b.hz - a.hz)
+      return {
+        id,
+        title: 'Screen resolution and refresh rate',
+        items: [
+          { key: 'what', label: 'A new mode goes back by itself after 15 seconds unless you keep it.', info: true },
+          ...sorted.slice(0, 40).map((m) => ({
+            key: `mode-${m.w}x${m.h}@${m.hz}`,
+            label: `${m.w} × ${m.h}`,
+            value: `${m.hz} Hz${m.current ? ' · now' : ''}`,
+            run: () => (m.current ? undefined : h.sysDisplaySet(m.w, m.h, m.hz))
+          }))
+        ]
+      }
+    }
+    case 'screen-keep':
+      return {
+        id,
+        title: 'Keep this screen mode?',
+        items: [
+          { key: 'left', label: `Going back in ${x.sys?.keepLeft ?? 15} seconds.`, info: true },
+          { key: 'keep', label: 'Keep it', run: () => h.sysDisplayKeep(true) },
+          { key: 'back', label: 'Go back', run: () => h.sysDisplayKeep(false) }
+        ]
+      }
+    case 'bluetooth': {
+      const list = x.sys?.bt
+      const pads = (list ?? []).filter((d) => (d.cod & 0x1f00) === 0x0500 || /controller|gamepad|dualshock|dualsense|wireless|xbox|pro/i.test(d.name))
+      return {
+        id,
+        title: 'Bluetooth controllers',
+        items: [
+          { key: 'how', label: 'Put the controller into pairing mode (PS4/PS5: hold Share/Create + PS until the light flashes), then search.', info: true },
+          { key: 'scan', label: x.sys?.btBusy ?? 'Search for controllers', disabled: !!x.sys?.btBusy, run: () => (h.sysBluetooth(true), 'keep') },
+          ...(list && !pads.length ? [{ key: 'none', label: 'No controllers found.', info: true }] : []),
+          ...pads.map((d) => ({
+            key: `bt-${d.address}`,
+            label: d.name || d.address,
+            value: d.paired ? (d.connected ? 'Connected · ✕ to forget' : 'Paired · ✕ to forget') : 'Pair',
+            disabled: !!x.sys?.btBusy,
+            run: () => ((d.paired ? h.sysBluetoothRemove(d.address) : h.sysBluetoothPair(d.address)), 'keep' as const)
+          }))
+        ]
+      }
+    }
+    case 'accessibility': {
+      const map = (() => {
+        try {
+          return JSON.parse(s.buttonMap || '{}') as Record<string, number>
+        } catch {
+          return {}
+        }
+      })()
+      const names: Record<string, string> = { confirm: 'Select (confirm)', back: 'Back', options: 'Options (game menu)', search: 'Search', select: 'Favorite', start: 'Start', l1: 'Previous column', r1: 'Next column' }
+      const label = { normal: 'Normal', large: 'Large', larger: 'Larger' }
+      const order: Settings['textSize'][] = ['normal', 'large', 'larger']
+      return {
+        id,
+        title: 'Accessibility',
+        items: [
+          { key: 'text', label: 'Text size', value: label[s.textSize], run: () => (h.setSetting('textSize', order[(order.indexOf(s.textSize) + 1) % order.length]), 'keep') },
+          { key: 'btn', label: 'Menu buttons (press to move to the next button):', info: true },
+          ...Object.entries(names).map(([a, n]) => ({ key: `map-${a}`, label: n, value: x.buttonNames?.[a] ?? '', run: () => (h.remapButton(a), 'keep' as const) })),
+          ...(Object.keys(map).length ? [{ key: 'reset', label: 'Standard buttons again', run: () => (h.setSetting('buttonMap', ''), 'keep' as const) }] : [])
         ]
       }
     }

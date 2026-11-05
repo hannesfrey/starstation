@@ -28,6 +28,10 @@ export interface Settings {
   theme: string
   /** A short gameplay clip after resting on a game for about 2 seconds. */
   videoPreviews: boolean
+  /** Accessibility: text size, independent of TV mode. */
+  textSize: 'normal' | 'large' | 'larger'
+  /** Accessibility: menu buttons moved by the user, as JSON {action: button index} ("" = standard). */
+  buttonMap: string
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -47,7 +51,9 @@ export const DEFAULT_SETTINGS: Settings = {
   sortDownloads: true,
   tvMode: false,
   theme: 'monthly',
-  videoPreviews: true
+  videoPreviews: true,
+  textSize: 'normal',
+  buttonMap: ''
 }
 
 export type ConsoleIcon = 'cartridge' | 'cartridge-wide' | 'cartridge-n64' | 'disc' | 'disc-mini' | 'handheld' | 'box' | 'box-360' | 'remote'
@@ -283,6 +289,16 @@ export interface StarstationApi {
   profilePicture(id: string, file?: string): Promise<ProfileInfo[]>
   /** Switch profile (the menu starts again for the new profile). */
   profileSwitch(id: string, pin?: string): Promise<{ ok: boolean; error?: string }>
+  /** System settings from the menu (SPEC-v2 G). */
+  sysAudio(): Promise<{ id: string; name: string; default: boolean }[]>
+  sysAudioSet(id: string): Promise<boolean>
+  sysDisplay(): Promise<{ w: number; h: number; hz: number; current: boolean }[]>
+  /** Changes the screen; it goes back by itself after 15 s unless sysDisplayKeep() is called. */
+  sysDisplaySet(w: number, h: number, hz: number): Promise<{ ok: boolean; error?: string }>
+  sysDisplayKeep(keep: boolean): Promise<void>
+  sysBluetooth(scan: boolean): Promise<{ address: string; name: string; connected: boolean; paired: boolean; cod: number }[]>
+  sysBluetoothPair(address: string): Promise<{ ok: boolean; error?: string }>
+  sysBluetoothRemove(address: string): Promise<boolean>
   /** Receiving PC: put its inventory on a drive (smart package by USB). Folder only in hidden tests. */
   packagePrepareFolder(folder?: string): Promise<string | null>
   /** Finish receiving after the profile question (merge / replace / keep both per profile name). */
@@ -340,6 +356,7 @@ export interface StarstationApi {
   on(channel: 'trophies', cb: (t: { list: Trophy[]; ra: Achievement[] }) => void): () => void
   on(channel: 'wallpapers', cb: (w: Wallpapers) => void): () => void
   on(channel: 'package-ask', cb: (a: { profiles: string[]; folder?: string }) => void): () => void
+  on(channel: 'display-revert', cb: () => void): () => void
   on(channel: 'screenshots', cb: (s: Screenshot[]) => void): () => void
   on(channel: 'battery', cb: (b: BatteryInfo | null) => void): () => void
   on(channel: 'package-progress', cb: (p: PackageProgress) => void): () => void

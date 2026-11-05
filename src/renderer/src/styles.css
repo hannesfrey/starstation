@@ -942,3 +942,17 @@ body,
   animation: bgIn 0.9s var(--ease) forwards;
   filter: brightness(0.6);
 }
+
+/* ---- accessibility: bigger text (on its own, TV mode makes everything bigger) ---- */
+.text-large .xmb-items,
+.text-large .panel,
+.text-large .notices,
+.text-large .game-info {
+  zoom: 1.15;
+}
+.text-larger .xmb-items,
+.text-larger .panel,
+.text-larger .notices,
+.text-larger .game-info {
+  zoom: 1.3;
+}

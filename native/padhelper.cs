@@ -393,6 +393,211 @@ static class PadHelper
         return n;
     }
 
+    // ---------------- system settings (SPEC-v2 G: no Windows menus needed) ----------------
+    static string J(string s) { return "\"" + (s ?? "").Replace("\\", "\\\\").Replace("\"", "\\\"") + "\""; }
+
+    // sound output: the playback devices, and making one the default (Windows' own policy interface)
+    [ComImport, Guid("A95664D2-9614-4F35-A746-DE8DB63617E6"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IMMDeviceEnumerator2
+    {
+        [PreserveSig] int EnumAudioEndpoints(int dataFlow, int stateMask, out IMMDeviceCollection2 devices);
+        [PreserveSig] int GetDefaultAudioEndpoint(int dataFlow, int role, out IMMDevice2 device);
+    }
+    [ComImport, Guid("0BD7A1BE-7A1A-44DB-8397-CC5392387B5E"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IMMDeviceCollection2
+    {
+        [PreserveSig] int GetCount(out int count);
+        [PreserveSig] int Item(int index, out IMMDevice2 device);
+    }
+    [ComImport, Guid("D666063F-1587-4E43-81F1-B948E807363F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IMMDevice2
+    {
+        [PreserveSig] int Activate(ref Guid iid, int clsCtx, IntPtr p, [MarshalAs(UnmanagedType.IUnknown)] out object o);
+        [PreserveSig] int OpenPropertyStore(int access, out IPropertyStore store);
+        [PreserveSig] int GetId([MarshalAs(UnmanagedType.LPWStr)] out string id);
+    }
+    [StructLayout(LayoutKind.Sequential)] struct PROPERTYKEY { public Guid fmtid; public int pid; }
+    [StructLayout(LayoutKind.Explicit)] struct PROPVARIANT { [FieldOffset(0)] public short vt; [FieldOffset(8)] public IntPtr p; [FieldOffset(16)] public long pad; }
+    [ComImport, Guid("886d8eeb-8cf2-4446-8d02-cdba1dbdcf99"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IPropertyStore
+    {
+        [PreserveSig] int GetCount(out int n);
+        [PreserveSig] int GetAt(int i, out PROPERTYKEY k);
+        [PreserveSig] int GetValue(ref PROPERTYKEY k, out PROPVARIANT v);
+    }
+    [ComImport, Guid("870af99c-171d-4f9e-af0d-e63df40c2bc9")] class PolicyConfigClient { }
+    [ComImport, Guid("f8679f50-850a-41cf-9c72-430f290290c8"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IPolicyConfig
+    {
+        [PreserveSig] int GetMixFormat(string id, IntPtr f);
+        [PreserveSig] int GetDeviceFormat(string id, int def, IntPtr f);
+        [PreserveSig] int ResetDeviceFormat(string id);
+        [PreserveSig] int SetDeviceFormat(string id, IntPtr a, IntPtr b);
+        [PreserveSig] int GetProcessingPeriod(string id, int def, IntPtr a, IntPtr b);
+        [PreserveSig] int SetProcessingPeriod(string id, IntPtr a);
+        [PreserveSig] int GetShareMode(string id, IntPtr m);
+        [PreserveSig] int SetShareMode(string id, IntPtr m);
+        [PreserveSig] int GetPropertyValue(string id, IntPtr k, IntPtr v);
+        [PreserveSig] int SetPropertyValue(string id, IntPtr k, IntPtr v);
+        [PreserveSig] int SetDefaultEndpoint([MarshalAs(UnmanagedType.LPWStr)] string id, int role);
+    }
+
+    static string AudioList()
+    {
+        var en = (IMMDeviceEnumerator2)new MMDeviceEnumerator();
+        IMMDevice2 def;
+        string defId = "";
+        if (en.GetDefaultAudioEndpoint(0, 1, out def) == 0) def.GetId(out defId);
+        IMMDeviceCollection2 devs;
+        if (en.EnumAudioEndpoints(0, 1, out devs) != 0) return "[]";
+        int n;
+        devs.GetCount(out n);
+        var parts = new List<string>();
+        var nameKey = new PROPERTYKEY { fmtid = new Guid("a45c254e-df1c-4efd-8020-67d146a850e0"), pid = 14 };
+        for (int i = 0; i < n; i++)
+        {
+            IMMDevice2 d;
+            if (devs.Item(i, out d) != 0) continue;
+            string id;
+            d.GetId(out id);
+            string name = id;
+            IPropertyStore ps;
+            if (d.OpenPropertyStore(0, out ps) == 0)
+            {
+                PROPVARIANT v;
+                if (ps.GetValue(ref nameKey, out v) == 0 && v.vt == 31) name = Marshal.PtrToStringUni(v.p);
+            }
+            parts.Add("{\"id\":" + J(id) + ",\"name\":" + J(name) + ",\"default\":" + (id == defId ? "true" : "false") + "}");
+        }
+        return "[" + string.Join(",", parts.ToArray()) + "]";
+    }
+
+    static bool AudioSet(string id)
+    {
+        var pc = (IPolicyConfig)new PolicyConfigClient();
+        bool ok = true;
+        for (int role = 0; role < 3; role++) ok &= pc.SetDefaultEndpoint(id, role) == 0; // console, multimedia, communications
+        return ok;
+    }
+
+    // display: resolution + refresh rate of the main screen
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    struct DEVMODE
+    {
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string dmDeviceName;
+        public short dmSpecVersion, dmDriverVersion, dmSize, dmDriverExtra;
+        public int dmFields, dmPositionX, dmPositionY, dmDisplayOrientation, dmDisplayFixedOutput;
+        public short dmColor, dmDuplex, dmYResolution, dmTTOption, dmCollate;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string dmFormName;
+        public short dmLogPixels;
+        public int dmBitsPerPel, dmPelsWidth, dmPelsHeight, dmDisplayFlags, dmDisplayFrequency;
+        public int dmICMMethod, dmICMIntent, dmMediaType, dmDitherType, dmReserved1, dmReserved2, dmPanningWidth, dmPanningHeight;
+    }
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern bool EnumDisplaySettings(string device, int mode, ref DEVMODE dm);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int ChangeDisplaySettingsEx(string device, ref DEVMODE dm, IntPtr hwnd, int flags, IntPtr param);
+
+    static DEVMODE NewMode() { var m = new DEVMODE(); m.dmSize = (short)Marshal.SizeOf(typeof(DEVMODE)); return m; }
+
+    static string DisplayList()
+    {
+        var cur = NewMode();
+        EnumDisplaySettings(null, -1, ref cur); // ENUM_CURRENT_SETTINGS
+        var seen = new HashSet<string>();
+        var parts = new List<string>();
+        var m = NewMode();
+        for (int i = 0; EnumDisplaySettings(null, i, ref m); i++)
+        {
+            if (m.dmBitsPerPel != 32 || m.dmPelsWidth < 1024) continue;
+            string k = m.dmPelsWidth + "x" + m.dmPelsHeight + "@" + m.dmDisplayFrequency;
+            if (!seen.Add(k)) continue;
+            bool now = m.dmPelsWidth == cur.dmPelsWidth && m.dmPelsHeight == cur.dmPelsHeight && m.dmDisplayFrequency == cur.dmDisplayFrequency;
+            parts.Add("{\"w\":" + m.dmPelsWidth + ",\"h\":" + m.dmPelsHeight + ",\"hz\":" + m.dmDisplayFrequency + ",\"current\":" + (now ? "true" : "false") + "}");
+        }
+        return "[" + string.Join(",", parts.ToArray()) + "]";
+    }
+
+    /** test = only ask Windows whether the mode would work (nothing changes). */
+    static int DisplaySet(int w, int h, int hz, bool test)
+    {
+        var m = NewMode();
+        EnumDisplaySettings(null, -1, ref m);
+        m.dmPelsWidth = w;
+        m.dmPelsHeight = h;
+        m.dmDisplayFrequency = hz;
+        m.dmFields = 0x80000 | 0x100000 | 0x400000; // width, height, frequency
+        return ChangeDisplaySettingsEx(null, ref m, IntPtr.Zero, test ? 0x2 : 0x1, IntPtr.Zero); // CDS_TEST : CDS_UPDATEREGISTRY
+    }
+
+    // Bluetooth: find controllers in pairing mode and pair them (Windows' classic Bluetooth API)
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    struct BLUETOOTH_DEVICE_INFO
+    {
+        public int dwSize;
+        public ulong Address;
+        public uint ulClassofDevice;
+        public bool fConnected, fRemembered, fAuthenticated;
+        public SYSTEMTIME stLastSeen, stLastUsed;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 248)] public string szName;
+    }
+    [StructLayout(LayoutKind.Sequential)] struct SYSTEMTIME { public short a, b, c, d, e, f, g, h; }
+    [StructLayout(LayoutKind.Sequential)]
+    struct BLUETOOTH_DEVICE_SEARCH_PARAMS
+    {
+        public int dwSize;
+        public bool fReturnAuthenticated, fReturnRemembered, fReturnUnknown, fReturnConnected, fIssueInquiry;
+        public byte cTimeoutMultiplier;
+        public IntPtr hRadio;
+    }
+    [DllImport("bthprops.cpl")] static extern IntPtr BluetoothFindFirstDevice(ref BLUETOOTH_DEVICE_SEARCH_PARAMS p, ref BLUETOOTH_DEVICE_INFO info);
+    [DllImport("bthprops.cpl")] static extern bool BluetoothFindNextDevice(IntPtr h, ref BLUETOOTH_DEVICE_INFO info);
+    [DllImport("bthprops.cpl")] static extern bool BluetoothFindDeviceClose(IntPtr h);
+    [DllImport("bthprops.cpl")] static extern int BluetoothAuthenticateDeviceEx(IntPtr hwnd, IntPtr radio, ref BLUETOOTH_DEVICE_INFO info, IntPtr oob, int auth);
+    [DllImport("bthprops.cpl")] static extern int BluetoothSetServiceState(IntPtr radio, ref BLUETOOTH_DEVICE_INFO info, ref Guid service, int flags);
+    [DllImport("bthprops.cpl")] static extern int BluetoothRemoveDevice(ref ulong address);
+
+    static List<BLUETOOTH_DEVICE_INFO> BtDevices(bool scan)
+    {
+        var list = new List<BLUETOOTH_DEVICE_INFO>();
+        var p = new BLUETOOTH_DEVICE_SEARCH_PARAMS();
+        p.dwSize = Marshal.SizeOf(p);
+        p.fReturnAuthenticated = p.fReturnRemembered = p.fReturnConnected = true;
+        p.fReturnUnknown = scan;
+        p.fIssueInquiry = scan;
+        p.cTimeoutMultiplier = (byte)(scan ? 6 : 0); // 6 × 1.28 s
+        var d = new BLUETOOTH_DEVICE_INFO();
+        d.dwSize = Marshal.SizeOf(d);
+        IntPtr h;
+        try { h = BluetoothFindFirstDevice(ref p, ref d); }
+        catch (Exception) { return list; } // no Bluetooth on this PC
+        if (h == IntPtr.Zero) return list;
+        do { list.Add(d); d = new BLUETOOTH_DEVICE_INFO(); d.dwSize = Marshal.SizeOf(d); } while (BluetoothFindNextDevice(h, ref d));
+        BluetoothFindDeviceClose(h);
+        return list;
+    }
+
+    static string BtList(bool scan)
+    {
+        var parts = new List<string>();
+        foreach (var d in BtDevices(scan))
+            parts.Add("{\"address\":\"" + d.Address.ToString("X12") + "\",\"name\":" + J(d.szName) + ",\"connected\":" + (d.fConnected ? "true" : "false") + ",\"paired\":" + (d.fAuthenticated || d.fRemembered ? "true" : "false") + ",\"cod\":" + d.ulClassofDevice + "}");
+        return "[" + string.Join(",", parts.ToArray()) + "]";
+    }
+
+    static string BtPair(string address)
+    {
+        ulong a = Convert.ToUInt64(address, 16);
+        foreach (var d0 in BtDevices(true))
+        {
+            if (d0.Address != a) continue;
+            var d = d0;
+            int r = BluetoothAuthenticateDeviceEx(IntPtr.Zero, IntPtr.Zero, ref d, IntPtr.Zero, 0); // no PIN: controllers "just work"
+            var hid = new Guid("00001124-0000-1000-8000-00805F9B34FB");
+            int s = BluetoothSetServiceState(IntPtr.Zero, ref d, ref hid, 1); // switch on the controller (HID) service
+            return (r == 0 || r == 183) && (s == 0 || s == 183) ? "ok" : "failed " + r + "/" + s; // 183: already done
+        }
+        return "not found";
+    }
+
     // ---------------- main ----------------
     static void Main(string[] args)
     {
@@ -436,7 +641,8 @@ static class PadHelper
             if (a.Length == 0 || a[0].Length == 0) continue;
             try
             {
-                uint pid = a.Length > 1 && a[0] != "focushwnd" ? uint.Parse(a[1]) : 0;
+                uint pid = 0;
+                if (a.Length > 1) uint.TryParse(a[1], out pid); // only some commands take a process id
                 switch (a[0])
                 {
                     case "quit": return;
@@ -449,6 +655,21 @@ static class PadHelper
                         }
                     case "close": Say(Close(pid) ? "ok close" : "err close no window"); break;
                     case "focus": Say(Focus(pid) ? "ok focus" : "err focus no window"); break;
+                    case "audio": Say("audio " + AudioList()); break;
+                    case "audioset": Say(a.Length > 1 && AudioSet(line.Trim().Substring(9)) ? "ok audioset" : "err audioset"); break;
+                    case "display": Say("display " + DisplayList()); break;
+                    case "displayset":
+                    case "displaytest":
+                        {
+                            // displayset <w> <h> <hz> (all in a[1] + a[2] split again)
+                            var v = line.Trim().Split(' ');
+                            int r = DisplaySet(int.Parse(v[1]), int.Parse(v[2]), int.Parse(v[3]), a[0] == "displaytest");
+                            Say(r == 0 ? "ok " + a[0] : "err " + a[0] + " " + r);
+                            break;
+                        }
+                    case "bt": Say("bt " + BtList(a.Length > 1 && a[1] == "scan")); break;
+                    case "btpair": { string r = BtPair(a.Length > 1 ? a[1] : ""); Say(r == "ok" ? "ok btpair" : "err btpair " + r); break; }
+                    case "btremove": { ulong ad = Convert.ToUInt64(a.Length > 1 ? a[1] : "0", 16); Say(BluetoothRemoveDevice(ref ad) == 0 ? "ok btremove" : "err btremove"); break; }
                     case "idle":
                         {
                             // ms since the last keyboard / mouse input (couch test waits until nobody uses the PC)

@@ -16,8 +16,14 @@ let proc: ChildProcess | null = null
 let homeListeners: ((pad: string) => void)[] = []
 let padsListeners: ((pads: string[]) => void)[] = []
 let lastPads: string[] = []
-/** Answers come back in order: one waiting promise per command. */
-const waiting: ((line: string) => void)[] = []
+/** Waiting commands; an answer goes to the oldest one with its command name (a late answer can't land on another). */
+const waiting: { cmd: string; done: (line: string) => void }[] = []
+
+/** "ok keys" / "err keys …" → keys; "audio […]" → audio; "fg 123" → fg. */
+function answerTo(line: string): string {
+  const [a, b] = line.split(' ')
+  return a === 'ok' || a === 'err' ? b : a
+}
 
 export function startPadHelper(): void {
   if (proc) return
@@ -31,7 +37,7 @@ export function startPadHelper(): void {
   proc.once('exit', (code) => {
     log.warn(`helper stopped (code ${code})`)
     proc = null
-    for (const w of waiting.splice(0)) w('err gone')
+    for (const w of waiting.splice(0)) w.done('err gone')
   })
   proc.once('error', (e) => log.error('helper failed to start', e))
   createInterface({ input: proc.stdout! }).on('line', (line) => {
@@ -43,7 +49,11 @@ export function startPadHelper(): void {
       lastPads = line.slice(5).split(',').filter(Boolean)
       for (const l of padsListeners) l(lastPads)
     } else if (line === 'ready') log.info('helper ready')
-    else waiting.shift()?.(line)
+    else {
+      const cmd = answerTo(line)
+      const i = waiting.findIndex((w) => w.cmd === cmd)
+      if (i >= 0) waiting.splice(i, 1)[0].done(line)
+    }
   })
 }
 
@@ -67,16 +77,64 @@ export function helperPads(): string[] {
   return lastPads
 }
 
-function ask(cmd: string): Promise<string> {
+function ask(cmd: string, timeoutMs = 5000): Promise<string> {
   if (!proc?.stdin) return Promise.resolve('err no helper')
+  const name = cmd.split(' ')[0]
   return new Promise((resolve) => {
-    const t = setTimeout(() => resolve('err timeout'), 5000)
-    waiting.push((line) => {
-      clearTimeout(t)
-      resolve(line)
-    })
+    const w = {
+      cmd: name,
+      done: (line: string) => {
+        clearTimeout(t)
+        resolve(line)
+      }
+    }
+    const t = setTimeout(() => {
+      const i = waiting.indexOf(w)
+      if (i >= 0) waiting.splice(i, 1)
+      resolve('err timeout')
+    }, timeoutMs)
+    waiting.push(w)
     proc!.stdin!.write(`${cmd}\n`)
   })
+}
+
+// ---------------- system settings (SPEC-v2 G) ----------------
+
+function jsonAnswer<T>(line: string, prefix: string, fallback: T): T {
+  if (!line.startsWith(`${prefix} `)) return fallback
+  try {
+    return JSON.parse(line.slice(prefix.length + 1)) as T
+  } catch {
+    return fallback
+  }
+}
+
+export async function audioOutputs(): Promise<{ id: string; name: string; default: boolean }[]> {
+  return jsonAnswer(await ask('audio'), 'audio', [])
+}
+export async function setAudioOutput(id: string): Promise<boolean> {
+  if (!/^\{[\w.-]+\}\.\{[\w-]+\}$/.test(id)) return false
+  return (await ask(`audioset ${id}`)).startsWith('ok')
+}
+export async function displayModes(): Promise<{ w: number; h: number; hz: number; current: boolean }[]> {
+  return jsonAnswer(await ask('display'), 'display', [])
+}
+/** test: only ask Windows whether it would work. */
+export async function setDisplayMode(w: number, h: number, hz: number, test = false): Promise<boolean> {
+  if (![w, h, hz].every((n) => Number.isInteger(n) && n > 0 && n < 10000)) return false
+  return (await ask(`${test ? 'displaytest' : 'displayset'} ${w} ${h} ${hz}`)).startsWith('ok')
+}
+export async function bluetoothDevices(scan: boolean): Promise<{ address: string; name: string; connected: boolean; paired: boolean; cod: number }[]> {
+  return jsonAnswer(await ask(scan ? 'bt scan' : 'bt', scan ? 20_000 : 5000), 'bt', [])
+}
+export async function bluetoothPair(address: string): Promise<{ ok: boolean; error?: string }> {
+  if (!/^[0-9A-F]{12}$/i.test(address)) return { ok: false, error: 'Bad address' }
+  const r = await ask(`btpair ${address}`, 30_000)
+  return r.startsWith('ok') ? { ok: true } : { ok: false, error: r.replace(/^err btpair /, '') }
+}
+export async function bluetoothRemove(address: string): Promise<boolean> {
+  if (!/^[0-9A-F]{12}$/i.test(address)) return false
+  return (await ask(`btremove ${address}`)).startsWith('ok')
 }
 
 /** Like clicking the emulator window's X: it saves its resume state (where set up) and closes. */

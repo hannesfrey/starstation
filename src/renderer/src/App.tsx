@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from './api'
-import { input, BACKSPACE, type Action, type PadKind } from './input'
+import { input, BACKSPACE, type Action, type PadKind, setButtonMap, buttonFor, BUTTON_NAMES, REMAPPABLE } from './input'
 import { PhotoViewer } from './components/PhotoViewer'
 import { PadTest } from './components/PadTest'
 import { isMenuPad, padName } from './input'
@@ -137,6 +137,11 @@ export function App() {
       api.on('compress-progress', ({ gameId, text }) => setExtra((x) => ({ ...x, compressing: { ...x.compressing, [gameId]: text } }))),
       // a Nexus Mods download link: ask which game it is for
       api.on('trophies', (t) => setTrophyData(t)),
+      // the new screen mode wasn't kept: it went back by itself
+      api.on('display-revert', () => {
+        if (keepTimer.current) window.clearInterval(keepTimer.current)
+        setPanels((p) => p.filter((q) => q.id !== 'screen-keep'))
+      }),
       api.on('package-ask', (a) => {
         setExtra((x) => ({ ...x, pkgAsk: { ...a, choices: {} } }))
         setPanels((p) => [...p.filter((q) => q.id !== 'pkg-profiles'), { id: 'pkg-profiles', index: 0 }])
@@ -345,6 +350,11 @@ export function App() {
     if (arg && id === 'game') void api.mods(arg).then((v) => v && setExtra((x) => ({ ...x, mods: { ...x.mods, [arg]: v } })))
     if (id === 'about') void api.updateState().then((update) => setExtra((x) => ({ ...x, update })))
     if (id === 'mod-sources') void api.nexusStatus().then((nexusStatus) => setExtra((x) => ({ ...x, nexusStatus })))
+    if (id === 'system' || id === 'sound' || id === 'screen') {
+      void api.sysAudio().then((audio) => setExtra((x) => ({ ...x, sys: { ...x.sys, audio } })))
+      void api.sysDisplay().then((display) => setExtra((x) => ({ ...x, sys: { ...x.sys, display } })))
+    }
+    if (id === 'bluetooth') void api.sysBluetooth(false).then((bt) => setExtra((x) => ({ ...x, sys: { ...x.sys, bt } })))
     if (id === 'storage') {
       setExtra((x) => ({ ...x, storage: undefined }))
       void api.storage(true).then((storage) => setExtra((x) => ({ ...x, storage })))
@@ -511,6 +521,84 @@ export function App() {
     setExtra((x) => ({ ...x, pkgAsk: undefined }))
     void api.packageFinish(a.folder, !!extra.pkg.useSettings, choices).then(() => api.profiles().then(applyProfiles))
   }, [extra.pkgAsk, extra.pkg.useSettings, applyProfiles])
+  useEffect(() => {
+    let map: Partial<Record<Action, number>> = {}
+    try {
+      map = JSON.parse(state?.settings.buttonMap || '{}')
+    } catch {
+      /* broken setting: standard buttons */
+    }
+    setButtonMap(map)
+    setExtra((x) => ({ ...x, buttonNames: Object.fromEntries(REMAPPABLE.map((r) => [r, BUTTON_NAMES[buttonFor(r) ?? -1] ?? '—'])) }))
+  }, [state?.settings.buttonMap])
+
+  // ---- system settings ----
+  const loadSys = useCallback(() => {
+    void api.sysAudio().then((audio) => setExtra((x) => ({ ...x, sys: { ...x.sys, audio } })))
+    void api.sysDisplay().then((display) => setExtra((x) => ({ ...x, sys: { ...x.sys, display } })))
+  }, [])
+  const sysAudioSet = useCallback(
+    (id: string) => {
+      void api.sysAudioSet(id).then((ok) => {
+        if (!ok) notify({ kind: 'error', title: 'Sound output not changed' })
+        loadSys()
+      })
+    },
+    [notify, loadSys]
+  )
+  const keepTimer = useRef<number | null>(null)
+  const sysDisplaySet = useCallback(
+    (w: number, h: number, hz: number) => {
+      void api.sysDisplaySet(w, h, hz).then((r) => {
+        if (!r.ok) return notify({ kind: 'error', title: 'Screen not changed', detail: r.error })
+        // countdown on screen; Starstation goes back by itself after 15 s
+        setExtra((x) => ({ ...x, sys: { ...x.sys, keepLeft: 15 } }))
+        setPanels((p) => [...p.filter((q) => q.id !== 'screen-keep'), { id: 'screen-keep', index: 1 }])
+        if (keepTimer.current) window.clearInterval(keepTimer.current)
+        keepTimer.current = window.setInterval(() => setExtra((x) => ({ ...x, sys: { ...x.sys, keepLeft: Math.max(0, (x.sys?.keepLeft ?? 15) - 1) } })), 1000)
+      })
+    },
+    [notify]
+  )
+  const sysDisplayKeep = useCallback(
+    (keep: boolean) => {
+      if (keepTimer.current) window.clearInterval(keepTimer.current)
+      setPanels((p) => p.filter((q) => q.id !== 'screen-keep'))
+      void api.sysDisplayKeep(keep).then(loadSys)
+    },
+    [loadSys]
+  )
+  const sysBluetooth = useCallback((scan: boolean) => {
+    setExtra((x) => ({ ...x, sys: { ...x.sys, btBusy: scan ? 'Searching… (about 8 seconds)' : 'Looking…' } }))
+    void api.sysBluetooth(scan).then((bt) => setExtra((x) => ({ ...x, sys: { ...x.sys, bt, btBusy: undefined } })))
+  }, [])
+  const sysBluetoothPair = useCallback(
+    (address: string) => {
+      setExtra((x) => ({ ...x, sys: { ...x.sys, btBusy: 'Pairing…' } }))
+      void api.sysBluetoothPair(address).then((r) => {
+        notify(r.ok ? { kind: 'controller', title: 'Controller paired' } : { kind: 'error', title: 'Not paired', detail: 'Is the controller still in pairing mode (light flashing)?' })
+        sysBluetooth(false)
+      })
+    },
+    [notify, sysBluetooth]
+  )
+  const sysBluetoothRemove = useCallback((address: string) => void api.sysBluetoothRemove(address).then(() => sysBluetooth(false)), [sysBluetooth])
+  const remapButton = useCallback(
+    (action: string) => {
+      const cur = (() => {
+        try {
+          return JSON.parse(stateRef.current?.settings.buttonMap || '{}') as Record<string, number>
+        } catch {
+          return {}
+        }
+      })()
+      const choices = Object.keys(BUTTON_NAMES).map(Number)
+      const now = cur[action] ?? buttonFor(action as Action) ?? choices[0]
+      const next = choices[(choices.indexOf(now) + 1) % choices.length]
+      setSetting('buttonMap', JSON.stringify({ ...cur, [action]: next }))
+    },
+    [setSetting]
+  )
   const setWallpaper = useCallback(
     (kind: string, remove?: boolean) => {
       void api.setWallpaper(kind, remove ? null : undefined).then((r) => {
@@ -1108,7 +1196,14 @@ export function App() {
         profileEdit,
         pkgPrepareFolder,
         pkgAskChoice,
-        pkgFinish
+        pkgFinish,
+        sysAudioSet,
+        sysDisplaySet,
+        sysDisplayKeep,
+        sysBluetooth,
+        sysBluetoothPair,
+        sysBluetoothRemove,
+        remapButton
       },
       extra
     )
@@ -1191,6 +1286,13 @@ export function App() {
     pkgPrepareFolder,
     pkgAskChoice,
     pkgFinish,
+    sysAudioSet,
+    sysDisplaySet,
+    sysDisplayKeep,
+    sysBluetooth,
+    sysBluetoothPair,
+    sysBluetoothRemove,
+    remapButton,
     extra
   ])
 
@@ -1561,7 +1663,7 @@ export function App() {
   // a console's own wallpaper on its column, else the user's picture (none in safe mode)
   const wallpaper = (column && walls.consoles[column.id]) || walls.own
   return (
-    <div className={`app ${idle ? 'idle' : ''} ${running ? 'running' : ''}`}>
+    <div className={`app ${idle ? 'idle' : ''} ${running ? 'running' : ''} text-${state?.settings.textSize ?? 'normal'}`}>
       <Background paused={!!running} dim={idle} theme={state?.settings.theme} />
       {wallpaper && <div className="wallpaper" key={wallpaper} style={{ backgroundImage: `url("${api.mediaUrl(wallpaper)}")` }} data-testid="wallpaper" />}
       {bgArt && !preview && <div className="game-bg" style={{ backgroundImage: `url("${api.mediaUrl(bgArt)}")` }} />}

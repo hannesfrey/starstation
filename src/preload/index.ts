@@ -64,6 +64,14 @@ const api = {
   profilePicture: (id: string, file?: string) => ipcRenderer.invoke('profile-picture', id, file),
   profileSwitch: (id: string, pin?: string) => ipcRenderer.invoke('profile-switch', id, pin),
   packagePrepareFolder: (folder?: string) => ipcRenderer.invoke('package-prepare-folder', folder),
+  sysAudio: () => ipcRenderer.invoke('sys-audio'),
+  sysAudioSet: (id: string) => ipcRenderer.invoke('sys-audio-set', id),
+  sysDisplay: () => ipcRenderer.invoke('sys-display'),
+  sysDisplaySet: (w: number, h: number, hz: number) => ipcRenderer.invoke('sys-display-set', w, h, hz),
+  sysDisplayKeep: (keep: boolean) => ipcRenderer.invoke('sys-display-keep', keep),
+  sysBluetooth: (scan: boolean) => ipcRenderer.invoke('sys-bt', scan),
+  sysBluetoothPair: (address: string) => ipcRenderer.invoke('sys-bt-pair', address),
+  sysBluetoothRemove: (address: string) => ipcRenderer.invoke('sys-bt-remove', address),
   packageFinish: (folder: string, useSettings: boolean, choices: unknown) => ipcRenderer.invoke('package-finish', folder, useSettings, choices),
   nexusInstall: (url: string, gameId: string) => ipcRenderer.invoke('nexus-install', url, gameId),
   couchStart: () => ipcRenderer.invoke('couch-start'),
@@ -106,7 +114,7 @@ const api = {
   quit: () => ipcRenderer.invoke('quit'),
   mediaUrl: (absPath: string) => `starstation-media://local/${encodeURIComponent(absPath)}`,
   on: (channel: string, cb: (payload: unknown) => void) => {
-    const allowed = ['notice', 'library', 'consoles', 'collections', 'screenshots', 'battery', 'package-progress', 'running', 'navigate', 'import-progress', 'emulator-progress', 'add-ask', 'overlay', 'compress-progress', 'nexus-request', 'trophies', 'wallpapers', 'package-ask']
+    const allowed = ['notice', 'library', 'consoles', 'collections', 'screenshots', 'battery', 'package-progress', 'running', 'navigate', 'import-progress', 'emulator-progress', 'add-ask', 'overlay', 'compress-progress', 'nexus-request', 'trophies', 'wallpapers', 'package-ask', 'display-revert']
     if (!allowed.includes(channel)) throw new Error(`Unknown channel ${channel}`)
     const h = (_e: unknown, payload: unknown) => cb(payload)
     ipcRenderer.on(channel, h)
