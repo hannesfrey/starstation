@@ -9,6 +9,7 @@ import { music, sfx } from './sound'
 import { Background } from './components/Background'
 import { Boot } from './components/Boot'
 import { PlayerAssign, menuPads } from './components/PlayerAssign'
+import { ManualViewer } from './components/ManualViewer'
 import { TopBar } from './components/TopBar'
 import { Notices } from './components/Notices'
 import { KeyHints, type GlyphButton } from './components/Glyph'
@@ -64,6 +65,13 @@ export function App() {
   const [photo, setPhoto] = useState<number | null>(null)
   const [battery, setBattery] = useState<BatteryInfo | null>(null)
   const [padTest, setPadTest] = useState(false)
+  const [manual, setManual] = useState<{ file: string; title: string } | null>(null)
+  const closeManual = useCallback(() => setManual(null), [])
+  const openManual = useCallback((g: Game) => {
+    if (!g.manual) return
+    setPanels([])
+    setManual({ file: g.manual, title: g.title })
+  }, [])
   const [assign, setAssign] = useState<{ title: string; max: number; resolve: (r: PlayerPad[] | null | 'cancel') => void } | null>(null)
   const newConsoleRef = useRef<() => void>(() => undefined)
   const [dragging, setDragging] = useState(false)
@@ -915,7 +923,8 @@ export function App() {
         markTested,
         guideSeen,
         couchSave,
-        compressGame
+        compressGame,
+        openManual
       },
       extra
     )
@@ -985,6 +994,7 @@ export function App() {
     guideSeen,
     couchSave,
     compressGame,
+    openManual,
     extra
   ])
 
@@ -1049,6 +1059,8 @@ export function App() {
       return
     }
     if (booting || !state) return
+    // the manual viewer handles its own buttons
+    if (manual) return
 
     if (padTest) {
       if (a === 'back') {
@@ -1391,6 +1403,7 @@ export function App() {
             />
           )}
           {photo !== null && <PhotoViewer shots={shots} index={photo} />}
+          {manual && <ManualViewer file={manual.file} title={manual.title} onClose={closeManual} />}
           {padTest && <PadTest />}
           {activePanel && (
             <PanelView

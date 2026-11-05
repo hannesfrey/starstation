@@ -138,3 +138,22 @@ const [vMaj, vMin, vBld] = fileVersion(vcDst).split('.').map(Number)
 // electron-builder includes installer.nsh twice (installer + uninstaller): define once
 fs.writeFileSync(vcNsh, `; written by scripts/fetch-bin.mjs: version of the bundled build/vc_redist.x64.exe\n!ifndef VCREDIST_MINOR\n!define VCREDIST_MAJOR ${vMaj}\n!define VCREDIST_MINOR ${vMin}\n!define VCREDIST_BLD ${vBld}\n!endif\n`)
 console.log(`vc_redist.x64.exe: ${vMaj}.${vMin}.${vBld}, signed by Microsoft`)
+
+// ScreenScraper developer login (SPEC-v2: built into the installer so every PC gets manuals and clips).
+// Taken from Hannes's Files\config\secrets.json at build time; never committed (resources/extra/*.json is ignored).
+const extra = path.resolve(import.meta.dirname, '..', 'resources', 'extra')
+fs.mkdirSync(extra, { recursive: true })
+const ssOut = path.join(extra, 'screenscraper.json')
+let ss = {}
+try {
+  ss = JSON.parse(fs.readFileSync(path.resolve(import.meta.dirname, '..', '..', 'config', 'secrets.json'), 'utf8')).screenscraper ?? {}
+} catch {
+  /* no secrets on this PC */
+}
+if (ss.devid && ss.devpassword) {
+  fs.writeFileSync(ssOut, JSON.stringify({ devid: ss.devid, devpassword: ss.devpassword }))
+  console.log('screenscraper.json: developer login built in')
+} else {
+  fs.rmSync(ssOut, { force: true })
+  console.log('screenscraper.json: no developer login yet (manuals and clips need one)')
+}

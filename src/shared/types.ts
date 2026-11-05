@@ -90,6 +90,9 @@ export interface Game {
   customArt?: boolean
   /** PS3 / Xbox 360 compatibility label. */
   compat?: Compat
+  /** Scanned game manual (PDF) and gameplay clip (MP4), from ScreenScraper. */
+  manual?: string
+  video?: string
 }
 
 export interface GameStats {
@@ -244,6 +247,8 @@ export interface StarstationApi {
   /** Compress / decompress a game (lossless; the original goes to the Recycle Bin after a check). */
   compressGame(gameId: string): Promise<{ ok: boolean; error?: string }>
   storage(fresh?: boolean): Promise<StorageInfo>
+  /** A file inside Files\ (a game manual), as bytes. */
+  readMedia(path: string): Promise<Uint8Array | null>
   /** Hidden tests only: act as if the PS button was pressed. */
   testHome(): Promise<void>
   gameDetails(gameId: string): Promise<GameDetails | null>

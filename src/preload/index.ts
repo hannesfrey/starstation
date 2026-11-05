@@ -45,6 +45,7 @@ const api = {
   testHome: () => ipcRenderer.invoke('test-home'),
   compressGame: (gameId: string) => ipcRenderer.invoke('compress-game', gameId),
   storage: (fresh?: boolean) => ipcRenderer.invoke('storage', fresh),
+  readMedia: (p: string) => ipcRenderer.invoke('read-media', p),
   couchStart: () => ipcRenderer.invoke('couch-start'),
   couchStatus: () => ipcRenderer.invoke('couch-status'),
   couchPad: () => ipcRenderer.invoke('couch-pad'),

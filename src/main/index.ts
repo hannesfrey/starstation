@@ -447,6 +447,17 @@ function registerIpc(): void {
   ipcMain.handle('overlay-state', () => overlayState())
   // ---- library & storage (SPEC-v2 D) ----
   ipcMain.handle('storage', (_e, fresh?: boolean) => storageInfo(!!fresh))
+  ipcMain.handle('read-media', async (_e, p: string) => {
+    // only files inside Files\ (manuals in media\artwork), and not huge ones
+    const abs = path.resolve(String(p))
+    if (!abs.toLowerCase().startsWith(path.resolve(filesDir()).toLowerCase() + path.sep)) return null
+    try {
+      if ((await fs.promises.stat(abs)).size > 300 * 1024 ** 2) return null
+      return new Uint8Array(await fs.promises.readFile(abs))
+    } catch {
+      return null
+    }
+  })
   ipcMain.handle('compress-game', (_e, id: string) => doCompress(String(id)))
   ipcMain.handle('couch-start', () => startCouchCheck())
   ipcMain.handle('couch-status', () => couchStatus())

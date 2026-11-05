@@ -871,3 +871,42 @@ body,
   color: var(--text-dim);
   font-size: 17px;
 }
+
+/* ---- game manual (page by page) ---- */
+.manual {
+  position: absolute;
+  inset: 0;
+  z-index: 45;
+  display: flex;
+  flex-direction: column;
+  background: rgba(3, 5, 10, 0.94);
+}
+.manual-top {
+  display: flex;
+  justify-content: space-between;
+  padding: 2.4vh 4vw 1.4vh;
+  font-size: 20px;
+  color: var(--text-dim);
+}
+.manual-page {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+}
+.manual-page.zoom {
+  display: block;
+  overflow-y: auto;
+  text-align: center;
+}
+.manual-page canvas {
+  box-shadow: 0 6px 40px rgba(0, 0, 0, 0.6);
+  background: #fff;
+}
+.manual-hint {
+  text-align: center;
+  padding: 1.2vh 0 2vh;
+  color: var(--text-dim);
+  font-size: 16px;
+}

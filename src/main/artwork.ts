@@ -104,11 +104,37 @@ interface SsMedia {
   region?: string
 }
 
-async function fromScreenScraper(g: Game, want: { icon: boolean; background: boolean }, d: string): Promise<{ icon: boolean; background: boolean }> {
-  const s = getSecrets().screenscraper
-  const got = { icon: false, background: false }
+/**
+ * ScreenScraper login: the user's own (secrets.json), and the developer ID either from secrets.json or the one
+ * built into the installer (resources\screenscraper.json, made from Hannes's secrets at build time).
+ */
+export function screenScraperLogin(): { devid: string; devpassword: string; username: string; password: string } | null {
+  const s = getSecrets().screenscraper ?? {}
+  let dev = { devid: s.devid ?? '', devpassword: s.devpassword ?? '' }
+  if (!dev.devid || !dev.devpassword) {
+    const built = readJson<{ devid?: string; devpassword?: string }>(path.join(process.resourcesPath ?? '', 'screenscraper.json'), {})
+    if (built.devid && built.devpassword) dev = { devid: built.devid, devpassword: built.devpassword }
+  }
+  if (!dev.devid || !dev.devpassword) return null
+  return { ...dev, username: s.username ?? '', password: s.password ?? '' }
+}
+
+const ssBase = () => process.env.STARSTATION_SCREENSCRAPER_BASE ?? 'https://api.screenscraper.fr/api2'
+const ssCache = new Map<string, Promise<SsMedia[]>>()
+
+/** All media ScreenScraper has for a game (one request per game and session). */
+function ssMedias(g: Game): Promise<SsMedia[]> {
+  const hit = ssCache.get(g.id)
+  if (hit) return hit
+  const p = ssLookup(g)
+  ssCache.set(g.id, p)
+  return p
+}
+
+async function ssLookup(g: Game): Promise<SsMedia[]> {
+  const s = screenScraperLogin()
   const system = SCREENSCRAPER_SYSTEM[g.console]
-  if (!s?.devid || !s.devpassword || !system) return got
+  if (!s || !system) return []
   const q = new URLSearchParams({
     devid: s.devid,
     devpassword: s.devpassword,
@@ -123,10 +149,28 @@ async function fromScreenScraper(g: Game, want: { icon: boolean; background: boo
   })
   if (g.serial) q.set('serialnum', g.serial)
   try {
-    const r = await net.fetch(`https://api.screenscraper.fr/api2/jeuInfos.php?${q}`, { headers: { 'User-Agent': 'Starstation' } })
-    if (!r.ok) return got
-    const medias: SsMedia[] = ((await r.json()) as { response?: { jeu?: { medias?: SsMedia[] } } }).response?.jeu?.medias ?? []
-    const pick = (type: string) => medias.find((m) => m.type === type && ['wor', 'us', 'eu'].includes(m.region ?? 'wor')) ?? medias.find((m) => m.type === type)
+    const r = await net.fetch(`${ssBase()}/jeuInfos.php?${q}`, { headers: { 'User-Agent': 'Starstation' } })
+    if (!r.ok) return []
+    return ((await r.json()) as { response?: { jeu?: { medias?: SsMedia[] } } }).response?.jeu?.medias ?? []
+  } catch (e) {
+    log.warn(`screenscraper failed for ${g.id}`, e)
+    return []
+  }
+}
+
+function pickMedia(medias: SsMedia[], ...types: string[]): SsMedia | undefined {
+  for (const type of types) {
+    const m = medias.find((x) => x.type === type && ['wor', 'us', 'eu', 'ss'].includes(x.region ?? 'wor')) ?? medias.find((x) => x.type === type)
+    if (m) return m
+  }
+  return undefined
+}
+
+async function fromScreenScraper(g: Game, want: { icon: boolean; background: boolean }, d: string): Promise<{ icon: boolean; background: boolean }> {
+  const got = { icon: false, background: false }
+  try {
+    const medias = await ssMedias(g)
+    const pick = (type: string) => pickMedia(medias, type)
     const box = pick('box-2D')
     const ss = pick('ss')
     if (want.icon && box) got.icon = await fetchTo(box.url, path.join(d, 'icon.png'))
@@ -139,6 +183,45 @@ async function fromScreenScraper(g: Game, want: { icon: boolean; background: boo
 
 interface Tried {
   at: number
+}
+
+/** Download a file and check what it is (a PDF manual, an MP4 clip): error pages are not kept. */
+async function fetchFile(url: string, file: string, looksRight: (b: Buffer) => boolean): Promise<boolean> {
+  try {
+    const r = await net.fetch(url, { headers: { 'User-Agent': 'Starstation' } })
+    if (!r.ok) return false
+    const buf = Buffer.from(await r.arrayBuffer())
+    if (!looksRight(buf)) return false
+    await fsp.mkdir(path.dirname(file), { recursive: true })
+    await fsp.writeFile(file, buf)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Manual (scanned booklet, PDF) and gameplay clip (MP4) from ScreenScraper (SPEC-v2 C + D), next to the
+ * artwork: manual.pdf / video.mp4. Only with a ScreenScraper login; nothing found → asked again after a week.
+ */
+export async function fetchExtras(g: Game): Promise<boolean> {
+  if (!screenScraperLogin()) return false
+  const d = artDir(g)
+  const manual = path.join(d, 'manual.pdf')
+  const video = path.join(d, 'video.mp4')
+  const tried = path.join(d, 'extras-tried.json')
+  if (fs.existsSync(manual) && fs.existsSync(video)) return false
+  const t = readJson<Tried | null>(tried, null)
+  if (t && Date.now() - t.at < 7 * 24 * 3600_000) return false
+  const medias = await ssMedias(g)
+  let got = false
+  const m = !fs.existsSync(manual) && pickMedia(medias, 'manuel')
+  if (m) got = (await fetchFile(m.url, manual, (b) => b.subarray(0, 5).toString('latin1') === '%PDF-')) || got
+  const v = !fs.existsSync(video) && pickMedia(medias, 'video-normalized', 'video')
+  if (v) got = (await fetchFile(v.url, video, (b) => b.subarray(4, 8).toString('latin1') === 'ftyp')) || got
+  if (!fs.existsSync(manual) || !fs.existsSync(video)) writeJson(tried, { at: Date.now() } satisfies Tried)
+  if (got) log.info(`${g.id}: manual / video from ScreenScraper`)
+  return got
 }
 
 /**
@@ -185,7 +268,9 @@ export function queueArtwork(games: Game[], onChange: () => void, retry = false)
   if (process.env.STARSTATION_HEADLESS === '1' && !process.env.STARSTATION_ARTWORK_BASE) return // hidden tests stay offline
   if (!getSettings().artworkAuto) return // "download artwork later" in the setup wizard
   const known = new Set(queue.map((q) => q.g.id))
-  queue.push(...games.filter((g) => !known.has(g.id) && (!g.icon || !g.background)).map((g) => ({ g, retry })))
+  // missing pictures — or, with a ScreenScraper login, a missing manual / clip
+  const ss = !!screenScraperLogin()
+  queue.push(...games.filter((g) => !known.has(g.id) && (!g.icon || !g.background || (ss && (!g.manual || !g.video)))).map((g) => ({ g, retry })))
   if (busy) return
   busy = true
   void (async () => {
@@ -193,7 +278,13 @@ export function queueArtwork(games: Game[], onChange: () => void, retry = false)
     let last = Date.now()
     while (queue.length) {
       const batch = queue.splice(0, 3)
-      const res = await Promise.all(batch.map((q) => fetchArtwork(q.g, false, q.retry).catch(() => false)))
+      const res = await Promise.all(
+        batch.map(async (q) => {
+          const art = await fetchArtwork(q.g, false, q.retry).catch(() => false)
+          const extras = await fetchExtras(q.g).catch(() => false)
+          return art || extras
+        })
+      )
       if (res.some(Boolean)) changed = true
       if (changed && Date.now() - last > 1500) {
         onChange()

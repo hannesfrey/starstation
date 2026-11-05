@@ -198,9 +198,9 @@ function identify(c: ConsolePreset, e: ScanEntry, addedAt?: number): (Game & { m
 export function reattachArtwork(): boolean {
   let changed = false
   for (const g of games) {
-    const before = `${g.icon}|${g.background}`
+    const before = `${g.icon}|${g.background}|${g.manual}|${g.video}`
     attachLocalArtwork(g)
-    if (`${g.icon}|${g.background}` !== before) changed = true
+    if (`${g.icon}|${g.background}|${g.manual}|${g.video}` !== before) changed = true
   }
   if (changed) writeJson(cacheFile(), { version: CACHE_VERSION, games } satisfies CacheFile)
   return changed
@@ -211,7 +211,9 @@ function attachLocalArtwork(g: Game): void {
   const key = artKey(g)
   for (const [k, f] of [
     ['icon', 'icon.png'],
-    ['background', 'background.png']
+    ['background', 'background.png'],
+    ['manual', 'manual.pdf'],
+    ['video', 'video.mp4']
   ] as const) {
     if (g[k]) continue
     const p = dir('media', 'artwork', g.console, key, f)

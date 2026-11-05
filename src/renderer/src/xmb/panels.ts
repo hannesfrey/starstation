@@ -122,6 +122,7 @@ export interface PanelHandlers {
   guideSeen: (keys: string[]) => void
   couchSave: () => void
   compressGame: (g: Game) => void
+  openManual: (g: Game) => void
 }
 
 const onOff = (b: boolean) => (b ? 'On' : 'Off')
@@ -902,6 +903,7 @@ export function buildPanel(id: string, arg: string | undefined, state: AppState,
           run: () => (h.openPanel('mods', g.id), 'keep')
         })
       items.push(
+        ...(g.manual ? [{ key: 'manual', label: 'Manual', value: 'the original booklet', run: () => h.openManual(g) }] : []),
         { key: 'folders', label: 'Open folder…', run: () => (h.openPanel('folders', g.id), 'keep') },
         { key: 'info', label: 'Game info', run: () => (h.openPanel('info', g.id), 'keep') },
         ...(g.compat ? [{ key: 'compat', label: `Compatibility: ${g.compat.label}`, value: `${g.compat.source} list: ${g.compat.status}`, info: true }] : []),

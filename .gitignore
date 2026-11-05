@@ -27,3 +27,6 @@ resources/bin/
 build/vc_redist.x64.exe
 build/vc_redist.x64.exe.part
 build/vcredist.nsh
+
+# ScreenScraper developer login for the installer (from secrets.json at build time)
+resources/extra/*.json
