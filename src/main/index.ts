@@ -75,9 +75,10 @@ protocol.registerSchemesAsPrivileged([
   { scheme: 'starstation-media', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }
 ])
 
-if (!app.requestSingleInstanceLock()) {
-  app.quit()
-}
+// Starstation already open: this copy only hands over to it (second-instance) and ends at once.
+// It must not touch anything else: it once marked the open copy as crashed and started a rescue.
+const primary = app.requestSingleInstanceLock()
+if (!primary) app.exit(0)
 
 let win: BrowserWindow | null = null
 
@@ -1061,7 +1062,7 @@ app.on('second-instance', (_e, argv) => {
   // a Nexus Mods "Download with mod manager" click starts a second Starstation with an nxm:// link
   const nxm = nxmFromArgs(argv)
   if (nxm) return void openNxm(nxm)
-  if (win && !runningGame()) {
+  if (win && !win.isDestroyed() && !runningGame()) {
     if (win.isMinimized()) win.restore()
     win.focus()
   }
@@ -1087,6 +1088,7 @@ async function openNxm(url: string): Promise<void> {
 }
 
 app.whenReady().then(async () => {
+  if (!primary) return
   ensureDataDirs()
   log.info(`Starstation ${app.getVersion()} starting; Files=${filesDir()}${inSafeMode() ? ' (safe mode)' : ''}`)
   // crashed twice right after an update? then go back to the version before, before anything else
@@ -1104,6 +1106,11 @@ app.whenReady().then(async () => {
   registerHooks()
   registerMediaProtocol()
   win = createWindow()
+  // closing the menu closes Starstation, also while the hidden PS button menu window is still there
+  win.on('closed', () => {
+    win = null
+    quitAll()
+  })
   attachWindow(win)
   setLauncherWindow(win)
   // the PS button menu window comes after the menu has loaded (keeps start-up fast)
@@ -1133,11 +1140,12 @@ app.whenReady().then(async () => {
   })
 })
 
-app.on('window-all-closed', () => {
+function quitAll(): void {
   stopRunning()
   stopPadHelper()
   app.quit()
-})
+}
+app.on('window-all-closed', quitAll)
 // the guest session ends when Starstation closes: back to the first profile first (the guest's things go)
 let guestCleared = false
 app.on('before-quit', (e) => {

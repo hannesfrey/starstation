@@ -31,11 +31,11 @@ async function fakeGithub() {
       const p = url.split('?')[0]
       if (p === '/api/repos/hannesfrey/starstation/releases')
         return json([
-          { tag_name: 'v2.0.0', prerelease: !promoted, draft: false },
-          { tag_name: 'v1.9.5', prerelease: false, draft: false },
-          { tag_name: 'v1.9.0', prerelease: false, draft: false }
+          { tag_name: 'v99.0.0', prerelease: !promoted, draft: false },
+          { tag_name: 'v98.5.0', prerelease: false, draft: false },
+          { tag_name: 'v98.0.0', prerelease: false, draft: false }
         ])
-      if (p === '/api/repos/hannesfrey/starstation/releases/tags/v2.0.0') return json({ id: 42, prerelease: !promoted })
+      if (p === '/api/repos/hannesfrey/starstation/releases/tags/v99.0.0') return json({ id: 42, prerelease: !promoted })
       if (p === '/api/repos/hannesfrey/starstation/releases/42' && req.method === 'PATCH') {
         promoted = JSON.parse(body).prerelease === false
         return json({ id: 42, prerelease: !promoted })
@@ -80,7 +80,7 @@ test('everyone else: only released versions, and only tested emulator versions',
     const u = await api<Upd>(page, 'checkForUpdates')
     expect(u.channel).toBe('everyone')
     expect(u.tester).toBe(false)
-    expect(u.version).toBe('1.9.5') // 2.0.0 is still a beta
+    expect(u.version).toBe('98.5.0') // 99.0.0 is still a beta
     expect(u.canRelease).toBe(false)
     // emulators: the tested version, not the newest
     const pcsx2 = (await api<Emu[]>(page, 'checkEmulatorUpdates')).find((e) => e.id === 'pcsx2')!
@@ -106,12 +106,12 @@ test('tester PC: betas first, Release to everyone, Mark as tested', async () => 
   fakePcsx2(files, '2.9.9', 'v2.9.9')
   process.env.STARSTATION_GITHUB_API = `${gh.base}/api`
   process.env.STARSTATION_GITHUB_RAW = `${gh.base}/raw`
-  process.env.STARSTATION_TEST_VERSION = '2.0.0' // pretend the beta is installed here
+  process.env.STARSTATION_TEST_VERSION = '99.0.0' // pretend the beta is installed here
   const { app, page } = await launchApp(files)
   try {
     let u = await api<Upd>(page, 'checkForUpdates')
     expect(u.channel).toBe('beta')
-    expect(u.status).toBe('latest') // 2.0.0 is the newest
+    expect(u.status).toBe('latest') // 99.0.0 is the newest
     expect(u.canRelease).toBe(true)
 
     // Release to everyone turns the pre-release into a normal release

@@ -90,6 +90,13 @@ Read SPEC.md first. This file tracks where the build stands and every small deci
 - No controller translation driver was needed (see step 3), so none is installed.
 - Tests: `profiles.spec.ts`, `packages2.spec.ts`, unit `buttons.test.ts`. Not testable here: real Bluetooth pairing (no pad in pairing mode), DS4/DualSense directly, real PKG install, Nexus/ScreenScraper with real accounts → Hannes's checklist.
 
+### After 2.0.0 — 2.0.1 fix (2026-11-05, Hannes: "something broke")
+
+- **What happened on Hannes's PC:** 1.9.0 updated itself to 2.0.0. Closing the 2.0.0 window didn't end Starstation: the hidden PS button menu window kept it running unseen (`window-all-closed` never came). Opening Starstation again then (a) crashed the hidden copy ("Object has been destroyed" in `second-instance`: the menu window was gone), and (b) the new copy ran the start-up checks before ending — it saw the hidden copy's open session as a crash, counted 2 in a row (the first came from the installer ending a 1.9.0 Hannes had opened during the install) and the rescue went back to 1.9.0.
+- **Fixes:** closing the menu window quits Starstation (`win.on('closed')` → `quitAll`); a second start ends at once with `app.exit(0)` and never touches session / rescue; `second-instance` checks `isDestroyed()`; an unclean end of *another* version doesn't count as a crash (an update ended it).
+- New test `quit.spec.ts` (fails on the 2.0.0 code for both bugs, passes now). `channel.spec.ts` used fake versions just above the app's own (1.9.5 / 2.0.0) and broke with the bump to 2.0.0 → now 98.x / 99.0.0.
+- 2.0.1 published as a pre-release; Hannes's 1.9.0 gets it on its next start (2.0.0 is in skip.json after the rescue, 2.0.1 isn't).
+
 ## How to work on it
 
 - Open a PowerShell, `. .\env.ps1` (portable Node/gh, caches in `tools\`).

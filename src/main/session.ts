@@ -31,7 +31,8 @@ let info: StartInfo | null = null
 
 export function startSession(version: string): StartInfo {
   const st = readJson<SessionFile>(file(), { crashesInARow: 0, cleanRuns: {}, versions: [] })
-  const crashed = !!st.last && !st.last.clean
+  // another version ran last: an update replaced it (the installer ends a running Starstation), not a crash
+  const crashed = !!st.last && !st.last.clean && st.last.version === version
   st.crashesInARow = crashed ? st.crashesInARow + 1 : 0
   if (st.versions[0] !== version) st.versions = [version, ...st.versions.filter((v) => v !== version)].slice(0, 10)
   st.last = { version, startedAt: Date.now(), clean: false }
