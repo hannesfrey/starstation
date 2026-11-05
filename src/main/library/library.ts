@@ -7,6 +7,7 @@ import { cleanTitle, discSerial, n3dsTitleId, n64Header, nintendoDiscId, ps3From
 import { parseSfo } from '../formats/sfo'
 import { x360TitleId } from '../formats/xdvdfs'
 import { compatFor } from '../compat'
+import { profileFile } from '../profiles'
 import { loadSerialDb, stripDisc } from './titledb'
 import { folderSize, scanConsole, type ScanEntry } from './scan'
 import { logger } from '../log'
@@ -23,7 +24,8 @@ interface CacheFile {
 let games: (Game & { mtime: number })[] = []
 let stats: Record<string, GameStats> = {}
 const cacheFile = () => dir('config', 'library', 'library.json')
-const statsFile = () => dir('config', 'library', 'stats.json')
+// play time, favorites and recently played belong to the active profile
+const statsFile = () => profileFile(dir('config', 'library', 'stats.json'), 'stats.json')
 
 export function loadLibrary(): void {
   const c = readJson<CacheFile>(cacheFile(), { version: 0, games: [] })

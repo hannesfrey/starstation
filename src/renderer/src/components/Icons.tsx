@@ -164,6 +164,49 @@ const shapes: Record<string, ReactElement> = {
       <path d="M20 10h24v14a12 12 0 0 1-24 0zM20 16h-8c0 8 4 12 8 12M44 16h8c0 8-4 12-8 12M32 36v10M22 54h20M26 46h12v8H26z" />
     </g>
   ),
+  // profile pictures (our own simple drawings)
+  'p-star': (
+    <g {...S}>
+      <path d="M32 8l6.5 15 16 1.5-12 10.5 3.6 15.8L32 42.5 17.9 50.8l3.6-15.8-12-10.5 16-1.5z" />
+    </g>
+  ),
+  'p-planet': (
+    <g {...S}>
+      <circle cx="32" cy="32" r="14" />
+      <ellipse cx="32" cy="32" rx="27" ry="9" transform="rotate(-20 32 32)" />
+    </g>
+  ),
+  'p-rocket': (
+    <g {...S}>
+      <path d="M32 6c9 7 12 18 9 32H23c-3-14 0-25 9-32zM23 38l-7 10 9-3M41 38l7 10-9-3M28 46l4 10 4-10" />
+      <circle cx="32" cy="22" r="4" />
+    </g>
+  ),
+  'p-ghost': (
+    <g {...S}>
+      <path d="M16 54V28a16 16 0 0 1 32 0v26l-6-5-5 5-5-5-5 5-5-5z" />
+      <circle cx="26" cy="28" r="2.5" />
+      <circle cx="38" cy="28" r="2.5" />
+    </g>
+  ),
+  'p-cat': (
+    <g {...S}>
+      <path d="M14 50V18l10 8h16l10-8v32a8 8 0 0 1-8 8H22a8 8 0 0 1-8-8z" />
+      <path d="M24 38h.01M40 38h.01M29 45q3 3 6 0" />
+    </g>
+  ),
+  'p-heart': (
+    <g {...S}>
+      <path d="M32 52S10 39 10 24a11 11 0 0 1 22-3 11 11 0 0 1 22 3c0 15-22 28-22 28z" />
+    </g>
+  ),
+  guest: (
+    <g {...S}>
+      <circle cx="32" cy="22" r="10" />
+      <path d="M12 54c2-11 10-17 20-17s18 6 20 17" />
+      <path d="M44 10l6-4M48 16h7" opacity={0.6} />
+    </g>
+  ),
   // trophies by tier: the same cup, filled in its own metal colour (locked: outline only, faint)
   'trophy-bronze': <TrophyCup fill="#c98a52" />,
   'trophy-silver': <TrophyCup fill="#cfd6df" />,

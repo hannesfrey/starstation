@@ -28,6 +28,7 @@ import { describeNxm, downloadNxm, nexusKey, nxmFromArgs, registerNxm } from './
 import { patchStatus, updatePatches } from './patchsets'
 import { noteFirst, trophies } from './trophies'
 import { power, setWallpaper, wallpapers } from './consolefeel'
+import { activeProfile, addProfile, applyProfilePaths, deleteProfile, finishInterruptedSwitch, GUEST, listProfiles, setPin, switchProfile, updateProfile } from './profiles'
 import { refreshCompat } from './compat'
 import { moveGameOptions } from './gameoptions'
 import { moveGameInCollections } from './collections'
@@ -47,7 +48,7 @@ import { listRooms, netplayArgs, netplayVars } from './netplay'
 import { addToSteam, steamStatus } from './steam'
 import { customConsoleForm, removeCustomConsole, saveCustomConsole } from './customconsole'
 import { allEmulators } from './presets'
-import { cancelTransfer, packageSize, receiveByCode, receiveFromFolder, sendByCode, buildPackage } from './packages'
+import { cancelTransfer, packageSize, receiveByCode, receiveFromFolder, sendByCode, buildPackage, inventory, INVENTORY_FILE, noteSent } from './packages'
 import { applyModProfile, deleteModProfile, enablePending, modProfiles, saveModProfile } from './mods'
 import { readJson } from './store'
 import { consoleInfos } from './consoles'
@@ -59,7 +60,7 @@ import { couchMark, couchStatus, saveCouchCheck, startCouchCheck } from './couch
 import type { OverlayAction } from '../shared/types'
 import { attachWindow, notify, send } from './notify'
 import { startDownloadWatcher } from './downloads'
-import type { Achievement, AddGamesResult, AppState, CustomConsoleForm, EmulatorInfo, GameDetails, NetplayRoom, PackageChoice, PackageProgress, PlayerPad, Settings, StartNotes, Trophy } from '../shared/types'
+import type { Achievement, AddGamesResult, AppState, CustomConsoleForm, EmulatorInfo, GameDetails, Inventory, NetplayRoom, PackageChoice, PackageProgress, PlayerPad, ProfileMerge, Settings, StartNotes, Trophy } from '../shared/types'
 
 // ---- before ready: keep everything inside Files\ ----
 redirectElectronPaths()
@@ -385,7 +386,14 @@ function registerIpc(): void {
   })
   // ---- packages ----
   const pkgProgress = (p: PackageProgress) => send('package-progress', p)
-  const afterReceive = async (r: { ok: boolean; added?: number; kept?: number; error?: string }) => {
+  const pkgAskFolders = new Set<string>()
+  const afterReceive = async (r: { ok: boolean; added?: number; kept?: number; error?: string; ask?: string[]; folder?: string }) => {
+    if (r.ask) {
+      // profiles that exist here already: ask first (nothing has been unpacked yet)
+      if (r.folder) pkgAskFolders.add(path.resolve(r.folder).toLowerCase())
+      send('package-ask', { profiles: r.ask, folder: r.folder })
+      return r
+    }
     if (!r.ok) {
       pkgProgress({ phase: 'error', pct: 0, detail: r.error })
       return r
@@ -415,8 +423,11 @@ function registerIpc(): void {
       base = pick.filePaths[0]
     }
     const folder = path.join(base, `Starstation package ${new Date().toISOString().slice(0, 10)}`)
+    // the other PC put its inventory on this drive: leave out what it has (smart package)
+    const have = readJson<Inventory | null>(path.join(base, INVENTORY_FILE), null)
     try {
-      await buildPackage(c, folder, false, pkgProgress)
+      await buildPackage(c, folder, false, pkgProgress, have)
+      if (have) noteSent(have.pcId)
       pkgProgress({ phase: 'done', pct: 1, detail: folder })
       notify({ kind: 'success', title: 'Package saved', detail: folder, action: { label: 'Open folder', command: 'open-path', arg: folder } })
       return { ok: true, folder }
@@ -436,9 +447,30 @@ function registerIpc(): void {
       if (pick.canceled || !pick.filePaths[0]) return null
       f = pick.filePaths[0]
     }
-    return afterReceive(await receiveFromFolder(f, { useSettings: !!useSettings }, pkgProgress).catch((e) => ({ ok: false, error: (e as Error).message, added: 0, kept: 0 })))
+    return afterReceive({ ...(await receiveFromFolder(f, { useSettings: !!useSettings }, pkgProgress).catch((e) => ({ ok: false, error: (e as Error).message, added: 0, kept: 0 }))), folder: f })
   })
   ipcMain.handle('package-cancel', () => cancelTransfer())
+  // receiving PC: put "what I have" on a USB drive, so the package saved there only holds the rest
+  ipcMain.handle('package-prepare-folder', async (_e, folder?: string) => {
+    let f = HEADLESS && typeof folder === 'string' ? folder : null
+    if (!f) {
+      const pick = await dialog.showOpenDialog(win!, { title: 'Choose the drive or folder the package will be saved to', properties: ['openDirectory', 'createDirectory'] })
+      if (pick.canceled || !pick.filePaths[0]) return null
+      f = pick.filePaths[0]
+    }
+    writeJson(path.join(f, INVENTORY_FILE), inventory())
+    notify({ kind: 'success', title: 'Ready for a package', detail: 'Now save the package to this drive on the other PC: only what is missing here goes on it.' })
+    return f
+  })
+  // profiles with names that exist here: the answers (merge / replace / keep both) finish the receiving
+  ipcMain.handle('package-finish', async (_e, folder: string, useSettings: boolean, choices: Record<string, ProfileMerge>) => {
+    const f = path.resolve(String(folder))
+    if (!f.toLowerCase().startsWith(dir('config', 'packages').toLowerCase()) && !(HEADLESS || pkgAskFolders.has(f.toLowerCase())))
+      return { ok: false, error: 'Unknown package folder' }
+    const r = await afterReceive(await receiveFromFolder(f, { useSettings: !!useSettings, profiles: choices }, pkgProgress))
+    if (r.ok && f.toLowerCase().startsWith(dir('config', 'packages').toLowerCase())) await fs.promises.rm(f, { recursive: true, force: true })
+    return r
+  })
   // ---- first start ----
   ipcMain.handle('setup-status', () => {
     const done = !!readJson<{ done?: boolean }>(dir('config', 'setup.json'), {}).done
@@ -464,6 +496,36 @@ function registerIpc(): void {
   // ---- library & storage (SPEC-v2 D) ----
   ipcMain.handle('storage', (_e, fresh?: boolean) => storageInfo(!!fresh))
   ipcMain.handle('trophies', () => trophyView())
+  // ---- profiles (SPEC-v2 G) ----
+  ipcMain.handle('profiles', () => listProfiles())
+  ipcMain.handle('profile-add', (_e, name: string, icon?: string) => addProfile(String(name), icon ? String(icon) : undefined))
+  ipcMain.handle('profile-update', (_e, id: string, change: { name?: string; icon?: string }) => updateProfile(String(id), { name: change?.name, icon: change?.icon }))
+  ipcMain.handle('profile-pin', (_e, id: string, pin: string | null, oldPin?: string) => setPin(String(id), pin === null ? null : String(pin), oldPin, true))
+  ipcMain.handle('profile-delete', (_e, id: string) => deleteProfile(String(id), trash))
+  ipcMain.handle('profile-picture', async (_e, id: string, file?: string) => {
+    let src = HEADLESS && typeof file === 'string' ? file : null
+    if (!src) {
+      const pick = await dialog.showOpenDialog(win!, { title: 'Choose a profile picture', properties: ['openFile'], filters: [{ name: 'Pictures', extensions: ['png', 'jpg', 'jpeg'] }] })
+      if (pick.canceled || !pick.filePaths[0]) return listProfiles()
+      src = pick.filePaths[0]
+    }
+    let img = nativeImage.createFromPath(src)
+    if (img.isEmpty()) return listProfiles()
+    img = img.resize({ width: 256, height: 256, quality: 'best' })
+    const to = dir('media', 'profiles', `${String(id).replace(/\W/g, '')}-${Date.now()}.png`)
+    fs.mkdirSync(path.dirname(to), { recursive: true })
+    fs.writeFileSync(to, img.toPNG())
+    return updateProfile(String(id), { image: to })
+  })
+  ipcMain.handle('profile-switch', async (_e, id: string, pin?: string) => {
+    if (runningGame()) return { ok: false, error: 'Close the game first.' }
+    const r = await switchProfile(String(id), pin === undefined ? undefined : String(pin))
+    if (!r.ok) return r
+    // everything that belongs to a profile is read again
+    loadLibrary()
+    win?.webContents.reload()
+    return r
+  })
   // ---- console feel (SPEC-v2 C) ----
   ipcMain.handle('wallpapers', () => wallpapers())
   ipcMain.handle('wallpaper-set', async (_e, kind: string, file?: string | null) => {
@@ -944,7 +1006,9 @@ function takeStartNotes(): StartNotes {
       crashed: !!session?.crashedLastTime && !inSafeMode() && !rescued,
       rescued,
       whatsNew: w ?? undefined,
-      homeConflicts: HEADLESS && !process.env.STARSTATION_TEST_CONFLICTS ? [] : newHomeConflicts()
+      homeConflicts: HEADLESS && !process.env.STARSTATION_TEST_CONFLICTS ? [] : newHomeConflicts(),
+      // like the PS3: with more than one profile, ask who is playing (the guest doesn't count)
+      whoIsPlaying: listProfiles().filter((p) => !p.guest).length > 1
     }
     return startNotes
   }
@@ -988,6 +1052,9 @@ app.whenReady().then(async () => {
   if (session.crashedLastTime) log.warn(`last run ended unexpectedly (${session.crashesInARow} in a row)`)
   if (await maybeRescue(session).catch((e) => (log.error('rescue failed', e), false))) return
   loadPresets()
+  // profiles: a switch cut off half-way is finished, then saves / play time / trophies point at the active profile
+  await finishInterruptedSwitch().catch((e) => log.error('could not finish the profile switch', e))
+  applyProfilePaths()
   loadLibrary()
   // mods that safe mode set aside come back at every normal start (also after a crash in safe mode)
   if (!inSafeMode()) void restoreSuspended().catch((e) => log.warn('could not switch mods on again', e))
@@ -1028,6 +1095,16 @@ app.on('window-all-closed', () => {
   stopRunning()
   stopPadHelper()
   app.quit()
+})
+// the guest session ends when Starstation closes: back to the first profile first (the guest's things go)
+let guestCleared = false
+app.on('before-quit', (e) => {
+  if (guestCleared || activeProfile() !== GUEST) return
+  e.preventDefault()
+  guestCleared = true
+  void switchProfile(listProfiles().find((p) => p.main)!.id)
+    .catch((err) => log.error('could not end the guest session', err))
+    .finally(() => app.quit())
 })
 // a normal close or Windows shutting down is not a crash
 app.on('will-quit', () => endSession())

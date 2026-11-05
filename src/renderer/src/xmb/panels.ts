@@ -2,7 +2,7 @@ import type { UpdateState, AddGamesResult, AppState, CustomConsoleForm, PackageC
 import { formatPlayTime } from './model'
 import { compareVersions } from '../../../shared/semver'
 import { whatsNewFor } from '../../../shared/whatsnew'
-import type { CouchStatus, NexusRequest, StartNotes, StorageInfo, Wallpapers } from '../../../shared/types'
+import type { CouchStatus, NexusRequest, ProfileInfo, ProfileMerge, StartNotes, StorageInfo, Wallpapers } from '../../../shared/types'
 import { THEMES } from '../components/Background'
 
 /** Data some panels load on demand. */
@@ -45,6 +45,9 @@ export interface PanelExtra {
   nexusStatus?: { key: boolean; registered: boolean; patches: { pcsx2?: string; rpcs3?: string } }
   patchesBusy?: boolean
   wallpapers?: Wallpapers
+  profiles?: ProfileInfo[]
+  /** Received package with profiles that exist here: how to bring each one in. */
+  pkgAsk?: { profiles: string[]; folder?: string; choices: Record<string, ProfileMerge> }
 }
 
 export interface PItem {
@@ -136,6 +139,11 @@ export interface PanelHandlers {
   updatePatches: () => void
   setWallpaper: (kind: string, remove?: boolean) => void
   power: (action: 'sleep' | 'shutdown') => void
+  switchProfile: (p: ProfileInfo) => void
+  profileEdit: (id: string, what: 'name' | 'pin' | 'nopin' | 'picture' | 'own-picture' | 'delete') => void
+  pkgPrepareFolder: () => void
+  pkgAskChoice: (name: string) => void
+  pkgFinish: () => void
 }
 
 const onOff = (b: boolean) => (b ? 'On' : 'Off')
@@ -499,6 +507,16 @@ export function buildPanel(id: string, arg: string | undefined, state: AppState,
           { key: 'mods', label: 'Mods (with on/off)', value: onOff(c.mods), run: () => (h.pkgToggle('mods'), 'keep') },
           { key: 'settings', label: 'Settings', value: onOff(c.settings), run: () => (h.pkgToggle('settings'), 'keep') },
           { key: 'saves', label: 'Saves', value: onOff(c.saves), run: () => (h.pkgToggle('saves'), 'keep') },
+          ...(x.profiles ?? [])
+            .filter((p) => !p.guest)
+            .map((p) => ({
+              key: `prof-${p.id}`,
+              label: `Profile: ${p.name}`,
+              value: (c.profiles ?? []).includes(p.id) ? 'On: saves, play time, trophies, favorites' : 'Off',
+              run: () => (h.pkgToggle(`profile:${p.id}` as keyof PackageChoice), 'keep' as const)
+            })),
+          { key: 'onlynew', label: 'Only new since last time', value: c.onlyNew ? 'On' : 'Off', run: () => (h.pkgToggle('onlyNew'), 'keep') },
+          { key: 'smart', label: 'Only what the other PC is missing is sent (it tells Starstation what it has).', info: true },
           { key: 'size', label: `Size: ${size}`, info: true },
           { key: 'code', label: 'Send by code', disabled: x.pkg.busy, run: () => (h.pkgSend(), 'keep') },
           { key: 'folder', label: 'Save to folder…', disabled: x.pkg.busy, run: () => (h.pkgSaveFolder(), 'keep') }
@@ -524,8 +542,23 @@ export function buildPanel(id: string, arg: string | undefined, state: AppState,
         items.push({ key: 'set', label: 'Settings from the package', value: x.pkg.useSettings ? 'Use the package\'s' : 'Keep mine', run: () => (h.pkgToggle('useSettings' as keyof PackageChoice), 'keep') })
       }
       items.push({ key: 'code', label: 'Enter code…', disabled: x.pkg.busy, run: () => (h.pkgReceiveCode(!existing || !!x.pkg.useSettings), 'keep') })
+      items.push({ key: 'usb', label: 'Prepare a USB drive first…', value: 'then only what is missing here goes on it', run: () => (h.pkgPrepareFolder(), 'keep') })
       items.push({ key: 'folder', label: 'From a folder…', disabled: x.pkg.busy, run: () => (h.pkgReceiveFolder(!existing || !!x.pkg.useSettings), 'keep') })
       return { id, title: 'Receive package', items }
+    }
+    case 'pkg-profiles': {
+      const a = x.pkgAsk
+      if (!a) return null
+      const label = { merge: 'Merge (keep both sets of saves)', replace: 'Replace with the package’s', both: 'Keep both (adds a new profile)' }
+      return {
+        id,
+        title: 'Profiles already here',
+        items: [
+          { key: 'what', label: 'These profiles exist on this PC too. For each one:', info: true },
+          ...a.profiles.map((n) => ({ key: `pp-${n}`, label: n, value: label[a.choices[n] ?? 'merge'], run: () => (h.pkgAskChoice(n), 'keep' as const) })),
+          { key: 'go', label: 'Continue', run: () => h.pkgFinish() }
+        ]
+      }
     }
     case 'pkg-progress': {
       const p = x.pkg.progress
@@ -1115,6 +1148,37 @@ export function buildPanel(id: string, arg: string | undefined, state: AppState,
           { key: 'from', label: `On Nexus Mods for: ${n.gameName}${n.fileName ? ` · ${n.fileName}` : ''}`, info: true },
           { key: 'ask', label: 'Which game is this mod for?', info: true },
           ...ranked.map(({ g }) => ({ key: `nx-${g.id}`, label: g.title, value: state.consoles.find((c) => c.id === g.console)?.short, run: () => h.nexusInstall(n.url, g) }))
+        ]
+      }
+    }
+    case 'who': {
+      const list = x.profiles ?? []
+      return {
+        id,
+        title: 'Who’s playing?',
+        items: list.map((p) => ({
+          key: `who-${p.id}`,
+          label: p.name,
+          value: [p.active ? 'last time' : '', p.hasPin ? 'PIN' : ''].filter(Boolean).join(' · ') || undefined,
+          run: () => (p.active ? undefined : h.switchProfile(p))
+        }))
+      }
+    }
+    case 'profile': {
+      const p = x.profiles?.find((y) => y.id === arg)
+      if (!p) return null
+      const me = x.profiles?.find((y) => y.active)
+      return {
+        id,
+        title: p.name,
+        items: [
+          ...(p.active ? [] : [{ key: 'switch', label: 'Switch to this profile', run: () => h.switchProfile(p) }]),
+          { key: 'name', label: 'Rename…', run: () => h.profileEdit(p.id, 'name') },
+          { key: 'pic', label: 'Picture', value: p.image ? 'your picture' : 'change', run: () => (h.profileEdit(p.id, 'picture'), 'keep') },
+          { key: 'own', label: 'Use your own picture…', run: () => (h.profileEdit(p.id, 'own-picture'), 'keep') },
+          { key: 'pin', label: p.hasPin ? 'Change PIN…' : 'Set a PIN…', value: '4 digits', run: () => h.profileEdit(p.id, 'pin') },
+          ...(p.hasPin ? [{ key: 'nopin', label: me?.main && !p.main ? 'Reset PIN (first profile)' : 'Remove PIN', run: () => h.profileEdit(p.id, 'nopin') }] : []),
+          ...(p.main || p.active ? [] : [{ key: 'del', label: 'Delete profile…', value: 'its saves go to the Recycle Bin', run: () => h.profileEdit(p.id, 'delete') }])
         ]
       }
     }

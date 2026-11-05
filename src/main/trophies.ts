@@ -2,6 +2,7 @@ import { dir } from './paths'
 import { readJson, writeJson } from './store'
 import { allConsoles } from './presets'
 import { view } from './library/library'
+import { profileFile } from './profiles'
 import type { Trophy } from '../shared/types'
 
 /**
@@ -15,7 +16,7 @@ interface State {
   firsts: Partial<Record<'mod' | 'netplay', number>>
 }
 
-let fileFn = () => dir('config', 'trophies.json')
+let fileFn = () => profileFile(dir('config', 'trophies.json'), 'trophies.json')
 /** Profiles (step 7) keep their own trophies: the file can be pointed elsewhere. */
 export function setTrophyFile(fn: () => string): void {
   fileFn = fn

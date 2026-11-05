@@ -10,13 +10,19 @@ import { allConsoles, allEmulators, emulatorDir, getEmulator, loadPresets } from
 import { applyConsoleConfig } from './emuconfig'
 import { view } from './library/library'
 import { logger } from './log'
-import type { PackageChoice, PackageManifest, PackageProgress } from '../shared/types'
+import { addProfile, profileByName, profileData } from './profiles'
+import type { Inventory, PackageChoice, PackageManifest, PackageProgress, ProfileMerge } from '../shared/types'
 
 /**
  * Packages copy a whole setup to another PC: emulators, BIOS, games, mods, settings, saves (optional).
  * Sent by code with croc (encrypted, resumable) or saved to a folder. Receiving adds what's new and never
  * deletes or overwrites anything that is already there.
- * Never included: favorites, play time, recently played (stats.json), logins (secrets.json), logs, caches.
+ * Never included: favorites, play time, recently played (stats.json), logins (secrets.json), logs, caches —
+ * unless profiles are sent along on purpose (SPEC-v2 F), then those profiles' saves, play time, trophies and
+ * favorites travel too.
+ * Smart packages (SPEC-v2 F): the receiving Starstation first tells the sender what it has (an inventory:
+ * file paths + sizes); the sender leaves those files out. "Only new since last time" also leaves out what
+ * hasn't changed since the last package to that PC.
  */
 
 const log = logger('packages')
@@ -62,6 +68,17 @@ export function planPackage(c: PackageChoice): { entries: Entry[]; manifest: Pac
         add(p, path.join('saves', con.id, n))
       }
     }
+  // profiles sent along: everything that is theirs
+  for (const id of c.profiles ?? []) {
+    const p = profileData(id)
+    const name = listProfileName(id)
+    if (!name) continue
+    const base = path.join('profiles', safeName(name))
+    add(p.stats, path.join(base, 'stats.json'))
+    add(p.trophies, path.join(base, 'trophies.json'))
+    add(p.saves, path.join(base, 'saves'))
+    for (const [key, from] of Object.entries(p.emu)) add(from, path.join(base, 'emulator-saves', key))
+  }
   if (c.settings) {
     for (const f of ['settings.json', 'controllers.json']) add(dir('config', f), path.join('config', f))
     for (const f of ['collections.json', 'game-options.json']) add(dir('config', 'library', f), path.join('config', 'library', f))
@@ -77,6 +94,55 @@ export function planPackage(c: PackageChoice): { entries: Entry[]; manifest: Pac
     games: games.length
   }
   return { entries, manifest }
+}
+
+const safeName = (n: string) => n.replace(/[^\w .-]+/g, '_').trim() || 'Profile'
+function listProfileName(id: string): string | undefined {
+  return profileNames().get(id)
+}
+function profileNames(): Map<string, string> {
+  return new Map(readJson<{ list?: { id: string; name: string }[] }>(dir('config', 'profiles.json'), {}).list?.map((p) => [p.id, p.name]) ?? [])
+}
+
+// ---------------- smart packages ----------------
+
+/** This PC's own id (so a sender can remember what it sent here). */
+export function pcId(): string {
+  const f = dir('config', 'pc-id.json')
+  const have = readJson<{ id?: string }>(f, {}).id
+  if (have) return have
+  const id = crypto.randomUUID()
+  writeJson(f, { id })
+  return id
+}
+
+/** What this PC has (the parts a package can bring): path inside Files → size. */
+export function inventory(): Inventory {
+  const files: Record<string, number> = {}
+  const root = filesDir()
+  const walk = (p: string) => {
+    let st: fs.Stats
+    try {
+      st = fs.statSync(p)
+    } catch {
+      return
+    }
+    if (st.isDirectory()) for (const n of fs.readdirSync(p)) walk(path.join(p, n))
+    else if (st.isFile()) files[path.relative(root, p).replace(/\\/g, '/')] = st.size
+  }
+  for (const d of ['emulators', 'bios', 'games', 'mods', 'saves']) walk(path.join(root, d))
+  return { pcId: pcId(), files, at: new Date().toISOString() }
+}
+
+const sentFile = () => dir('config', 'packages', 'sent.json')
+export const INVENTORY_FILE = 'Starstation inventory.json'
+
+export function lastSentTo(pc: string): number | undefined {
+  const t = readJson<Record<string, string>>(sentFile(), {})[pc]
+  return t ? Date.parse(t) : undefined
+}
+export function noteSent(pc: string): void {
+  writeJson(sentFile(), { ...readJson<Record<string, string>>(sentFile(), {}), [pc]: new Date().toISOString() })
 }
 
 function treeSize(p: string): { files: number; bytes: number } {
@@ -103,13 +169,15 @@ export function packageSize(c: PackageChoice): number {
 }
 
 /** Copy (or hard-link, for a temporary send folder) every entry into `to`. Links are followed. */
-async function writeTree(from: string, to: string, link: boolean, onFile: (bytes: number) => void): Promise<void> {
+async function writeTree(from: string, to: string, link: boolean, onFile: (bytes: number) => void, rel = '', skip?: (rel: string, st: fs.Stats) => boolean): Promise<void> {
   const st = await fsp.stat(from)
   if (st.isDirectory()) {
     await fsp.mkdir(to, { recursive: true })
-    for (const n of await fsp.readdir(from)) await writeTree(path.join(from, n), path.join(to, n), link, onFile)
+    for (const n of await fsp.readdir(from)) await writeTree(path.join(from, n), path.join(to, n), link, onFile, rel ? `${rel}/${n}` : n, skip)
     return
   }
+  // smart packages: the other PC has it already, or it hasn't changed since the last package there
+  if (skip?.(rel, st)) return
   await fsp.mkdir(path.dirname(to), { recursive: true })
   if (link) {
     try {
@@ -124,16 +192,34 @@ async function writeTree(from: string, to: string, link: boolean, onFile: (bytes
   onFile(st.size)
 }
 
-export async function buildPackage(c: PackageChoice, folder: string, link: boolean, progress: (p: PackageProgress) => void): Promise<string> {
+export async function buildPackage(
+  c: PackageChoice,
+  folder: string,
+  link: boolean,
+  progress: (p: PackageProgress) => void,
+  have?: Inventory | null
+): Promise<string> {
   const { entries, manifest } = planPackage(c)
   const total = entries.reduce((n, e) => n + treeSize(e.from).bytes, 0)
+  const since = c.onlyNew && have ? lastSentTo(have.pcId) : undefined
+  // profiles always travel whole (the receiver decides merge / replace / keep both)
+  const skip = (rel: string, st: fs.Stats) =>
+    !rel.startsWith('profiles/') && ((have?.files[rel] !== undefined && have.files[rel] === st.size) || (since !== undefined && st.mtimeMs <= since))
   let done = 0
+  let left = 0
   await fsp.mkdir(folder, { recursive: true })
   for (const e of entries) {
     progress({ phase: 'packing', pct: total ? done / total : 0, detail: e.rel })
-    await writeTree(e.from, path.join(folder, e.rel), link, (b) => (done += b))
+    await writeTree(e.from, path.join(folder, e.rel), link, (b) => (done += b), e.rel.replace(/\\/g, '/'), (rel, st) => {
+      const s = skip(rel, st)
+      if (s) {
+        left++
+        done += st.size
+      }
+      return s
+    })
   }
-  writeJson(path.join(folder, 'manifest.json'), { ...manifest, bytes: total })
+  writeJson(path.join(folder, 'manifest.json'), { ...manifest, bytes: total, smart: have ? { pcId: have.pcId, left, since: since ? new Date(since).toISOString() : undefined } : undefined })
   progress({ phase: 'packing', pct: 1 })
   log.info(`package built in ${folder} (${Math.round(total / 1e6)} MB, link=${link})`)
   return folder
@@ -203,14 +289,25 @@ async function mergeMods(from: string, stats: { added: number; kept: number }): 
   return games
 }
 
+/** Profiles in a package whose name already exists here: the user decides first. */
+export function profileConflicts(folder: string): string[] {
+  const root = findPackageRoot(folder)
+  const p = root ? path.join(root, 'profiles') : ''
+  if (!p || !fs.existsSync(p)) return []
+  return fs.readdirSync(p).filter((n) => profileByName(n))
+}
+
 export async function receiveFromFolder(
   folder: string,
-  opts: { useSettings: boolean },
+  opts: { useSettings: boolean; profiles?: Record<string, ProfileMerge> },
   progress: (p: PackageProgress) => void
-): Promise<{ ok: boolean; error?: string; added: number; kept: number }> {
+): Promise<{ ok: boolean; error?: string; added: number; kept: number; ask?: string[] }> {
   const root = findPackageRoot(folder)
   if (!root) return { ok: false, error: "That folder doesn't contain a Starstation package.", added: 0, kept: 0 }
   const m = readManifest(root)!
+  // a profile with the same name is already here: merge, replace or keep both? (asked before anything is unpacked)
+  const ask = profileConflicts(root).filter((n) => !opts.profiles?.[n])
+  if (ask.length) return { ok: false, added: 0, kept: 0, ask }
   const stats = { added: 0, kept: 0 }
   const step = async (rel: string, label: string, pct: number) => {
     const p = path.join(root, rel)
@@ -238,6 +335,7 @@ export async function receiveFromFolder(
   progress({ phase: 'unpacking', pct: 0.85, detail: 'Mods' })
   await mergeMods(path.join(root, 'mods'), stats)
   await step('saves', 'Saves', 0.92)
+  await receiveProfiles(path.join(root, 'profiles'), opts.profiles ?? {}, stats)
   writeJson(dir('config', 'imports.json'), [
     ...readJson<unknown[]>(dir('config', 'imports.json'), []),
     { at: new Date().toISOString(), source: `package from ${m.createdAt}`, result: stats }
@@ -245,6 +343,54 @@ export async function receiveFromFolder(
   progress({ phase: 'done', pct: 1 })
   log.info(`package received: ${stats.added} added, ${stats.kept} kept`)
   return { ok: true, ...stats }
+}
+
+// ---------------- profiles in packages ----------------
+
+type Stats = Record<string, { playTime?: number; playCount?: number; lastPlayed?: number; favorite?: boolean }>
+
+async function receiveProfiles(from: string, choices: Record<string, ProfileMerge>, stats: { added: number; kept: number }): Promise<void> {
+  if (!fs.existsSync(from)) return
+  for (const name of fs.readdirSync(from)) {
+    const src = path.join(from, name)
+    const existing = profileByName(name)
+    const how: ProfileMerge = existing ? (choices[name] ?? 'both') : 'both'
+    let id = existing?.id
+    if (!existing || how === 'both') {
+      // a new profile ("Name (2)" when the name is taken)
+      let n = name
+      for (let i = 2; profileByName(n); i++) n = `${name} (${i})`
+      const list = addProfile(n)
+      id = list.find((p) => p.name === n)!.id
+    }
+    const to = profileData(id!)
+    const replace = how === 'replace' && !!existing
+    if (replace) {
+      // the old ones go to the Recycle Bin-like backups folder first, then the package's take their place
+      const keep = dir('backups', 'replaced-profiles', `${safeName(name)}-${Date.now()}`)
+      for (const p of [to.saves, ...Object.values(to.emu)]) if (fs.existsSync(p)) await fsp.cp(p, path.join(keep, path.basename(p)), { recursive: true })
+      for (const p of [to.saves, ...Object.values(to.emu)]) await fsp.rm(p, { recursive: true, force: true })
+    }
+    const copy = async (a: string, b: string) => {
+      if (!fs.existsSync(a)) return
+      await fsp.mkdir(path.dirname(b), { recursive: true })
+      await addTree(a, b, stats)
+    }
+    await copy(path.join(src, 'saves'), to.saves)
+    for (const [key, target] of Object.entries(to.emu)) await copy(path.join(src, 'emulator-saves', key), target)
+    // play time / favorites and trophies: replaced, or merged (longer play time, favorite if either, all trophies)
+    const theirs = readJson<Stats>(path.join(src, 'stats.json'), {})
+    const mine = replace || !existing ? {} : readJson<Stats>(to.stats, {})
+    for (const [g, s] of Object.entries(theirs)) {
+      const m = mine[g] ?? {}
+      mine[g] = { ...m, ...s, playTime: Math.max(m.playTime ?? 0, s.playTime ?? 0), playCount: Math.max(m.playCount ?? 0, s.playCount ?? 0), lastPlayed: Math.max(m.lastPlayed ?? 0, s.lastPlayed ?? 0) || undefined, favorite: !!(m.favorite || s.favorite) || undefined }
+    }
+    writeJson(to.stats, mine)
+    const tTheirs = readJson<{ unlocked?: Record<string, number>; firsts?: Record<string, number> }>(path.join(src, 'trophies.json'), {})
+    const tMine = replace || !existing ? { unlocked: {}, firsts: {} } : readJson<{ unlocked: Record<string, number>; firsts: Record<string, number> }>(to.trophies, { unlocked: {}, firsts: {} })
+    writeJson(to.trophies, { unlocked: { ...tTheirs.unlocked, ...tMine.unlocked }, firsts: { ...tTheirs.firsts, ...tMine.firsts } })
+    log.info(`profile "${name}" received (${how}${existing ? '' : ', new'})`)
+  }
 }
 
 // ---------------- croc ----------------
@@ -288,19 +434,58 @@ export function cancelTransfer(): void {
   running?.kill()
 }
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+/** Sender: the receiver's inventory arrives first under "<code>-have" (an older Starstation doesn't send one). */
+async function receiveInventory(code: string, waitMs: number): Promise<Inventory | null> {
+  const out = dir('config', 'packages', `have-${Date.now()}`)
+  await fsp.mkdir(out, { recursive: true })
+  const until = Date.now() + waitMs
+  try {
+    while (Date.now() < until) {
+      const exit = await croc(['--overwrite', '--out', out, `${code}-have`], () => undefined)
+      const f = path.join(out, 'inventory.json')
+      if (exit === 0 && fs.existsSync(f)) return readJson<Inventory | null>(f, null)
+      await sleep(2000)
+    }
+    return null
+  } finally {
+    await fsp.rm(out, { recursive: true, force: true })
+  }
+}
+
+/** Receiver: tell the sender what is here (gives up after a while: an older sender doesn't ask). */
+async function sendInventory(code: string, waitMs: number): Promise<void> {
+  const d = dir('config', 'packages', `inv-${Date.now()}`)
+  await fsp.mkdir(d, { recursive: true })
+  const f = path.join(d, 'inventory.json')
+  writeJson(f, inventory())
+  const t = setTimeout(() => cancelTransfer(), waitMs)
+  try {
+    await croc(['send', '--code', `${code}-have`, f], () => undefined)
+  } finally {
+    clearTimeout(t)
+    await fsp.rm(d, { recursive: true, force: true })
+  }
+}
+
 export async function sendByCode(c: PackageChoice, onCode: (code: string) => void, progress: (p: PackageProgress) => void): Promise<{ ok: boolean; error?: string }> {
   const stage = dir('config', 'packages', `send-${Date.now()}`)
   const folder = path.join(stage, `Starstation package ${new Date().toISOString().slice(0, 10)}`)
   try {
-    await buildPackage(c, folder, true, progress)
     const code = makeCode()
     onCode(code)
+    progress({ phase: 'waiting', pct: 0, code })
+    // smart package: what does the other PC have already?
+    const have = await receiveInventory(code, Number(process.env.STARSTATION_INVENTORY_WAIT ?? 60_000))
+    await buildPackage(c, folder, true, progress, have)
     progress({ phase: 'waiting', pct: 0, code })
     const exit = await croc(['send', '--code', code, folder], (l) => {
       const pct = crocProgress(l)
       if (pct !== null) progress({ phase: 'sending', pct, code })
     })
     if (exit !== 0) return { ok: false, error: 'The transfer stopped. Start it again — croc continues where it left off.' }
+    if (have) noteSent(have.pcId)
     progress({ phase: 'done', pct: 1, code })
     return { ok: true }
   } finally {
@@ -312,19 +497,30 @@ export async function receiveByCode(
   code: string,
   opts: { useSettings: boolean },
   progress: (p: PackageProgress) => void
-): Promise<{ ok: boolean; error?: string; added?: number; kept?: number }> {
+): Promise<{ ok: boolean; error?: string; added?: number; kept?: number; ask?: string[]; folder?: string }> {
   const clean = code.trim().toLowerCase().replace(/\s+/g, '-')
   if (clean.length < 6) return { ok: false, error: 'The code is too short.' }
   // download into Files\config\packages (same drive: no extra copy later), keep it until it's unpacked
   const out = dir('config', 'packages', `receive-${clean.replace(/[^\w-]/g, '')}`)
   await fsp.mkdir(out, { recursive: true })
+  // smart package: first tell the sender what is here, then take only the rest
+  progress({ phase: 'receiving', pct: 0, detail: 'Telling the other PC what is here…' })
+  await sendInventory(clean, Number(process.env.STARSTATION_INVENTORY_WAIT ?? 60_000))
   progress({ phase: 'receiving', pct: 0 })
-  const exit = await croc(['--overwrite', '--out', out, clean], (l) => {
-    const pct = crocProgress(l)
-    if (pct !== null) progress({ phase: 'receiving', pct })
-  })
+  // the sender packs after it got the list: try again until it is ready (up to 10 minutes)
+  let exit = -1
+  const until = Date.now() + 10 * 60_000
+  while (Date.now() < until) {
+    exit = await croc(['--overwrite', '--out', out, clean], (l) => {
+      const pct = crocProgress(l)
+      if (pct !== null) progress({ phase: 'receiving', pct })
+    })
+    if (exit === 0 && findPackageRoot(out)) break
+    await sleep(2000)
+  }
   if (exit !== 0) return { ok: false, error: 'Nothing received. Check the code, and that the other PC is still sending.' }
   const r = await receiveFromFolder(out, opts, progress)
   if (r.ok) await fsp.rm(out, { recursive: true, force: true })
-  return r
+  // profiles to decide about: the download stays until the answer comes (packageFinish)
+  return r.ask ? { ...r, folder: out } : r
 }

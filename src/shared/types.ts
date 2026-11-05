@@ -272,6 +272,21 @@ export interface StarstationApi {
   /** kind "own" or "console:<id>"; file null = remove (a file path only in hidden tests, else a file dialog). */
   setWallpaper(kind: string, file?: string | null): Promise<{ ok: boolean; error?: string }>
   power(action: 'sleep' | 'shutdown'): Promise<void>
+  /** Profiles (Users column). */
+  profiles(): Promise<ProfileInfo[]>
+  profileAdd(name: string, icon?: string): Promise<ProfileInfo[]>
+  profileUpdate(id: string, change: { name?: string; icon?: string }): Promise<ProfileInfo[]>
+  /** pin null = remove; the first profile may reset anyone's PIN without the old one. */
+  profilePin(id: string, pin: string | null, oldPin?: string): Promise<{ ok: boolean; error?: string }>
+  profileDelete(id: string): Promise<{ ok: boolean; error?: string }>
+  /** Own picture (file dialog; a path only in hidden tests). */
+  profilePicture(id: string, file?: string): Promise<ProfileInfo[]>
+  /** Switch profile (the menu starts again for the new profile). */
+  profileSwitch(id: string, pin?: string): Promise<{ ok: boolean; error?: string }>
+  /** Receiving PC: put its inventory on a drive (smart package by USB). Folder only in hidden tests. */
+  packagePrepareFolder(folder?: string): Promise<string | null>
+  /** Finish receiving after the profile question (merge / replace / keep both per profile name). */
+  packageFinish(folder: string, useSettings: boolean, choices: Record<string, ProfileMerge>): Promise<{ ok: boolean; error?: string }>
   nexusInstall(url: string, gameId: string): Promise<{ ok: boolean; error?: string }>
   /** Hidden tests only: act as if the PS button was pressed. */
   testHome(): Promise<void>
@@ -324,6 +339,7 @@ export interface StarstationApi {
   on(channel: 'nexus-request', cb: (r: NexusRequest) => void): () => void
   on(channel: 'trophies', cb: (t: { list: Trophy[]; ra: Achievement[] }) => void): () => void
   on(channel: 'wallpapers', cb: (w: Wallpapers) => void): () => void
+  on(channel: 'package-ask', cb: (a: { profiles: string[]; folder?: string }) => void): () => void
   on(channel: 'screenshots', cb: (s: Screenshot[]) => void): () => void
   on(channel: 'battery', cb: (b: BatteryInfo | null) => void): () => void
   on(channel: 'package-progress', cb: (p: PackageProgress) => void): () => void
@@ -484,7 +500,22 @@ export interface PackageChoice {
   mods: boolean
   settings: boolean
   saves: boolean
+  /** Only what was added or changed since the last package to that PC. */
+  onlyNew?: boolean
+  /** Profiles to send along (their saves, play time, trophies, favorites). */
+  profiles?: string[]
 }
+
+/** What a receiving PC already has: the sender leaves those files out (smart packages). */
+export interface Inventory {
+  pcId: string
+  /** Path inside Files\ → size. */
+  files: Record<string, number>
+  at: string
+}
+
+/** How to bring in a profile whose name already exists on this PC. */
+export type ProfileMerge = 'merge' | 'replace' | 'both'
 
 export interface PackageManifest {
   format: number
@@ -528,6 +559,8 @@ export interface StartNotes {
   whatsNew?: { version: string; summary: string[]; details: string[] }
   /** Apps that take the PS / Home button and whose guide wasn't shown yet. */
   homeConflicts?: ('steam' | 'gameBar')[]
+  /** More than one profile: ask "Who's playing?" */
+  whoIsPlaying?: boolean
 }
 
 export interface Collection {
@@ -617,4 +650,18 @@ export interface Trophy {
 export interface Wallpapers {
   own?: string
   consoles: Record<string, string>
+}
+
+/** A profile in the Users column (SPEC-v2 G). */
+export interface ProfileInfo {
+  id: string
+  name: string
+  /** Built-in picture name, or the user's own picture (image). */
+  icon: string
+  image?: string
+  hasPin: boolean
+  /** The first profile: may reset other profiles' PINs; can't be deleted. */
+  main: boolean
+  guest: boolean
+  active: boolean
 }

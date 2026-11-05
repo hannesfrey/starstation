@@ -27,7 +27,14 @@ export function filesDir(): string {
   return filesRoot
 }
 
+/** Profiles (SPEC-v2 G): the active profile's saves folder (null = Files\saves, the first profile's). */
+let savesRoot: string | null = null
+export function setSavesRoot(root: string | null): void {
+  savesRoot = root
+}
+
 export function dir(kind: DataDir, ...parts: string[]): string {
+  if (kind === 'saves' && savesRoot) return path.join(savesRoot, ...parts)
   return path.join(filesDir(), kind, ...parts)
 }
 

@@ -1,4 +1,4 @@
-import type { AppState, ConsoleInfo, Game, GameStats, Screenshot, Trophy, Achievement } from '../../../shared/types'
+import type { AppState, ConsoleInfo, Game, GameStats, Screenshot, Trophy, Achievement, ProfileInfo } from '../../../shared/types'
 
 export interface TrophiesView {
   list: Trophy[]
@@ -43,6 +43,8 @@ export interface ModelHandlers {
   newCollection: () => void
   openPhoto: (index: number) => void
   newConsole: () => void
+  switchProfile: (p: ProfileInfo) => void
+  newProfile: () => void
 }
 
 export function formatPlayTime(sec: number): string {
@@ -70,10 +72,31 @@ const byTitle = (a: Game, b: Game) => a.title.localeCompare(b.title, undefined, 
 
 const TIER = { bronze: 'Bronze', silver: 'Silver', gold: 'Gold', platinum: 'Platinum' }
 
-export function buildColumns(state: AppState, h: ModelHandlers, shots: Screenshot[] = [], trophies?: TrophiesView): XColumn[] {
+export function buildColumns(state: AppState, h: ModelHandlers, shots: Screenshot[] = [], trophies?: TrophiesView, profiles: ProfileInfo[] = []): XColumn[] {
   const { library, consoles, settings } = state
   const stats = library.stats
   const cols: XColumn[] = []
+
+  // ---- Users (like the PS3): ✕ switches, △ edits ----
+  if (profiles.length)
+    cols.push({
+      id: 'users',
+      label: 'Users',
+      icon: 'guest',
+      items: [
+        ...profiles.map((p) => ({
+          key: `user-${p.id}`,
+          label: p.name,
+          sub: [p.active ? 'Playing now' : p.guest ? 'Starts empty, cleared afterwards' : 'Switch to this profile', p.hasPin ? 'PIN' : ''].filter(Boolean).join(' · '),
+          icon: p.icon,
+          art: p.image,
+          kind: 'action' as const,
+          run: () => h.switchProfile(p),
+          options: p.guest ? undefined : () => h.openPanel('profile', p.id)
+        })),
+        { key: 'user-new', label: 'Add a profile', sub: 'Own saves, play time, trophies and favorites', icon: 'p-planet', kind: 'action' as const, run: () => h.newProfile() }
+      ]
+    })
 
   // ---- Settings ----
   cols.push({

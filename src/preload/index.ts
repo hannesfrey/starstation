@@ -56,6 +56,15 @@ const api = {
   wallpapers: () => ipcRenderer.invoke('wallpapers'),
   setWallpaper: (kind: string, file?: string | null) => ipcRenderer.invoke('wallpaper-set', kind, file),
   power: (action: string) => ipcRenderer.invoke('power', action),
+  profiles: () => ipcRenderer.invoke('profiles'),
+  profileAdd: (name: string, icon?: string) => ipcRenderer.invoke('profile-add', name, icon),
+  profileUpdate: (id: string, change: unknown) => ipcRenderer.invoke('profile-update', id, change),
+  profilePin: (id: string, pin: string | null, oldPin?: string) => ipcRenderer.invoke('profile-pin', id, pin, oldPin),
+  profileDelete: (id: string) => ipcRenderer.invoke('profile-delete', id),
+  profilePicture: (id: string, file?: string) => ipcRenderer.invoke('profile-picture', id, file),
+  profileSwitch: (id: string, pin?: string) => ipcRenderer.invoke('profile-switch', id, pin),
+  packagePrepareFolder: (folder?: string) => ipcRenderer.invoke('package-prepare-folder', folder),
+  packageFinish: (folder: string, useSettings: boolean, choices: unknown) => ipcRenderer.invoke('package-finish', folder, useSettings, choices),
   nexusInstall: (url: string, gameId: string) => ipcRenderer.invoke('nexus-install', url, gameId),
   couchStart: () => ipcRenderer.invoke('couch-start'),
   couchStatus: () => ipcRenderer.invoke('couch-status'),
@@ -97,7 +106,7 @@ const api = {
   quit: () => ipcRenderer.invoke('quit'),
   mediaUrl: (absPath: string) => `starstation-media://local/${encodeURIComponent(absPath)}`,
   on: (channel: string, cb: (payload: unknown) => void) => {
-    const allowed = ['notice', 'library', 'consoles', 'collections', 'screenshots', 'battery', 'package-progress', 'running', 'navigate', 'import-progress', 'emulator-progress', 'add-ask', 'overlay', 'compress-progress', 'nexus-request', 'trophies', 'wallpapers']
+    const allowed = ['notice', 'library', 'consoles', 'collections', 'screenshots', 'battery', 'package-progress', 'running', 'navigate', 'import-progress', 'emulator-progress', 'add-ask', 'overlay', 'compress-progress', 'nexus-request', 'trophies', 'wallpapers', 'package-ask']
     if (!allowed.includes(channel)) throw new Error(`Unknown channel ${channel}`)
     const h = (_e: unknown, payload: unknown) => cb(payload)
     ipcRenderer.on(channel, h)

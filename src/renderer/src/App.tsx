@@ -17,7 +17,7 @@ import { Xmb } from './xmb/Xmb'
 import { PanelView } from './xmb/PanelView'
 import { buildColumns, type XItem, type TrophiesView } from './xmb/model'
 import { buildPanel, type Panel, type PanelExtra } from './xmb/panels'
-import type { AddGamesResult, AppState, BatteryInfo, CustomConsoleForm, NetplayRoom, Game, LaunchResult, ModAddResult, Notice, PlayerPad, Screenshot, Settings, Wallpapers } from '../../shared/types'
+import type { AddGamesResult, AppState, BatteryInfo, CustomConsoleForm, NetplayRoom, Game, LaunchResult, ModAddResult, Notice, PlayerPad, Screenshot, Settings, Wallpapers, ProfileInfo, ProfileMerge } from '../../shared/types'
 
 const byTitle = (a: Game, b: Game) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base', numeric: true })
 
@@ -56,7 +56,7 @@ export function App() {
     gb: { page: 1, more: false, detail: {} },
     compressing: {},
     // everything except saves is ticked by default (spec 12)
-    pkg: { choice: { emulators: true, bios: true, games: 'all', mods: true, settings: true, saves: false }, busy: false }
+    pkg: { choice: { emulators: true, bios: true, games: 'all', mods: true, settings: true, saves: false, onlyNew: false, profiles: [] }, busy: false }
   })
   /** First-start wizard: step + selected row (null = not shown). */
   const [wizard, setWizard] = useState<{ step: number; index: number } | null>(null)
@@ -67,6 +67,11 @@ export function App() {
   const [padTest, setPadTest] = useState(false)
   const [trophyData, setTrophyData] = useState<TrophiesView | undefined>(undefined)
   const [walls, setWalls] = useState<Wallpapers>({ consoles: {} })
+  const [profiles, setProfiles] = useState<ProfileInfo[]>([])
+  const applyProfiles = useCallback((list: ProfileInfo[]) => {
+    setProfiles(list)
+    setExtra((x) => ({ ...x, profiles: list }))
+  }, [])
   const [preview, setPreview] = useState<string | null>(null)
   const [manual, setManual] = useState<{ file: string; title: string } | null>(null)
   const closeManual = useCallback(() => setManual(null), [])
@@ -98,6 +103,10 @@ export function App() {
     }
     void api.screenshots().then(setShots)
     void api.trophies().then(setTrophyData)
+    void api.profiles().then((list) => {
+      setProfiles(list)
+      setExtra((x) => ({ ...x, profiles: list }))
+    })
     void api.wallpapers().then((w) => {
       setWalls(w)
       setExtra((x) => ({ ...x, wallpapers: w }))
@@ -128,6 +137,10 @@ export function App() {
       api.on('compress-progress', ({ gameId, text }) => setExtra((x) => ({ ...x, compressing: { ...x.compressing, [gameId]: text } }))),
       // a Nexus Mods download link: ask which game it is for
       api.on('trophies', (t) => setTrophyData(t)),
+      api.on('package-ask', (a) => {
+        setExtra((x) => ({ ...x, pkgAsk: { ...a, choices: {} } }))
+        setPanels((p) => [...p.filter((q) => q.id !== 'pkg-profiles'), { id: 'pkg-profiles', index: 0 }])
+      }),
       api.on('wallpapers', (w) => {
         setWalls(w)
         setExtra((x) => ({ ...x, wallpapers: w }))
@@ -438,6 +451,66 @@ export function App() {
     },
     [loadMods]
   )
+  // ---- profiles ----
+  const askField = useCallback((title: string, target: string, value = '') => {
+    setPanels([])
+    setEntry({ kind: 'field', title, value, row: 0, col: 0, focus: 'keys', result: 0, target })
+  }, [])
+  const switchProfile = useCallback(
+    (p: ProfileInfo) => {
+      if (p.active) return
+      // a PIN first, on the on-screen keyboard
+      if (p.hasPin) return askField(`PIN for ${p.name}`, `pin:${p.id}`)
+      void api.profileSwitch(p.id).then((r) => {
+        if (!r.ok) notify({ kind: 'error', title: 'Profile not switched', detail: r.error })
+      })
+    },
+    [askField, notify]
+  )
+  const newProfile = useCallback(() => askField('Name of the new profile', 'newprofile'), [askField])
+  const profileEdit = useCallback(
+    (id: string, what: 'name' | 'pin' | 'nopin' | 'picture' | 'own-picture' | 'delete') => {
+      const p = profiles.find((x) => x.id === id)
+      if (!p) return
+      if (what === 'name') return askField('New name', `pname:${id}`, p.name)
+      if (what === 'pin') return askField(p.hasPin ? 'New PIN (4 digits)' : 'PIN (4 digits)', `setpin:${id}`)
+      if (what === 'nopin')
+        return void api.profilePin(id, null).then((r) => {
+          if (!r.ok) notify({ kind: 'error', title: 'PIN not removed', detail: r.error })
+          void api.profiles().then(applyProfiles)
+        })
+      if (what === 'picture') {
+        const pics = ['p-star', 'p-planet', 'p-rocket', 'p-ghost', 'p-cat', 'p-heart']
+        return void api.profileUpdate(id, { icon: pics[(pics.indexOf(p.icon) + 1) % pics.length] }).then(applyProfiles)
+      }
+      if (what === 'own-picture') return void api.profilePicture(id).then(applyProfiles)
+      if (what === 'delete')
+        return void api.profileDelete(id).then((r) => {
+          if (!r.ok) notify({ kind: 'error', title: 'Profile not deleted', detail: r.error })
+          setPanels([])
+          void api.profiles().then(applyProfiles)
+        })
+    },
+    [profiles, askField, notify, applyProfiles]
+  )
+  // ---- packages: USB inventory + profiles that exist here ----
+  const pkgPrepareFolder = useCallback(() => void api.packagePrepareFolder(), [])
+  const pkgAskChoice = useCallback((name: string) => {
+    const order: ProfileMerge[] = ['merge', 'replace', 'both']
+    setExtra((x) => {
+      if (!x.pkgAsk) return x
+      const cur = x.pkgAsk.choices[name] ?? 'merge'
+      return { ...x, pkgAsk: { ...x.pkgAsk, choices: { ...x.pkgAsk.choices, [name]: order[(order.indexOf(cur) + 1) % order.length] } } }
+    })
+  }, [])
+  const pkgFinish = useCallback(() => {
+    const a = extra.pkgAsk
+    if (!a?.folder) return
+    const choices = Object.fromEntries(a.profiles.map((n) => [n, a.choices[n] ?? 'merge'])) as Record<string, ProfileMerge>
+    setPanels((p) => p.filter((q) => q.id !== 'pkg-profiles'))
+    setExtra((x) => ({ ...x, pkgAsk: undefined }))
+    void api.packageFinish(a.folder, !!extra.pkg.useSettings, choices).then(() => api.profiles().then(applyProfiles))
+  }, [extra.pkgAsk, extra.pkg.useSettings, applyProfiles])
   const setWallpaper = useCallback(
     (kind: string, remove?: boolean) => {
       void api.setWallpaper(kind, remove ? null : undefined).then((r) => {
@@ -639,7 +712,12 @@ export function App() {
         const cur = c.games === 'all' ? withGames : c.games
         const next = cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]
         c.games = next.length === withGames.length ? 'all' : next
-      } else if (key in c) (c as unknown as Record<string, boolean>)[key] = !(c as unknown as Record<string, boolean>)[key]
+      } else if (key.startsWith('profile:')) {
+        const id = key.slice(8)
+        const cur = c.profiles ?? []
+        c.profiles = cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]
+      } else if (key === 'onlyNew') c.onlyNew = !c.onlyNew
+      else if (key in c) (c as unknown as Record<string, boolean>)[key] = !(c as unknown as Record<string, boolean>)[key]
       setExtra((x) => ({ ...x, pkg: { ...x.pkg, choice: c } }))
       refreshPkgSize(c)
     },
@@ -785,6 +863,24 @@ export function App() {
         void api.packageReceive(value, receiveSettingsRef.current).then(endPkg)
         return
       }
+      const tg = entry.target as string
+      if (/^(pin|setpin|pname):/.test(tg) || tg === 'newprofile') {
+        setEntry(null)
+        const pid = tg.slice(tg.indexOf(':') + 1)
+        if (tg.startsWith('pin:'))
+          void api.profileSwitch(pid, value).then((r) => {
+            if (!r.ok) notify({ kind: 'error', title: 'Profile not switched', detail: r.error })
+          })
+        else if (tg.startsWith('setpin:'))
+          void api.profilePin(pid, value, undefined).then((r) => {
+            if (!r.ok) notify({ kind: 'error', title: 'PIN not set', detail: r.error })
+            else notify({ kind: 'success', title: 'PIN set' })
+            void api.profiles().then(applyProfiles)
+          })
+        else if (tg.startsWith('pname:')) void api.profileUpdate(pid, { name: value }).then(applyProfiles)
+        else if (value) void api.profileAdd(value).then(applyProfiles)
+        return
+      }
       if ((entry.target as string).startsWith('profile:')) {
         const gid = (entry.target as string).slice(8)
         setEntry(null)
@@ -804,7 +900,7 @@ export function App() {
     else if (entry.target) void api.collectionRename(entry.target, value).then(applyCollections)
     setEntry(null)
     setPanels([])
-  }, [entry, searchHits, applyCollections, notify, setSetting, loadMods])
+  }, [entry, searchHits, applyCollections, notify, setSetting, loadMods, applyProfiles])
 
   const pressKey = useCallback(
     (r: number, c: number) => {
@@ -865,10 +961,12 @@ export function App() {
             openSearch,
             newCollection: () => openEntry('new-collection'),
             openPhoto: (i) => setPhoto(i),
-            newConsole: () => newConsoleRef.current()
-          }, shots, trophyData)
+            newConsole: () => newConsoleRef.current(),
+            switchProfile,
+            newProfile
+          }, shots, trophyData, profiles)
         : [],
-    [state, openPanel, command, openSearch, openEntry, shots, trophyData]
+    [state, openPanel, command, openSearch, openEntry, shots, trophyData, profiles, switchProfile, newProfile]
   )
 
   // initial column: first console with games, otherwise Settings
@@ -1005,7 +1103,12 @@ export function App() {
         nexusInstall,
         updatePatches,
         setWallpaper,
-        power
+        power,
+        switchProfile,
+        profileEdit,
+        pkgPrepareFolder,
+        pkgAskChoice,
+        pkgFinish
       },
       extra
     )
@@ -1083,6 +1186,11 @@ export function App() {
     updatePatches,
     setWallpaper,
     power,
+    switchProfile,
+    profileEdit,
+    pkgPrepareFolder,
+    pkgAskChoice,
+    pkgFinish,
     extra
   ])
 
@@ -1117,6 +1225,7 @@ export function App() {
       // one after the other: the question on top, the guide underneath
       const queue: string[] = []
       if (notes.homeConflicts?.length) queue.push('home-guide')
+      if (notes.whoIsPlaying) queue.push('who')
       if (notes.crashed) queue.push('crashed')
       else if (notes.whatsNew) queue.push('whats-new')
       if (queue.length) setPanels((p) => [...p, ...queue.map((id) => ({ id, index: 0 }))])
