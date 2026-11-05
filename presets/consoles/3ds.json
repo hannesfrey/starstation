@@ -69,7 +69,9 @@
       "set": {
         "UI": {
           "Shortcuts\\Main%20Window\\Capture%20Screenshot\\KeySeq\\default": "false",
-          "Shortcuts\\Main%20Window\\Capture%20Screenshot\\KeySeq": "F12"
+          "Shortcuts\\Main%20Window\\Capture%20Screenshot\\KeySeq": "F12",
+          "pauseWhenInBackground": "true",
+          "pauseWhenInBackground\\default": "false"
         }
       },
       "spacing": "=",

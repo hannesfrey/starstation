@@ -19,5 +19,9 @@
     "azahar",
     "Azahar"
   ],
-  "license": "GPL-3.0"
+  "license": "GPL-3.0",
+  "overlay": {
+    "saveState": "CTRL+C",
+    "loadState": "CTRL+V"
+  }
 }

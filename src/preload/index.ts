@@ -39,6 +39,9 @@ const api = {
   releaseToEveryone: () => ipcRenderer.invoke('release-everyone'),
   markTested: (id: string) => ipcRenderer.invoke('emulator-mark-tested', id),
   setSafeMode: (on: boolean) => ipcRenderer.invoke('safe-mode', on),
+  overlayState: () => ipcRenderer.invoke('overlay-state'),
+  overlayAction: (action: string) => ipcRenderer.invoke('overlay-action', action),
+  testHome: () => ipcRenderer.invoke('test-home'),
   gameDetails: (gameId: string) => ipcRenderer.invoke('game-details', gameId),
   backupNow: (gameId: string) => ipcRenderer.invoke('backup-now', gameId),
   restoreBackup: (gameId: string, backupId: string) => ipcRenderer.invoke('backup-restore', gameId, backupId),
@@ -74,7 +77,7 @@ const api = {
   quit: () => ipcRenderer.invoke('quit'),
   mediaUrl: (absPath: string) => `starstation-media://local/${encodeURIComponent(absPath)}`,
   on: (channel: string, cb: (payload: unknown) => void) => {
-    const allowed = ['notice', 'library', 'consoles', 'collections', 'screenshots', 'battery', 'package-progress', 'running', 'navigate', 'import-progress', 'emulator-progress', 'add-ask']
+    const allowed = ['notice', 'library', 'consoles', 'collections', 'screenshots', 'battery', 'package-progress', 'running', 'navigate', 'import-progress', 'emulator-progress', 'add-ask', 'overlay']
     if (!allowed.includes(channel)) throw new Error(`Unknown channel ${channel}`)
     const h = (_e: unknown, payload: unknown) => cb(payload)
     ipcRenderer.on(channel, h)

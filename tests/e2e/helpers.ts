@@ -75,7 +75,9 @@ export async function launchApp(files: string, presets?: string): Promise<{ app:
       ELECTRON_RENDERER_URL: ''
     }
   })
-  const page = await app.firstWindow()
+  let page = await app.firstWindow()
+  // the PS button menu has its own window (#overlay); tests drive the main menu
+  if (page.url().includes('#overlay')) page = app.windows().find((w) => !w.url().includes('#overlay')) ?? (await app.waitForEvent('window'))
   await page.waitForLoadState('domcontentloaded')
   return { app, page }
 }

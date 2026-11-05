@@ -62,7 +62,7 @@
         "sort_savestates_enable = \"false\"",
         "quit_on_close_content = \"1\"",
         "video_fullscreen = \"true\"",
-        "pause_nonactive = \"false\"",
+        "pause_nonactive = \"true\"",
         "savestate_auto_save = \"true\"",
         "savestate_auto_load = \"{resume}\"",
         "input_joypad_driver = \"{rajoypad}\"",
@@ -77,7 +77,11 @@
         "core_options_path = \"{config}/retroarch/{console}-core-options.cfg\"",
         "global_core_options = \"true\"",
         "netplay_use_mitm_server = \"{nprelayon}\"",
-        "netplay_mitm_server = \"{nprelay}\""
+        "netplay_mitm_server = \"{nprelay}\"",
+        "video_windowed_fullscreen = \"true\"",
+        "input_save_state = \"f2\"",
+        "input_load_state = \"f4\"",
+        "input_menu_toggle_gamepad_combo = \"0\""
       ]
     },
     {

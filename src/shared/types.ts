@@ -228,6 +228,11 @@ export interface StarstationApi {
   markTested(emulatorId: string): Promise<{ ok: boolean; error?: string }>
   /** Enter / leave safe mode (the menu starts again). */
   setSafeMode(on: boolean): Promise<{ ok: boolean; error?: string }>
+  /** PS button menu (overlay window). */
+  overlayState(): Promise<OverlayState>
+  overlayAction(action: OverlayAction): Promise<{ ok: boolean; error?: string }>
+  /** Hidden tests only: act as if the PS button was pressed. */
+  testHome(): Promise<void>
   gameDetails(gameId: string): Promise<GameDetails | null>
   backupNow(gameId: string): Promise<BackupInfo | null>
   restoreBackup(gameId: string, backupId: string): Promise<{ ok: boolean; error?: string }>
@@ -272,6 +277,7 @@ export interface StarstationApi {
   on(channel: 'navigate', cb: (where: string) => void): () => void
   on(channel: 'collections', cb: (c: Collection[]) => void): () => void
   on(channel: 'add-ask', cb: (ask: AddGamesResult['ask']) => void): () => void
+  on(channel: 'overlay', cb: (s: OverlayState) => void): () => void
   on(channel: 'screenshots', cb: (s: Screenshot[]) => void): () => void
   on(channel: 'battery', cb: (b: BatteryInfo | null) => void): () => void
   on(channel: 'package-progress', cb: (p: PackageProgress) => void): () => void
@@ -482,3 +488,15 @@ export interface AddGamesResult {
   ask: { path: string; options: string[] }[]
   errors: string[]
 }
+
+/** PS button menu over a running game (SPEC-v2 A). */
+export interface OverlayState {
+  open: boolean
+  title: string
+  console: string
+  canSaveState: boolean
+  canLoadState: boolean
+  /** Save and quit keeps a resume state (consoles with quick resume). */
+  quickResume: boolean
+}
+export type OverlayAction = 'resume' | 'save-state' | 'load-state' | 'screenshot' | 'save-quit' | 'quit'

@@ -19,5 +19,9 @@
     "duckstation",
     "DuckStation"
   ],
-  "license": "CC BY-NC-ND 4.0"
+  "license": "CC BY-NC-ND 4.0",
+  "overlay": {
+    "saveState": "F2",
+    "loadState": "F1"
+  }
 }

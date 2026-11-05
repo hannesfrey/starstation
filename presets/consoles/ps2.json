@@ -63,7 +63,8 @@
           "SettingsVersion": "1",
           "SetupWizardIncomplete": "false",
           "StartFullscreen": "true",
-          "ConfirmShutdown": "false"
+          "ConfirmShutdown": "false",
+          "PauseOnFocusLoss": "true"
         },
         "Folders": {
           "Bios": "{bios}",
@@ -76,6 +77,13 @@
         },
         "EmuCore": {
           "SaveStateOnShutdown": "true"
+        },
+        "EmuCore/GS": {
+          "FullscreenMode": "Borderless Fullscreen"
+        },
+        "Hotkeys": {
+          "SaveStateToSlot": "Keyboard/F1",
+          "LoadStateFromSlot": "Keyboard/F3"
         }
       }
     }
@@ -151,7 +159,6 @@
           "RRight": "{pad}/+RightX",
           "RDown": "{pad}/+RightY",
           "RLeft": "{pad}/-RightX",
-          "Analog": "{pad}/Guide",
           "LargeMotor": "{pad}/LargeMotor",
           "SmallMotor": "{pad}/SmallMotor"
         },

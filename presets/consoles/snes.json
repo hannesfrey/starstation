@@ -66,7 +66,7 @@
         "sort_savestates_enable = \"false\"",
         "quit_on_close_content = \"1\"",
         "video_fullscreen = \"true\"",
-        "pause_nonactive = \"false\"",
+        "pause_nonactive = \"true\"",
         "savestate_auto_save = \"true\"",
         "savestate_auto_load = \"{resume}\"",
         "input_joypad_driver = \"{rajoypad}\"",
@@ -79,7 +79,11 @@
         "video_smooth = \"false\"",
         "video_shader_enable = \"{crt}\"",
         "netplay_use_mitm_server = \"{nprelayon}\"",
-        "netplay_mitm_server = \"{nprelay}\""
+        "netplay_mitm_server = \"{nprelay}\"",
+        "video_windowed_fullscreen = \"true\"",
+        "input_save_state = \"f2\"",
+        "input_load_state = \"f4\"",
+        "input_menu_toggle_gamepad_combo = \"0\""
       ]
     },
     {

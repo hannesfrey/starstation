@@ -162,6 +162,8 @@ export interface EmulatorPreset {
   versionHint?: string
   /** License of the emulator (shown in Settings → About). */
   license?: string
+  /** PS-button menu: keys the emulator is set up to use for save / load state (missing = no save states). */
+  overlay?: { saveState?: string; loadState?: string }
 }
 
 let consoles: ConsolePreset[] = []

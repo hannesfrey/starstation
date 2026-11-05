@@ -2,7 +2,7 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import fs from 'node:fs'
 import type { BrowserWindow } from 'electron'
 import { getConsole, getEmulator, emulatorDir, emulatorExe, fill } from './presets'
-import { gameVars, keepPreviousResume, resumeLaunch } from './gamedata'
+import { discardSessionResume, gameVars, keepPreviousResume, resumeLaunch, snapshotResume } from './gamedata'
 import { applyGameOptions, optionVars } from './gameoptions'
 import { applyModSettings, modVars } from './mods'
 import { suspendModsFor } from './safemode'
@@ -11,13 +11,14 @@ import { applyStep } from './emuconfig'
 import { applyConsoleConfig } from './emuconfig'
 import { biosStatus } from './bios'
 import { getGame, updateStats, view } from './library/library'
-import { send, notify } from './notify'
+import { send, notify, holdNotices } from './notify'
+import { closeWindow } from './padhelper'
 import { logger } from './log'
 import { dir } from './paths'
 import type { LaunchResult, RunningGame } from '../shared/types'
 
 const log = logger('launcher')
-let running: (RunningGame & { proc: ChildProcess }) | null = null
+let running: (RunningGame & { proc: ChildProcess; discard?: boolean }) | null = null
 let mainWindow: BrowserWindow | null = null
 /** Hooks run before launch (save backup) and after exit (quick resume bookkeeping). */
 const beforeHooks: ((gameId: string) => Promise<void> | void)[] = []
@@ -31,6 +32,31 @@ export function onBeforeLaunch(fn: (gameId: string) => Promise<void> | void): vo
 }
 export function onAfterExit(fn: (gameId: string, seconds: number, code: number | null, startedAt: number) => Promise<void> | void): void {
   afterHooks.push(fn)
+}
+
+/** Process id of the running emulator (PS button menu: focus, keys, close). */
+export function runningPid(): number | null {
+  return running?.proc.pid ?? null
+}
+
+/**
+ * PS button menu: close the game like clicking the window's X.
+ * save = true: "Save and quit" (the emulator writes its resume state). false: "Quit" (the state from before stays).
+ * If the window doesn't close within 20 s (a stuck emulator), it is ended.
+ */
+export async function closeRunning(save: boolean): Promise<boolean> {
+  const r = running
+  if (!r) return false
+  r.discard = !save
+  const asked = await closeWindow(r.proc.pid ?? 0)
+  if (!asked) log.warn('could not ask the emulator window to close')
+  setTimeout(() => {
+    if (running === r) {
+      log.warn(`${r.gameId}: still running 20 s after closing, ending it`)
+      r.proc.kill()
+    }
+  }, asked ? 20_000 : 0)
+  return true
 }
 
 export function runningGame(): RunningGame | null {
@@ -109,6 +135,8 @@ export async function launch(
   }
   // Start fresh: the emulator overwrites the resume state when it closes, so keep the old one
   if (mode === 'fresh' && game) await keepPreviousResume(game).catch((e) => log.warn('could not keep the resume state', e))
+  // "Quit" from the PS button menu can then leave the resume state as it was before this session
+  if (game) await snapshotResume(game).catch((e) => log.warn('could not copy the resume state', e))
   for (const h of beforeHooks) {
     try {
       await h(gameId)
@@ -136,12 +164,14 @@ export async function launch(
   }
   const startedAt = Date.now()
   running = { gameId, title: game!.title, startedAt, proc }
+  holdNotices(true)
   send('running', runningGame())
 
   return await new Promise<LaunchResult>((resolve) => {
     let settled = false
     proc.once('error', (err) => {
       log.error(`emulator error for ${gameId}`, err)
+      holdNotices(false)
       running = null
       send('running', null)
       if (!settled) {
@@ -155,10 +185,13 @@ export async function launch(
         resolve({ ok: true })
       }
     })
-    proc.once('exit', (code) => {
+    proc.once('exit', async (code) => {
       const seconds = Math.round((Date.now() - startedAt) / 1000)
       log.info(`exit ${gameId} code=${code} after ${seconds}s`)
+      const discard = running?.discard
       running = null
+      if (discard && game) await discardSessionResume(game, startedAt).catch((e) => log.warn('could not drop the resume state', e))
+      holdNotices(false)
       updateStats(gameId, (s) => ({
         ...s,
         playTime: s.playTime + seconds,

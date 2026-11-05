@@ -42,6 +42,9 @@ import { enablePending } from './mods'
 import { readJson } from './store'
 import { consoleInfos } from './consoles'
 import { launch, setLauncherWindow, runningGame, stopRunning, onBeforeLaunch, onAfterExit } from './launcher'
+import { hideOverlay, overlayAction, overlayOpen, overlayState, setupOverlay, toggleOverlay } from './overlay'
+import { onHome, startPadHelper, stopPadHelper } from './padhelper'
+import type { OverlayAction } from '../shared/types'
 import { attachWindow, notify, send } from './notify'
 import { startDownloadWatcher } from './downloads'
 import type { AddGamesResult, AppState, CustomConsoleForm, EmulatorInfo, GameDetails, NetplayRoom, PackageChoice, PackageProgress, Settings, StartNotes } from '../shared/types'
@@ -100,9 +103,14 @@ function createWindow(): BrowserWindow {
     // the menu crashed: that counts as a Starstation crash (safe mode is offered next time)
     if (d.reason !== 'clean-exit') app.exit(1)
   })
-  if (process.env.ELECTRON_RENDERER_URL) w.loadURL(process.env.ELECTRON_RENDERER_URL)
-  else w.loadFile(path.join(__dirname, '../renderer/index.html'))
+  loadPage(w)
   return w
+}
+
+/** The menu page; the PS button menu window loads the same page with #overlay. */
+function loadPage(w: BrowserWindow, hash?: string): void {
+  if (process.env.ELECTRON_RENDERER_URL) void w.loadURL(process.env.ELECTRON_RENDERER_URL + (hash ? `#${hash}` : ''))
+  else void w.loadFile(path.join(__dirname, '../renderer/index.html'), hash ? { hash } : {})
 }
 
 function state(): AppState {
@@ -421,6 +429,12 @@ function registerIpc(): void {
   ipcMain.handle('update-check', () => checkNow(notify))
   // ---- safe updates + safe mode (SPEC-v2 B, G) ----
   ipcMain.handle('start-notes', () => takeStartNotes())
+  // ---- PS button menu (SPEC-v2 A) ----
+  ipcMain.handle('overlay-state', () => overlayState())
+  ipcMain.handle('overlay-action', (_e, a: OverlayAction) => overlayAction(a))
+  ipcMain.handle('test-home', () => {
+    if (HEADLESS) toggleOverlay()
+  })
   ipcMain.handle('undo-update', (_e, to: string) => undoUpdate(String(to)))
   ipcMain.handle('release-everyone', async () => {
     const r = await releaseToEveryone()
@@ -711,6 +725,10 @@ function registerHooks(): void {
     if (list.length > 3) notify({ kind: 'achievement', title: `${list.length - 3} more achievements unlocked`, detail: g.title })
   })
   onAfterExit(() => {
+    // the game is gone: so is its menu
+    if (overlayOpen()) void hideOverlay(false)
+  })
+  onAfterExit(() => {
     // new screenshots from the session show up in the Photo column
     send('screenshots', listScreenshots())
   })
@@ -776,6 +794,10 @@ app.whenReady().then(async () => {
   win = createWindow()
   attachWindow(win)
   setLauncherWindow(win)
+  // the PS button menu window comes after the menu has loaded (keeps start-up fast)
+  win.webContents.once('did-finish-load', () => setupOverlay(path.join(__dirname, '../preload/index.js'), (w) => loadPage(w, 'overlay')))
+  startPadHelper()
+  onHome(() => toggleOverlay())
   // scan after the window is up so startup stays fast (cache is shown first)
   win.webContents.once('did-finish-load', () => {
     setTimeout(() => scanAndArt(true), 50)
@@ -793,6 +815,7 @@ app.whenReady().then(async () => {
 
 app.on('window-all-closed', () => {
   stopRunning()
+  stopPadHelper()
   app.quit()
 })
 // a normal close or Windows shutting down is not a crash

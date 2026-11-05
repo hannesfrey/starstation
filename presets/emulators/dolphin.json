@@ -20,5 +20,9 @@
     "Dolphin",
     "dolphin"
   ],
-  "license": "GPL-2.0-or-later"
+  "license": "GPL-2.0-or-later",
+  "overlay": {
+    "saveState": "SHIFT+F1",
+    "loadState": "F1"
+  }
 }

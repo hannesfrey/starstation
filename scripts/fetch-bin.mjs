@@ -62,3 +62,19 @@ for (const f of files) {
     fs.rmSync(dst)
   }
 }
+
+// Starstation's own helpers, compiled from native\*.cs with the C# compiler that ships with Windows
+// (.NET Framework 4, C# 5) — no SDK to install. Rebuilt when the source is newer than the exe.
+const csc = path.join(process.env.SystemRoot ?? 'C:\Windows', 'Microsoft.NET', 'Framework64', 'v4.0.30319', 'csc.exe')
+const nativeDir = path.resolve(import.meta.dirname, '..', 'native')
+for (const src of fs.readdirSync(nativeDir).filter((n) => n.endsWith('.cs'))) {
+  const exe = path.join(bin, src.replace(/\.cs$/, '.exe'))
+  const from = path.join(nativeDir, src)
+  if (fs.existsSync(exe) && fs.statSync(exe).mtimeMs >= fs.statSync(from).mtimeMs) {
+    console.log(`${path.basename(exe)}: up to date`)
+    continue
+  }
+  // Windows paths: csc reads "/..." as an option
+  execFileSync(csc, ['-nologo', '-optimize+', '-platform:x64', '-target:exe', `-out:${exe}`, from], { stdio: 'inherit' })
+  console.log(`${path.basename(exe)}: built`)
+}

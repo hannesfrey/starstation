@@ -291,6 +291,40 @@ export function resumeStatePath(g: Game): string | null {
   return hits[0]?.f ?? null
 }
 
+const SESSION_START = 'session-start'
+
+/** When a game starts: copy its resume state, so "Quit" (PS button menu) can leave it as it was. */
+export async function snapshotResume(g: Game): Promise<void> {
+  const d = path.join(backupRoot(g), SESSION_START)
+  await fsp.rm(d, { recursive: true, force: true })
+  const state = resumeStatePath(g)
+  if (!state) return
+  await fsp.mkdir(d, { recursive: true })
+  const copy = path.join(d, path.basename(state))
+  await fsp.copyFile(state, copy)
+  await fsp.utimes(copy, new Date(), fs.statSync(state).mtime)
+  writeJson(path.join(d, 'source.json'), { source: state })
+}
+
+/**
+ * "Quit" without saving a state: the emulator wrote a resume state while closing (it always does);
+ * put the one from before this session back, or remove the new one if there was none.
+ */
+export async function discardSessionResume(g: Game, startedAt: number): Promise<void> {
+  const d = path.join(backupRoot(g), SESSION_START)
+  const src = readJson<{ source?: string }>(path.join(d, 'source.json'), {}).source
+  const now = resumeStatePath(g)
+  if (now && fs.statSync(now).mtimeMs >= startedAt - 2000 && now !== src) await fsp.rm(now, { force: true })
+  if (src) {
+    const copy = path.join(d, path.basename(src))
+    if (fs.existsSync(copy)) {
+      await fsp.copyFile(copy, src)
+      await fsp.utimes(src, new Date(), fs.statSync(copy).mtime)
+    }
+  }
+  await fsp.rm(d, { recursive: true, force: true })
+}
+
 export function resumeInfo(g: Game): ResumeInfo | null {
   const state = resumeStatePath(g)
   if (!state) return null

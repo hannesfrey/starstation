@@ -43,7 +43,8 @@
         },
         "Interface": {
           "ConfirmStop": "False",
-          "ShowActiveTitle": "False"
+          "ShowActiveTitle": "False",
+          "PauseOnFocusLost": "True"
         },
         "General": {
           "ISOPaths": "1",
@@ -69,6 +70,15 @@
       "type": "link",
       "path": "{screenshots}/dolphin",
       "target": "{emu}/User/ScreenShots"
+    },
+    {
+      "type": "ini",
+      "file": "{emu}/User/Config/GFX.ini",
+      "set": {
+        "Settings": {
+          "BorderlessFullscreen": "True"
+        }
+      }
     }
   ],
   "quickResume": false,
@@ -124,7 +134,9 @@
           "General/Take Screenshot": "F12",
           "General/Stop": "ESCAPE",
           "General/Toggle Pause": "F10",
-          "General/Toggle Fullscreen": "@(Alt+RETURN)"
+          "General/Toggle Fullscreen": "@(Alt+RETURN)",
+          "Save State/Save State Slot 1": "@(Shift+F1)",
+          "Load State/Load State Slot 1": "F1"
         }
       }
     }

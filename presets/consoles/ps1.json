@@ -58,7 +58,8 @@
           "SetupWizardIncomplete": "false",
           "StartFullscreen": "true",
           "ConfirmPowerOff": "false",
-          "SaveStateOnExit": "true"
+          "SaveStateOnExit": "true",
+          "PauseOnFocusLoss": "true"
         },
         "BIOS": {
           "SearchDirectory": "{bios}"
@@ -72,6 +73,10 @@
         },
         "GameList": {
           "RecursivePaths": "{games}"
+        },
+        "Hotkeys": {
+          "SaveSelectedSaveState": "Keyboard/F2",
+          "LoadSelectedSaveState": "Keyboard/F1"
         }
       }
     }
@@ -148,7 +153,6 @@
           "RRight": "{pad}/+RightX",
           "RDown": "{pad}/+RightY",
           "RLeft": "{pad}/-RightX",
-          "Analog": "{pad}/Guide",
           "LargeMotor": "{pad}/LargeMotor",
           "SmallMotor": "{pad}/SmallMotor"
         },

@@ -82,6 +82,15 @@
       "type": "link",
       "path": "{screenshots}/rpcs3",
       "target": "{emu}/screenshots"
+    },
+    {
+      "type": "kv",
+      "file": "{emu}/config/config.yml",
+      "sep": ": ",
+      "set": {
+        "Exclusive Fullscreen Mode": "Prefer borderless fullscreen",
+        "Pause emulation on RPCS3 focus loss": "true"
+      }
     }
   ],
   "import": {

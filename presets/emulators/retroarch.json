@@ -15,5 +15,9 @@
     "RetroArch",
     "retroarch"
   ],
-  "license": "GPL-3.0"
+  "license": "GPL-3.0",
+  "overlay": {
+    "saveState": "F2",
+    "loadState": "F4"
+  }
 }
