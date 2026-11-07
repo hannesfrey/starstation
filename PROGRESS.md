@@ -186,6 +186,7 @@ The kept log (`rpcs3_20261107183640_…`) caught it: after 33 min of multiplayer
 - Sony's lists today: BO2 1.09 + 1.19 (466 MB, now installed); GT6 BCUS98296 01.02 … 01.22 = 21 packages, 11.2 GB (not installed: offered at its next start). 98 GB free on C:.
 - `dev_hdd0\game\TEST12345` (empty, from 2026-11-04) is a leftover, not Hannes's; left alone.
 - Tests: unit 58 (new `ps3update`), e2e 51 passed (13 opt-in skipped); new e2e `ps3update` (asked before playing, Play without updating, two updates installed in order then the game starts, damaged package refused twice, cache emptied).
+- Released: commit d32451b, tag `v2.0.12`, GitHub pre-release (beta).
 
 ## How to work on it
 
