@@ -11,6 +11,7 @@ import { logger } from './log'
 import { compareVersions } from '../shared/semver'
 import { pickRelease, type Release } from './formats/releases'
 import { endSession, type StartInfo } from './session'
+import { download } from './emulators'
 import type { Notice, UpdateState } from '../shared/types'
 
 /**
@@ -117,13 +118,19 @@ async function keepInstaller(file: string, v: string): Promise<void> {
 async function fetchInstaller(v: string): Promise<string> {
   const to = path.join(installersDir(), installerName(v))
   if (fs.existsSync(to)) return to
-  const r = await net.fetch(`${downloadsBase()}/v${v}/${installerName(v)}`, { headers: { 'User-Agent': 'Starstation' } })
-  if (!r.ok) throw new Error(`Installer ${v}: HTTP ${r.status}`)
-  const buf = Buffer.from(await r.arrayBuffer())
-  // an installer starts with "MZ"; anything else is an error page
-  if (buf[0] !== 0x4d || buf[1] !== 0x5a) throw new Error(`Installer ${v} is not a program`)
+  // streamed to disk (about 230 MB: never all in memory)
   await fsp.mkdir(installersDir(), { recursive: true })
-  await fsp.writeFile(`${to}.part`, buf)
+  try {
+    await download(`${downloadsBase()}/v${v}/${installerName(v)}`, `${to}.part`)
+    // an installer starts with "MZ"; anything else is an error page
+    const head = Buffer.alloc(2)
+    const fh = await fsp.open(`${to}.part`, 'r')
+    await fh.read(head, 0, 2, 0).finally(() => fh.close())
+    if (head[0] !== 0x4d || head[1] !== 0x5a) throw new Error(`Installer ${v} is not a program`)
+  } catch (e) {
+    await fsp.rm(`${to}.part`, { force: true })
+    throw e
+  }
   await fsp.rename(`${to}.part`, to)
   await keepInstaller(to, v)
   return to

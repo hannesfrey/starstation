@@ -12,6 +12,15 @@ export interface WhatsNew {
 
 export const WHATS_NEW: WhatsNew[] = [
   {
+    version: '2.0.16',
+    summary: ['Safer online play and downloads'],
+    details: [
+      'Online play: rooms from the public lobby are checked before joining, and one broken room no longer empties the whole list.',
+      'Big mod downloads from GameBanana (texture packs of several GB) go straight to disk instead of filling the memory.',
+      'Starstation’s own installer downloads work the same way; a broken PS3 update download is let go before it’s tried again.'
+    ]
+  },
+  {
     version: '2.0.15',
     summary: ['Settings is shorter: ten entries, the rest grouped inside them', 'The PS button menu listens to the player who pressed PS'],
     details: [

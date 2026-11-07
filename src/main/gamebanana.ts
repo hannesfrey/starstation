@@ -1,9 +1,11 @@
+import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import crypto from 'node:crypto'
 import { net } from 'electron'
 import { dir } from './paths'
 import { addMod, modsRoot, setModImage, type AddModResult } from './mods'
+import { download } from './emulators'
 import { logger } from './log'
 import type { Game, GbFile, GbGame, GbMod, GbModDetails } from '../shared/types'
 
@@ -90,11 +92,15 @@ export async function gbModDetails(id: number): Promise<GbModDetails> {
   }
 }
 
-async function download(url: string, to: string): Promise<void> {
-  const r = await net.fetch(url, { headers: { 'User-Agent': 'Starstation' } })
-  if (!r.ok || !r.body) throw new Error(`Download failed (${r.status})`)
-  await fsp.mkdir(path.dirname(to), { recursive: true })
-  await fsp.writeFile(to, Buffer.from(await r.arrayBuffer()))
+/** MD5 of a file, read in pieces (texture packs can be several GB: never all in memory). */
+function md5File(file: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const h = crypto.createHash('md5')
+    fs.createReadStream(file)
+      .on('data', (c) => h.update(c))
+      .on('end', () => resolve(h.digest('hex')))
+      .on('error', reject)
+  })
 }
 
 export async function installGbMod(g: Game, modId: number, fileId: number): Promise<AddModResult> {
@@ -107,7 +113,7 @@ export async function installGbMod(g: Game, modId: number, fileId: number): Prom
   await download(f.url, dl)
   try {
     if (f.md5) {
-      const md5 = crypto.createHash('md5').update(await fsp.readFile(dl)).digest('hex')
+      const md5 = await md5File(dl)
       if (md5.toLowerCase() !== f.md5.toLowerCase()) return { ok: false, error: 'The download was damaged (checksum mismatch). Try again.' }
     }
     const res = await addMod(g, dl, { name: d.name, description: d.text, source: { type: 'gamebanana', ref: `${modId}/${fileId}` } })

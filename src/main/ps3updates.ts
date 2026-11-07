@@ -182,7 +182,11 @@ function download(url: string, file: string, onPct: (pct: number) => void, hops 
       r.pipe(out)
       out.on('finish', () => fs.rename(file + '.part', file, (e) => (e ? reject(e) : resolve())))
       out.on('error', reject)
-      r.on('error', reject)
+      r.on('error', (e) => {
+        // the connection broke: let go of the half-written file before the next try writes it again
+        out.destroy()
+        reject(e)
+      })
     })
     // a stalled connection fails instead of hanging forever
     req.setTimeout(60_000, () => req.destroy(new Error('the download stalled')))

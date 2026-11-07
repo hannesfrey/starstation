@@ -4,9 +4,9 @@ Read SPEC.md first. This file tracks where the build stands and every small deci
 
 ## Current state
 
-- **Phase:** v2 done. Latest beta: **2.0.15** (2026-11-07: 2.0.13 trophies removed + reliability round, 2.0.14 follow-ups, 2.0.15 compact Settings + PS menu per player). v1.0.0 is still what everyone else gets; only Hannes presses "Release to everyone".
+- **Phase:** v2 done. Latest beta: **2.0.16** (2026-11-07: 2.0.13 trophies removed + reliability round, 2.0.14 follow-ups, 2.0.15 compact Settings + PS menu per player, 2.0.16 netplay + downloads). v1.0.0 is still what everyone else gets; only Hannes presses "Release to everyone".
 - **Earlier sessions (2026-11-07):** 2.0.10 player 2 from the first start (padVars count + RPCS3 new pad copies player 1's Config, fresh = VID 1356/PID 616); 2.0.11 RPCS3 "Exclusive Fullscreen Mode": "Disable" + emulator-refused settings logged; 2.0.12 PS3 game updates from Sony (`src/main/ps3updates.ts`, `formats/ps3update.ts`, panel 'ps3-update'). Black Ops II updated for real to 01.19. Gran Turismo 6 (BCUS98296) still 01.00: 21 updates / 11.2 GB offered at its next start.
-- **Waiting on Hannes:** restart Starstation to get 2.0.15 (also brings 2.0.12–2.0.14); check the PS menu with two players (only the one who pressed PS should move it) and the new Settings groups; play BO2 to see if the freezes are gone (earlier crash = RPCS3 stall tripping the game's own 30 s hang watchdog, not Starstation). If it crashes again: read `Files\config\logs\emulators` (RPCS3 log is kept).
+- **Waiting on Hannes:** restart Starstation to get 2.0.16 (also brings 2.0.12–2.0.15); check the PS menu with two players (only the one who pressed PS should move it) and the new Settings groups; play BO2 to see if the freezes are gone (earlier crash = RPCS3 stall tripping the game's own 30 s hang watchdog, not Starstation). If it crashes again: read `Files\config\logs\emulators` (RPCS3 log is kept).
 - **Still open:** DsHidMini driver install on a real DS3; real-pad check of the PS button; MK7 Mii + 3DS controller check.
 - **Reliability round, part 2 (Hannes asked for this session + half the next):** done in 2.0.14–2.0.15: packages receive, compress, Steam writer, custom consoles, stuck screens (health, storage, import, packages, player screen), PS menu per player (ground truth only), packaged-build check before every release. Still open: the remaining renderer `api.x().then` calls without `.catch` are one-shot loads (only logged on failure); a real two-pad check of the PS menu lock.
 - **Release routine:** bump package.json + whatsnew.ts entry → tests (`npx vitest run`, `npx playwright test`) → commit → `git tag vX` → push tag → `node scripts/release.mjs "<notes>"` (beta pre-release) → note "Released: commit …" here and push.
@@ -231,6 +231,12 @@ The kept log (`rpcs3_20261107183640_…`) caught it: after 33 min of multiplayer
 - Starstation update check every 6 h while running (not during a game). Log rolls over to a new file at midnight.
 - Tests: unit 77, e2e 54 passed (14 opt-in/packaged skipped in normal runs). Released: commit d9e8b09, tag `v2.0.15`, GitHub pre-release (beta); the release's own packaged check passed on the built 2.0.15.
 - After 2.0.15 (tests only): e2e `soak.spec.ts` — 15 games in a row with the PS menu each time; main-process timers / resources / heap must not grow, every session counted, no ERROR in the log (mutation-checked: a planted per-launch timer made it fail, timers 4 → 16). `reliability.spec` upgrade test — a 2.0.12-shaped Files (settings, profile, stats, old trophies.json) keeps everything, shows What's new, no ERROR.
+
+### 2.0.16 — netplay, downloads (2026-11-07)
+
+- **Netplay:** lobby rooms are public data and become RetroArch arguments: address must be a host name / IP (no leading "-": `--appendconfig=…` would pass RetroArch options), port 1–65535, session plain id; refused rooms → message. A lobby entry with missing fields was a TypeError that emptied the whole room list → skipped. `settings.spec` lobby has `{}`, a half entry and a "--appendconfig" room.
+- **Downloads in memory:** GameBanana downloaded with `arrayBuffer()` (multi-GB texture packs → main process out of memory) and hashed with readFile → streamed (`emulators.download`, exported; length-checked) + streamed MD5. Updater `fetchInstaller` (230 MB) streamed to `.part`, "MZ" checked on disk, `.part` removed on failure. PS3 update download: the half-written file is closed when the connection breaks.
+- Tests: `safe.spec` rescue with no kept installer — downloaded from a fake server (2 MB, size checked); an HTML error page → no rescue, normal start, no file left.
 
 ## How to work on it
 

@@ -181,3 +181,45 @@ test('Undo update: kept versions, going back skips the newer one', async () => {
   const session = JSON.parse(fs.readFileSync(updates(files, 'session.json'), 'utf8'))
   expect(session.last.clean).toBe(true)
 })
+
+test('rescue without a kept installer: downloads it (streamed); an error page instead is refused and nothing is left', async () => {
+  test.setTimeout(90_000)
+  const http = await import('node:http')
+  let errorPage = false
+  const server = http.createServer((req, res) => {
+    if (req.url !== '/v1.8.0/Starstation-Setup-1.8.0.exe') return void res.writeHead(404).end()
+    if (errorPage) return void res.writeHead(200, { 'content-type': 'text/html' }).end('<html>rate limited</html>')
+    const body = Buffer.concat([Buffer.from('MZ'), Buffer.alloc(2 * 1024 * 1024, 7)])
+    res.writeHead(200, { 'content-length': String(body.length) }).end(body)
+  })
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r))
+  const downloads = `http://127.0.0.1:${(server.address() as { port: number }).port}`
+  const crashed = { last: { version: VERSION, startedAt: 1, clean: false }, crashesInARow: 1, cleanRuns: {}, versions: [VERSION, '1.8.0'] }
+  try {
+    const files = makeFiles('rescue-download')
+    writeSettings(files, { bootAnimation: false })
+    writeJson(updates(files, 'session.json'), crashed)
+    await runUntilExit(files, { STARSTATION_GITHUB_DOWNLOADS: downloads })
+    expect(JSON.parse(fs.readFileSync(updates(files, 'test-runs.json'), 'utf8'))).toEqual([{ version: '1.8.0', why: 'rescue', args: ['/S', '--force-run'] }])
+    expect(fs.statSync(updates(files, 'installers', 'Starstation-Setup-1.8.0.exe')).size).toBe(2 * 1024 * 1024 + 2)
+
+    // an error page is not an installer: no rescue, Starstation starts as usual, no half file left
+    errorPage = true
+    const files2 = makeFiles('rescue-errorpage')
+    writeSettings(files2, { bootAnimation: false })
+    writeJson(updates(files2, 'session.json'), crashed)
+    process.env.STARSTATION_GITHUB_DOWNLOADS = downloads
+    const { app, page } = await launchApp(files2)
+    delete process.env.STARSTATION_GITHUB_DOWNLOADS
+    try {
+      await expect(page.getByTestId('xmb')).toBeVisible()
+      expect(fs.existsSync(updates(files2, 'test-runs.json'))).toBe(false)
+      expect(fs.readdirSync(updates(files2, 'installers'))).toEqual([])
+    } finally {
+      await app.close()
+    }
+  } finally {
+    delete process.env.STARSTATION_GITHUB_DOWNLOADS
+    server.close()
+  }
+})

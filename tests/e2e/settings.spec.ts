@@ -90,7 +90,11 @@ test('health, diagnostics, RetroAchievements, netplay, Steam and custom consoles
     if (u.pathname === '/list/')
       return json([
         { fields: { username: 'Far', country: 'jp', game_name: 'Other Game', game_crc: '00000000', core_name: 'FakeCore', ip: '1.1.1.1', port: 1, host_method: 0, has_password: false, connectable: true } },
-        { fields: { username: 'Pal', country: 'es', game_name: 'Alpha', game_crc: 'DEADBEEF', core_name: 'FakeCore 1.0', ip: '2.2.2.2', port: 55435, mitm_ip: 'europe-west1.relay.retroarch.com', mitm_port: 55435, mitm_session: 'sess42', host_method: 3, has_password: false, connectable: true } }
+        { fields: { username: 'Pal', country: 'es', game_name: 'Alpha', game_crc: 'DEADBEEF', core_name: 'FakeCore 1.0', ip: '2.2.2.2', port: 55435, mitm_ip: 'europe-west1.relay.retroarch.com', mitm_port: 55435, mitm_session: 'sess42', host_method: 3, has_password: false, connectable: true } },
+        // the lobby is public: broken entries, and a room trying to pass RetroArch an option as its address
+        {},
+        { fields: { username: 'Half' } },
+        { fields: { username: 'Bad', country: 'xx', game_name: 'Alpha', game_crc: '', core_name: 'FakeCore', ip: '--appendconfig=evil.cfg', port: 55435, host_method: 0, has_password: false, connectable: true } }
       ])
     res.writeHead(404).end()
   })
@@ -144,7 +148,10 @@ test('health, diagnostics, RetroAchievements, netplay, Steam and custom consoles
     // ---- netplay: rooms for this core + game, host and join arguments
     type Room = { host: string; sameGame: boolean; relay: boolean; address: string; port: number; session?: string }
     const rooms = await api<Room[]>(page, 'netplayRooms', gid)
-    expect(rooms.map((r) => r.host)).toEqual(['Pal'])
+    expect(rooms.map((r) => r.host)).toEqual(['Pal', 'Bad'])
+    const bad = await api<{ ok: boolean; error?: string }>(page, 'launch', gid, 'fresh', { join: rooms[1] })
+    expect(bad.ok).toBe(false)
+    expect(bad.error).toContain('address')
     expect(rooms[0]).toMatchObject({ sameGame: true, relay: true, address: 'europe-west1.relay.retroarch.com', port: 55435, session: 'sess42' })
     expect((await api<{ ok: boolean }>(page, 'launch', gid, 'fresh', { join: rooms[0] })).ok).toBe(true)
     await waitIdle()

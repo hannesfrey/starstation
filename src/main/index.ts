@@ -385,7 +385,13 @@ function registerIpc(): void {
     // controller assignment: player N → that pad, in every emulator's own way (controllers.ts)
     const order = Array.isArray(pads) ? pads.filter((p) => (p.api === 'xinput' || p.api === 'sdl') && Number.isInteger(p.index)).slice(0, 4) : []
     const vars = { ...(order.length ? padVars(order) : {}), ...(online ? netplayVars('host' in online) : {}) }
-    return launch(id, mode === 'resume' ? 'resume' : 'fresh', [], { args: online ? netplayArgs(online) : [], vars })
+    let args: string[] = []
+    try {
+      args = online ? netplayArgs(online) : []
+    } catch (e) {
+      return { ok: false, error: (e as Error).message }
+    }
+    return launch(id, mode === 'resume' ? 'resume' : 'fresh', [], { args, vars })
   })
   handle('health', () => healthCheck())
   handle('export-report', async () => {

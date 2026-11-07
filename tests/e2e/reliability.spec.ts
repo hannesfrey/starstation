@@ -1,7 +1,9 @@
 import { test, expect, type Page } from '@playwright/test'
 import fs from 'node:fs'
 import path from 'node:path'
-import { launchApp, makeFiles, makePresets, writeSettings } from './helpers'
+import { launchApp, makeFiles, makePresets, writeSettings, SOURCE } from './helpers'
+
+const VERSION = (JSON.parse(fs.readFileSync(path.join(SOURCE, 'package.json'), 'utf8')) as { version: string }).version
 
 /** Rounding off the edges (2.0.13): things that used to go wrong quietly or end a game too early. */
 
@@ -140,7 +142,7 @@ test('updating from 2.0.12: settings, profile and play time stay, the old trophi
   const { app, page } = await launchApp(files, presets)
   try {
     await expect(page.getByTestId('panel-whats-new')).toBeVisible()
-    await expect(page.getByTestId('panel-whats-new')).toContainText('Settings is shorter')
+    await expect(page.getByTestId('panel-whats-new')).toContainText(`What's new in ${VERSION}`)
     const st = await api<{ settings: { graphicsDefault: string; buttonIcons: string }; library: { stats: Record<string, { playTime: number; favorite?: boolean }> } }>(page, 'getState')
     expect(st.settings.graphicsDefault).toBe('max')
     expect(st.settings.buttonIcons).toBe('playstation')

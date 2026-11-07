@@ -52,8 +52,10 @@ export async function listRooms(g: Game): Promise<NetplayRoom[]> {
   const crc = romCrc(g)
   const base = path.basename(g.path, path.extname(g.path)).toLowerCase()
   const title = g.title.toLowerCase()
-  return rooms
-    .map((x) => x.fields)
+  // the lobby is public (anyone can list a room): an entry with missing fields is skipped, not the whole list
+  return (Array.isArray(rooms) ? rooms : [])
+    .map((x) => x?.fields)
+    .filter((f): f is LobbyRoom['fields'] => !!f && typeof f.game_name === 'string' && typeof f.core_name === 'string')
     .filter((f) => f.connectable && (!core || f.core_name.toLowerCase().startsWith(core)))
     .map((f) => {
       const name = f.game_name.toLowerCase()
@@ -81,7 +83,15 @@ export function netplayArgs(how: { host: true } | { join: NetplayRoom }): string
   const nick = (getSettings().netplayNickname || 'Player').replace(/[^\w .-]/g, '').slice(0, 30) || 'Player'
   if ('host' in how) return ['--host', '--nick', nick]
   const r = how.join
-  return ['--connect', r.address, '--port', String(r.port), '--nick', nick, ...(r.session ? ['--mitm-session', r.session] : [])]
+  // room details come from the public lobby: only a host name / IP, a port number and a plain session id
+  // become arguments (an "address" like "--appendconfig=…" would otherwise pass RetroArch its own options)
+  const address = String(r.address ?? '')
+  const port = Number(r.port)
+  const session = r.session === undefined || r.session === null ? '' : String(r.session)
+  if (!/^[A-Za-z0-9][A-Za-z0-9.:-]{0,253}$/.test(address)) throw new Error('This room has an address Starstation can’t use.')
+  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('This room has a port Starstation can’t use.')
+  if (session && !/^[A-Za-z0-9_-]{1,128}$/.test(session)) throw new Error('This room has a session id Starstation can’t use.')
+  return ['--connect', address, '--port', String(port), '--nick', nick, ...(session ? ['--mitm-session', session] : [])]
 }
 
 /** RetroArch config values: hosting goes through the chosen relay server. */

@@ -191,7 +191,8 @@ export async function extract(archive: string, to: string, opts: { flatten?: boo
   await fsp.rm(tmp, { recursive: true, force: true })
 }
 
-async function download(url: string, file: string, onProgress?: (done: number, total: number) => void): Promise<void> {
+/** Download to a file without holding it in memory (mods and emulators can be gigabytes). */
+export async function download(url: string, file: string, onProgress?: (done: number, total: number) => void): Promise<void> {
   const r = await net.fetch(url, { headers: { 'User-Agent': 'Starstation' } })
   if (!r.ok || !r.body) throw new Error(`Download failed: HTTP ${r.status}`)
   const total = Number(r.headers.get('content-length') ?? 0)
