@@ -123,3 +123,32 @@ test('menu errors land in the log; a crashed menu page comes back by itself', as
     await app.close()
   }
 })
+
+test('updating from 2.0.12: settings, profile and play time stay, the old trophies file is ignored, What’s new shows', async () => {
+  const { files, presets } = setup('upgrade', 300)
+  const w = (rel: string, data: unknown) => {
+    fs.mkdirSync(path.dirname(path.join(files, rel)), { recursive: true })
+    fs.writeFileSync(path.join(files, rel), JSON.stringify(data, null, 2))
+  }
+  // shaped like a real Files folder before the update
+  w('config/settings.json', { bootAnimation: false, graphicsDefault: 'max', crtDefault: true, buttonIcons: 'playstation', theme: 'monthly' })
+  w('config/profiles.json', { list: [{ id: 'p1', name: 'Player 1', icon: 'p-star', createdAt: 1793912797774 }], main: 'p1', active: 'p1' })
+  w('config/trophies.json', { unlocked: { 'first-mod': 1794052190588, 'console-ps3': 1794061173866 }, firsts: { mod: 1794052190584 } })
+  w('config/library/stats.json', { 'testcon:alpha.tst': { playTime: 3600, playCount: 4, favorite: true } })
+  w('config/updates/state.json', { lastVersion: '2.0.12' })
+  w('config/updates/session.json', { last: { version: '2.0.12', startedAt: 1, clean: true }, crashesInARow: 0, cleanRuns: { '2.0.12': 5 }, versions: ['2.0.12'] })
+  const { app, page } = await launchApp(files, presets)
+  try {
+    await expect(page.getByTestId('panel-whats-new')).toBeVisible()
+    await expect(page.getByTestId('panel-whats-new')).toContainText('Settings is shorter')
+    const st = await api<{ settings: { graphicsDefault: string; buttonIcons: string }; library: { stats: Record<string, { playTime: number; favorite?: boolean }> } }>(page, 'getState')
+    expect(st.settings.graphicsDefault).toBe('max')
+    expect(st.settings.buttonIcons).toBe('playstation')
+    expect(st.library.stats['testcon:alpha.tst']).toMatchObject({ playTime: 3600, favorite: true })
+    expect((await api<{ name: string; main: boolean }[]>(page, 'profiles')).find((p) => p.main)?.name).toBe('Player 1')
+    await expect(page.getByTestId('cat-trophies')).toHaveCount(0)
+    expect(logText(files)).not.toMatch(/ ERROR /)
+  } finally {
+    await app.close()
+  }
+})

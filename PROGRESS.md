@@ -230,6 +230,7 @@ The kept log (`rpcs3_20261107183640_…`) caught it: after 33 min of multiplayer
 - Storage / EmuDeck import scan / import run: failures end the screen (import: "importing" was stuck forever, blocking another try).
 - Starstation update check every 6 h while running (not during a game). Log rolls over to a new file at midnight.
 - Tests: unit 77, e2e 54 passed (14 opt-in/packaged skipped in normal runs). Released: commit d9e8b09, tag `v2.0.15`, GitHub pre-release (beta); the release's own packaged check passed on the built 2.0.15.
+- After 2.0.15 (tests only): e2e `soak.spec.ts` — 15 games in a row with the PS menu each time; main-process timers / resources / heap must not grow, every session counted, no ERROR in the log (mutation-checked: a planted per-launch timer made it fail, timers 4 → 16). `reliability.spec` upgrade test — a 2.0.12-shaped Files (settings, profile, stats, old trophies.json) keeps everything, shows What's new, no ERROR.
 
 ## How to work on it
 
