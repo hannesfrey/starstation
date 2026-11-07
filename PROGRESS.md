@@ -4,8 +4,12 @@ Read SPEC.md first. This file tracks where the build stands and every small deci
 
 ## Current state
 
-- **Phase:** v2 done — 2.0.0 on the beta channel (2026-11-05). v1.0.0 is still what everyone else gets.
-- **Next step:** v2 is done and on the beta channel (2.0.0). Waiting for Hannes's test notes; only he presses "Release to everyone".
+- **Phase:** v2 done. Latest beta: **2.0.12** (2026-11-07, commit d32451b, PROGRESS 33e69af, all pushed, working tree clean). v1.0.0 is still what everyone else gets; only Hannes presses "Release to everyone".
+- **Last session (2026-11-07):** 2.0.10 player 2 from the first start (padVars count + RPCS3 new pad copies player 1's Config, fresh = VID 1356/PID 616); 2.0.11 RPCS3 "Exclusive Fullscreen Mode": "Disable" + emulator-refused settings logged; 2.0.12 PS3 game updates from Sony (`src/main/ps3updates.ts`, `formats/ps3update.ts`, panel 'ps3-update'). Black Ops II updated for real to 01.19. Gran Turismo 6 (BCUS98296) still 01.00: 21 updates / 11.2 GB offered at its next start.
+- **Waiting on Hannes:** restart Starstation to get 2.0.12; play BO2 to see if the freezes are gone (earlier crash = RPCS3 stall tripping the game's own 30 s hang watchdog, not Starstation). If it crashes again: read `Files\config\logs\emulators` (RPCS3 log is kept).
+- **Still open:** DsHidMini driver install on a real DS3; real-pad check of the PS button; MK7 Mii + 3DS controller check.
+- **Release routine:** bump package.json + whatsnew.ts entry → tests (`npx vitest run`, `npx playwright test`) → commit → `git tag vX` → push tag → `node scripts/release.mjs "<notes>"` (beta pre-release) → note "Released: commit …" here and push.
+- **Allowed download sources** (Hannes): emudeck.com, emulators' official GitHub/sites, Sony PS3 firmware page, and (2026-11-07) Sony's PS3 game-update server.
 
 ## v2 (SPEC-v2.md)
 
