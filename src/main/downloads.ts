@@ -84,6 +84,20 @@ export function signature(p: string): Sig | null {
   }
 }
 
+/**
+ * Another program still has the file open for writing (Explorer copying it in from a USB drive sets the full
+ * size at the start, so size and time can look finished while it is still being written). Windows then
+ * refuses to share it: that answer is "busy".
+ */
+export function stillWriting(p: string): boolean {
+  try {
+    fs.closeSync(fs.openSync(p, 'r+'))
+    return false
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code === 'EBUSY'
+  }
+}
+
 function markDone(p: string): void {
   const s = signature(p)
   if (s) done.add(`${path.basename(p)}|${s.id}`)
@@ -211,13 +225,19 @@ export async function checkDownloads(h: DownloadHooks): Promise<void> {
       const prev = seen.get(n)
       seen.set(n, sig.id)
       if (prev !== sig.id || Date.now() - sig.mtime < SETTLE) continue
+      if (!sig.id.startsWith('d') && stillWriting(p)) {
+        seen.delete(n) // look again from the start once it's free
+        continue
+      }
       ready.push(n)
     }
 
     const plain: string[] = []
     for (const n of ready) {
       const p = path.join(root, n)
-      const isDir = fs.statSync(p).isDirectory()
+      const st = fs.statSync(p, { throwIfNoEntry: false })
+      if (!st) continue // moved away meanwhile
+      const isDir = st.isDirectory()
       if (!isDir && EXTRAS.test(n)) {
         markDone(p)
         continue

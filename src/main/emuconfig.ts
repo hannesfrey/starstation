@@ -4,6 +4,7 @@ import { fill, getEmulator, emulatorDir, vars, type ConfigStep, type ConsolePres
 import { getIniValue, setIniValues, setKvValues, setYamlPlayers, stripLines } from './ini'
 import { candidateBios } from './bios'
 import { dir } from './paths'
+import { writeFileAtomic } from './store'
 import { logger } from './log'
 import { withOneMii } from './formats/miidb'
 
@@ -33,7 +34,7 @@ export function applyStep(step: ConfigStep, v: Record<string, string>): void {
       const p = fill(step.path, v)
       if (!fs.existsSync(p)) {
         fs.mkdirSync(path.dirname(p), { recursive: true })
-        fs.writeFileSync(p, '')
+        writeFileAtomic(p, '')
       }
       return
     }
@@ -45,7 +46,7 @@ export function applyStep(step: ConfigStep, v: Record<string, string>): void {
       const next = withOneMii(fs.existsSync(file) ? fs.readFileSync(file) : null)
       if (next) {
         fs.mkdirSync(path.dirname(file), { recursive: true })
-        fs.writeFileSync(file, next)
+        writeFileAtomic(file, next)
         log.info(`Mii database: Starstation's Mii added (${file})`)
       }
       return
@@ -76,7 +77,7 @@ export function applyStep(step: ConfigStep, v: Record<string, string>): void {
       const p = fill(step.file, v)
       if (step.ifMissing && fs.existsSync(p)) return
       fs.mkdirSync(path.dirname(p), { recursive: true })
-      fs.writeFileSync(p, step.lines.map((l) => fill(l, v)).join('\r\n') + '\r\n')
+      writeFileAtomic(p, step.lines.map((l) => fill(l, v)).join('\r\n') + '\r\n')
       return
     }
     case 'ini': {
@@ -96,7 +97,7 @@ export function applyStep(step: ConfigStep, v: Record<string, string>): void {
       const after = setIniValues(before, set, step.spacing ?? ' = ')
       if (after !== before) {
         fs.mkdirSync(path.dirname(p), { recursive: true })
-        fs.writeFileSync(p, after)
+        writeFileAtomic(p, after)
       }
       return
     }
@@ -112,7 +113,7 @@ export function applyStep(step: ConfigStep, v: Record<string, string>): void {
       )
       if (after !== before) {
         fs.mkdirSync(path.dirname(p), { recursive: true })
-        fs.writeFileSync(p, after)
+        writeFileAtomic(p, after)
       }
       return
     }
@@ -131,7 +132,7 @@ export function applyStep(step: ConfigStep, v: Record<string, string>): void {
           if (e.isDirectory()) walk(p)
           else if (e.name.toLowerCase().endsWith(ext)) {
             const after = stripLines(fs.readFileSync(p, 'utf8'), step.match)
-            if (after !== null) fs.writeFileSync(p, after)
+            if (after !== null) writeFileAtomic(p, after)
           }
         }
       }
@@ -146,7 +147,7 @@ export function applyStep(step: ConfigStep, v: Record<string, string>): void {
       const after = setKvValues(before, set, step.sep)
       if (after !== before) {
         fs.mkdirSync(path.dirname(p), { recursive: true })
-        fs.writeFileSync(p, after)
+        writeFileAtomic(p, after)
       }
       return
     }
@@ -167,7 +168,11 @@ export function applyConsoleConfig(c: ConsolePreset, extra: Record<string, strin
       log.warn(`${c.id}: config step ${step.type} failed`, err)
     }
   }
-  selectBios(c, v)
+  try {
+    selectBios(c, v)
+  } catch (err) {
+    log.warn(`${c.id}: BIOS selection failed`, err)
+  }
 }
 
 /** Pick BIOS files for emulators that need them named in their config (PCSX2, xemu). */
@@ -186,7 +191,7 @@ function selectBios(c: ConsolePreset, v: Record<string, string>): void {
     const prefer = sel.prefer ? new RegExp(sel.prefer, 'i') : null
     const pick = asValue((prefer && candidates.find((n) => prefer.test(n))) || [...candidates].sort()[0])
     fs.mkdirSync(path.dirname(file), { recursive: true })
-    fs.writeFileSync(file, setIniValues(text, { [sel.section]: { [sel.key]: sel.quote ? `'${pick}'` : pick } }))
+    writeFileAtomic(file, setIniValues(text, { [sel.section]: { [sel.key]: sel.quote ? `'${pick}'` : pick } }))
     log.info(`${c.id}: ${sel.key} set to ${pick}`)
   }
 }

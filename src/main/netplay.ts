@@ -46,7 +46,7 @@ export function romCrc(g: Game): string | null {
 export async function listRooms(g: Game): Promise<NetplayRoom[]> {
   const c = getConsole(g.console)
   const core = (c?.netplayCore ?? '').toLowerCase()
-  const r = await net.fetch(LOBBY(), { headers: { 'User-Agent': 'Starstation' } })
+  const r = await net.fetch(LOBBY(), { signal: AbortSignal.timeout(15_000), headers: { 'User-Agent': 'Starstation' } })
   if (!r.ok) throw new Error(`lobby answered ${r.status}`)
   const rooms = (await r.json()) as LobbyRoom[]
   const crc = romCrc(g)

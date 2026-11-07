@@ -7,7 +7,7 @@ import { getConsole } from './presets'
 import { unpack } from './emulators'
 import { view } from './library/library'
 import { addMod, modsRoot, setModEnabled, type AddModResult } from './mods'
-import { signature } from './downloads'
+import { signature, stillWriting } from './downloads'
 import { logger } from './log'
 import { guessGame } from './formats/modguess'
 import type { Game, Notice } from '../shared/types'
@@ -52,6 +52,8 @@ interface Waiting {
   /** Unpacked copy (archives), so it isn't unpacked twice. */
   staged?: string
   sig: string
+  /** The question as it was asked (asked again if the menu was reloaded meanwhile). */
+  question?: InboxQuestion
 }
 
 /** Items handled already (failed or refused): not again until they change. */
@@ -230,7 +232,16 @@ async function handle(p: string, consoleId: string | undefined, sig: string): Pr
   // nothing to go on: games that already have mods are the likeliest (a second pack for the same game)
   const modded = new Set(games.filter((g) => fs.existsSync(path.join(modsRoot(g), 'mods.json'))).map((g) => g.id))
   const ranked = [...guess.ranked.filter((id) => modded.has(id)), ...guess.ranked.filter((id) => !modded.has(id))]
-  hooks!.ask({ id: w.id, name, games: ranked.slice(0, 15) })
+  w.question = { id: w.id, name, games: ranked.slice(0, 15) }
+  hooks!.ask(w.question)
+}
+
+/**
+ * Questions still waiting for an answer. The menu asks for them again whenever it (re)loads: a question lost
+ * with a reload would otherwise stop the mods folder for the rest of the session (it waits for the answer).
+ */
+export function openInboxQuestions(): InboxQuestion[] {
+  return [...waiting.values()].flatMap((w) => (w.question ? [w.question] : []))
 }
 
 /** One look at the mods folder. Exported for tests; normally called by the watcher. */
@@ -249,6 +260,11 @@ export async function checkModInbox(): Promise<void> {
       seen.set(it.path, s.id)
       // finished copying: the same at two looks and not touched for a few seconds
       if (before !== s.id || Date.now() - s.mtime < Math.min(3000, POLL)) continue
+      // still being copied in (Explorer sets the full size first): look again once it's free
+      if (!s.id.startsWith('d') && stillWriting(it.path)) {
+        seen.delete(it.path)
+        continue
+      }
       if (done[it.path.toLowerCase()] === s.id || later.has(`${it.path.toLowerCase()}|${s.id}`)) continue
       await handle(it.path, it.console, s.id)
       if (waiting.size) break // one question at a time

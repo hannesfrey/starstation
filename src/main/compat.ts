@@ -39,7 +39,7 @@ export function compatFor(g: Game): Compat | undefined {
 }
 
 async function rpcs3(serial: string): Promise<Compat | null> {
-  const r = await net.fetch(`${rpcs3Base()}?api=v1&g=${encodeURIComponent(serial)}`, { headers: { 'User-Agent': 'Starstation' } })
+  const r = await net.fetch(`${rpcs3Base()}?api=v1&g=${encodeURIComponent(serial)}`, { signal: AbortSignal.timeout(20_000), headers: { 'User-Agent': 'Starstation' } })
   if (!r.ok) throw new Error(`RPCS3 list: HTTP ${r.status}`)
   const j = (await r.json()) as { results?: Record<string, { status?: string; thread?: number }> }
   const hit = j.results?.[serial]
@@ -51,6 +51,7 @@ async function xenia(titleId: string): Promise<Compat | null> {
   const token = isTester() ? getSecrets().github?.token : undefined
   const q = encodeURIComponent(`repo:xenia-canary/game-compatibility ${titleId} in:title`)
   const r = await net.fetch(`${ghApi()}/search/issues?q=${q}`, {
+    signal: AbortSignal.timeout(20_000),
     headers: { 'User-Agent': 'Starstation', Accept: 'application/vnd.github+json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }
   })
   if (!r.ok) throw new Error(`Xenia list: HTTP ${r.status}`)

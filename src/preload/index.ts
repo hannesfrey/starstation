@@ -54,7 +54,6 @@ const api = {
   nxmOpen: (url: string) => ipcRenderer.invoke('nxm-open', url),
   nexusStatus: () => ipcRenderer.invoke('nexus-status'),
   updatePatches: () => ipcRenderer.invoke('update-patches'),
-  trophies: () => ipcRenderer.invoke('trophies'),
   wallpapers: () => ipcRenderer.invoke('wallpapers'),
   setWallpaper: (kind: string, file?: string | null) => ipcRenderer.invoke('wallpaper-set', kind, file),
   power: (action: string) => ipcRenderer.invoke('power', action),
@@ -115,9 +114,11 @@ const api = {
   runCommand: (command: string, arg?: string) => ipcRenderer.invoke('run-command', command, arg),
   toggleFullscreen: () => ipcRenderer.invoke('toggle-fullscreen'),
   quit: () => ipcRenderer.invoke('quit'),
+  logError: (where: string, message: string) => ipcRenderer.invoke('renderer-error', where, message),
+  modInboxOpen: () => ipcRenderer.invoke('mod-inbox-open'),
   mediaUrl: (absPath: string) => `starstation-media://local/${encodeURIComponent(absPath)}`,
   on: (channel: string, cb: (payload: unknown) => void) => {
-    const allowed = ['notice', 'library', 'consoles', 'collections', 'screenshots', 'battery', 'package-progress', 'running', 'navigate', 'import-progress', 'emulator-progress', 'add-ask', 'overlay', 'compress-progress', 'ps3update-progress', 'nexus-request', 'trophies', 'wallpapers', 'package-ask', 'display-revert', 'mod-inbox-ask', 'mod-result']
+    const allowed = ['notice', 'library', 'consoles', 'collections', 'screenshots', 'battery', 'package-progress', 'running', 'navigate', 'import-progress', 'emulator-progress', 'add-ask', 'overlay', 'compress-progress', 'ps3update-progress', 'nexus-request', 'wallpapers', 'package-ask', 'display-revert', 'mod-inbox-ask', 'mod-result']
     if (!allowed.includes(channel)) throw new Error(`Unknown channel ${channel}`)
     const h = (_e: unknown, payload: unknown) => cb(payload)
     ipcRenderer.on(channel, h)

@@ -105,11 +105,28 @@ export async function verifyTree(from: string, to: string): Promise<string[]> {
   return bad
 }
 
+/**
+ * Rename, tried again for a few seconds when Windows briefly holds the file or folder (antivirus, search
+ * indexer, Explorer showing the folder): a one-off "operation not permitted" must not cut a move in half.
+ */
+export async function renameRetry(from: string, to: string, tries = 12): Promise<void> {
+  for (let i = 0; ; i++) {
+    try {
+      await fsp.rename(from, to)
+      return
+    } catch (e) {
+      const code = (e as NodeJS.ErrnoException).code ?? ''
+      if (i >= tries - 1 || !['EPERM', 'EBUSY', 'EACCES'].includes(code)) throw e
+      await new Promise((r) => setTimeout(r, 100 * (i + 1)))
+    }
+  }
+}
+
 export async function moveFile(from: string, to: string): Promise<void> {
   await fsp.mkdir(path.dirname(to), { recursive: true })
   if (fs.existsSync(to)) throw new Error(`${to} already exists`)
   try {
-    await fsp.rename(from, to) // same drive: instant, nothing copied
+    await renameRetry(from, to) // same drive: instant, nothing copied
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code !== 'EXDEV') throw e
     // other drive: copy, verify by hash, then remove the original

@@ -7,6 +7,7 @@ import { binDir, dir } from './paths'
 import { readJson, writeJson } from './store'
 import { emulatorDir, getEmulator } from './presets'
 import { logger } from './log'
+import { renameRetry } from './fsutil'
 import type { Game } from '../shared/types'
 
 /**
@@ -155,7 +156,7 @@ export async function compressGame(g: Game, progress: Progress, trash: Trash): P
     if (fs.existsSync(final)) throw new Error(`${path.basename(final)} already exists`)
     const meta: Meta = { kind: opt.format === 'RVZ' ? 'rvz' : isCd ? 'cd' : 'dvd', files, compressedAt: new Date().toISOString() }
     if (isCd) meta.cue = { name: path.basename(src), text: fs.readFileSync(src, 'latin1') }
-    await fsp.rename(out, final)
+    await renameRetry(out, final)
     writeJson(metaFile(g, final), meta)
     for (const f of inputs) await trash(f)
     const saved = size - fs.statSync(final).size
@@ -217,7 +218,7 @@ export async function decompressGame(g: Game, progress: Progress, trash: Trash):
     }
     const targets = [...made.map((m) => path.join(folder, m.name)), ...(cueText !== null ? [path.join(folder, cueName)] : [])]
     for (const t of targets) if (fs.existsSync(t)) throw new Error(`${path.basename(t)} already exists`)
-    for (const m of made) await fsp.rename(m.tmp, path.join(folder, m.name))
+    for (const m of made) await renameRetry(m.tmp, path.join(folder, m.name))
     if (cueText !== null) await fsp.writeFile(path.join(folder, cueName), cueText, 'latin1')
     await trash(src)
     await fsp.rm(metaFile(g, src), { force: true })

@@ -15,7 +15,7 @@ const API = 'https://gamebanana.com/apiv11'
 const base = () => process.env.STARSTATION_GAMEBANANA_API || API
 
 async function get<T>(url: string): Promise<T> {
-  const r = await net.fetch(url, { headers: { 'User-Agent': 'Starstation', Accept: 'application/json' } })
+  const r = await net.fetch(url, { signal: AbortSignal.timeout(30_000), headers: { 'User-Agent': 'Starstation', Accept: 'application/json' } })
   if (!r.ok) throw new Error(`GameBanana answered ${r.status}`)
   return (await r.json()) as T
 }

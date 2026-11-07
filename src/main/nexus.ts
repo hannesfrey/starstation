@@ -42,6 +42,7 @@ async function nexus<T>(p: string): Promise<T> {
   const key = nexusKey()
   if (!key) throw new Error('Add your Nexus Mods API key to secrets.json first (Settings → Mods sources).')
   const r = await net.fetch(`${API()}${p}`, {
+    signal: AbortSignal.timeout(30_000),
     headers: { apikey: key, 'Application-Name': 'Starstation', 'Application-Version': app.getVersion(), Accept: 'application/json' }
   })
   if (r.status === 401) throw new Error('Nexus Mods did not accept the API key in secrets.json.')

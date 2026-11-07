@@ -6,10 +6,11 @@ import { dir, setSavesRoot } from './paths'
 import { readJson, writeJson } from './store'
 import { allConsoles, emulatorDir, fill, getEmulator, vars } from './presets'
 import { logger } from './log'
+import { renameRetry } from './fsutil'
 import type { ProfileInfo } from '../shared/types'
 
 /**
- * Profiles (SPEC-v2 G): like the PS3's users. Each profile has its own saves, play time, trophies,
+ * Profiles (SPEC-v2 G): like the PS3's users. Each profile has its own saves, play time,
  * favorites and recently played. The first profile ("main") is the setup as it was: its files stay where
  * they always were. Other profiles keep theirs in Files\profiles\<id>.
  *
@@ -72,7 +73,7 @@ export function applyProfilePaths(): void {
   setSavesRoot(root ? path.join(root, 'saves') : null)
 }
 
-/** Files of the active profile (stats, trophies…): main → the old file, others → their folder. */
+/** Files of the active profile (stats…): main → the old file, others → their folder. */
 export function profileFile(mainPath: string, name: string): string {
   const root = profileRoot(load().active)
   return root ? path.join(root, name) : mainPath
@@ -180,17 +181,22 @@ async function runJournal(j: Journal): Promise<void> {
     // 1. the outgoing profile's saves leave the emulator (if they haven't already)
     if (fs.existsSync(st.live) && !fs.existsSync(st.out)) {
       await fsp.mkdir(path.dirname(st.out), { recursive: true })
-      await fsp.rename(st.live, st.out)
+      await renameRetry(st.live, st.out)
     }
     // 2. the incoming profile's saves move in (or the place stays empty: the emulator starts fresh)
     if (fs.existsSync(st.in) && !fs.existsSync(st.live)) {
       await fsp.mkdir(path.dirname(st.live), { recursive: true })
-      await fsp.rename(st.in, st.live)
+      await renameRetry(st.in, st.live)
     }
     st.done = true
     writeJson(journalFile(), j)
   }
   fs.rmSync(journalFile(), { force: true })
+}
+
+/** A switch was cut off half-way and isn't finished yet: no game may start (it would play on mixed saves). */
+export function switchPending(): boolean {
+  return fs.existsSync(journalFile())
 }
 
 /** A switch cut off half-way (crash, power cut) is finished first thing at start. */
@@ -215,7 +221,19 @@ export async function switchProfile(id: string, pin?: string): Promise<{ ok: boo
   await backupBeforeFirstSwap(spots)
   const j: Journal = { from: s.active, to: id, steps: spots.map((sp) => ({ live: sp.live, out: store(s.active, sp.key), in: store(id, sp.key), done: false })) }
   writeJson(journalFile(), j)
-  await runJournal(j)
+  try {
+    await runJournal(j)
+  } catch (e) {
+    // a save folder is held by another program: try once more, else the next start finishes it
+    log.warn('profile switch: a save folder could not be moved, trying again', e)
+    await new Promise((r) => setTimeout(r, 2000))
+    try {
+      await runJournal(j)
+    } catch (e2) {
+      log.error('profile switch stopped half-way; it is finished at the next start', e2)
+      return { ok: false, error: 'A save folder is in use by another program. Close Starstation and start it again: the switch is finished then.' }
+    }
+  }
   const leaving = s.active
   s.active = id
   save(s)
@@ -251,16 +269,15 @@ export function profileFolder(id: string): string | null {
 
 /**
  * Where a profile's things are right now (packages send and receive profiles): play time + favorites,
- * trophies, its saves folder, and its saves inside emulators (live in the emulator while it is the active one).
+ * its saves folder, and its saves inside emulators (live in the emulator while it is the active one).
  */
-export function profileData(id: string): { stats: string; trophies: string; saves: string; emu: Record<string, string> } {
+export function profileData(id: string): { stats: string; saves: string; emu: Record<string, string> } {
   const s = load()
   const root = profileRoot(id)
   const emu: Record<string, string> = {}
   for (const sp of emulatorSaveSpots()) emu[sp.key] = id === s.active ? sp.live : store(id, sp.key)
   return {
     stats: root ? path.join(root, 'stats.json') : dir('config', 'library', 'stats.json'),
-    trophies: root ? path.join(root, 'trophies.json') : dir('config', 'trophies.json'),
     // the main profile's saves are Files\saves (dir('saves') follows the active profile, so not that)
     saves: root ? path.join(root, 'saves') : path.join(path.dirname(dir('config')), 'saves'),
     emu

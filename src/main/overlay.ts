@@ -53,6 +53,17 @@ function ensure(): BrowserWindow {
   win.setAlwaysOnTop(true, 'screen-saver')
   if (HEADLESS) win.webContents.setAudioMuted(true)
   win.on('closed', () => (win = null))
+  // its page crashed: throw the window away, the next PS button press builds a new one
+  const w = win
+  w.webContents.on('render-process-gone', (_e, d) => {
+    if (d.reason === 'clean-exit') return
+    log.error('PS button menu page gone', d)
+    if (win === w) {
+      win = null
+      open = false
+    }
+    if (!w.isDestroyed()) w.destroy()
+  })
   loader?.(win)
   return win
 }

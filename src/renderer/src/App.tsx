@@ -15,7 +15,7 @@ import { Notices } from './components/Notices'
 import { KeyHints, type GlyphButton } from './components/Glyph'
 import { Xmb } from './xmb/Xmb'
 import { PanelView } from './xmb/PanelView'
-import { buildColumns, type XItem, type TrophiesView } from './xmb/model'
+import { buildColumns, type XItem } from './xmb/model'
 import { buildPanel, type Panel, type PanelExtra } from './xmb/panels'
 import type { AddGamesResult, AppState, BatteryInfo, CustomConsoleForm, NetplayRoom, Game, LaunchResult, ModAddResult, Notice, PlayerPad, Screenshot, Settings, Wallpapers, ProfileInfo, ProfileMerge } from '../../shared/types'
 
@@ -67,7 +67,6 @@ export function App() {
   const [photo, setPhoto] = useState<number | null>(null)
   const [battery, setBattery] = useState<BatteryInfo | null>(null)
   const [padTest, setPadTest] = useState(false)
-  const [trophyData, setTrophyData] = useState<TrophiesView | undefined>(undefined)
   const [walls, setWalls] = useState<Wallpapers>({ consoles: {} })
   const [profiles, setProfiles] = useState<ProfileInfo[]>([])
   const applyProfiles = useCallback((list: ProfileInfo[]) => {
@@ -104,7 +103,6 @@ export function App() {
       else setState((s) => (s ? { ...s, ...patch } : s))
     }
     void api.screenshots().then(setShots)
-    void api.trophies().then(setTrophyData)
     void api.profiles().then((list) => {
       setProfiles(list)
       setExtra((x) => ({ ...x, profiles: list }))
@@ -138,8 +136,6 @@ export function App() {
       api.on('running', (running) => apply({ running })),
       api.on('compress-progress', ({ gameId, text }) => setExtra((x) => ({ ...x, compressing: { ...x.compressing, [gameId]: text } }))),
       api.on('ps3update-progress', ({ gameId, text }) => setExtra((x) => ({ ...x, ps3Updating: { ...x.ps3Updating, [gameId]: text } }))),
-      // a Nexus Mods download link: ask which game it is for
-      api.on('trophies', (t) => setTrophyData(t)),
       // the new screen mode wasn't kept: it went back by itself
       api.on('display-revert', () => {
         if (keepTimer.current) window.clearInterval(keepTimer.current)
@@ -175,6 +171,12 @@ export function App() {
         sfx.notify()
       })
     ]
+    // a mods-folder question from before a reload (safe mode, profile switch, crash recovery) is asked again
+    void api.modInboxOpen().then(([modInbox]) => {
+      if (!modInbox) return
+      setExtra((x) => ({ ...x, modInbox }))
+      setPanels((p) => [...p.filter((q) => q.id !== 'mod-inbox'), { id: 'mod-inbox', index: 0 }])
+    })
     input.start()
     const sendPads = () => {
       const ids = [...(navigator.getGamepads ? navigator.getGamepads() : [])].filter((p): p is Gamepad => !!p && p.connected).map((p) => p.id)
@@ -226,7 +228,21 @@ export function App() {
 
   const stateRef = useRef<AppState | null>(null)
   stateRef.current = state
+  /** A game is on its way (update check, first-start hint, player screen, preparing): a second ✕ does nothing. */
+  const launching = useRef(false)
   const launchMode = useCallback(async (g: Game, mode: 'fresh' | 'resume', noUpdate = false) => {
+    if (launching.current) return
+    launching.current = true
+    try {
+      await launchSteps(g, mode, noUpdate)
+    } catch (e) {
+      sfx.error()
+      setErrorPanel({ title: `Can't start ${g.title}`, result: { ok: false, error: (e as Error).message }, index: 1 })
+    } finally {
+      launching.current = false
+    }
+  }, [])
+  const launchSteps = async (g: Game, mode: 'fresh' | 'resume', noUpdate: boolean) => {
     // PS3: an update from PlayStation Network is waiting: "Update now / Play without updating", like the PS3
     if (g.console === 'ps3' && !noUpdate) {
       const info = await api.ps3UpdateInfo(g.id).catch(() => null)
@@ -258,11 +274,11 @@ export function App() {
       pads = r ?? undefined
     }
     const r = await api.launch(g.id, mode, undefined, pads)
-    if (!r.ok) {
+    if (!r.ok && !r.busy) {
       sfx.error()
       setErrorPanel({ title: `Can't start ${g.title}`, result: r, index: 1 })
     }
-  }, [])
+  }
 
   /** ✕ on a game: offer Resume / Start fresh when a resume state exists, otherwise just play. */
   const launch = useCallback(
@@ -394,7 +410,11 @@ export function App() {
     if (id === 'compress' && arg) void loadDetails(arg)
     if (id === 'health') {
       setExtra((x) => ({ ...x, health: undefined }))
-      void api.health().then((health) => setExtra((x) => ({ ...x, health })))
+      void api
+      .health()
+      .then((health) => setExtra((x) => ({ ...x, health })))
+      // never a screen that waits forever
+      .catch((e: Error) => setExtra((x) => ({ ...x, health: [{ severity: 'error', title: 'The health check could not finish', detail: e.message }] })))
     }
     if (id === 'controllers') {
       const p = [...(navigator.getGamepads ? navigator.getGamepads() : [])].find((x): x is Gamepad => !!x && x.connected && isMenuPad(x))
@@ -751,7 +771,11 @@ export function App() {
   // ---- settings (step 10) ----
   const runHealth = useCallback(() => {
     setExtra((x) => ({ ...x, health: undefined }))
-    void api.health().then((health) => setExtra((x) => ({ ...x, health })))
+    void api
+      .health()
+      .then((health) => setExtra((x) => ({ ...x, health })))
+      // never a screen that waits forever
+      .catch((e: Error) => setExtra((x) => ({ ...x, health: [{ severity: 'error', title: 'The health check could not finish', detail: e.message }] })))
   }, [])
   const exportReport = useCallback(() => void api.exportReport(), [])
   const loadRa = useCallback(() => void api.raStatus().then((ra) => setExtra((x) => ({ ...x, ra }))), [])
@@ -766,10 +790,13 @@ export function App() {
       .catch((e) => setExtra((x) => ({ ...x, rooms: { gameId: g.id, error: `The netplay lobby can't be reached (${(e as Error).message}).` } })))
   }, [])
   const playOnline = useCallback(async (g: Game, how: { host: true } | { join: NetplayRoom }) => {
+    if (launching.current) return
+    launching.current = true
     sfx.launch()
     setPanels([])
-    const r = await api.launch(g.id, 'fresh', how)
-    if (!r.ok) {
+    const r = await api.launch(g.id, 'fresh', how).catch((e: Error) => ({ ok: false, error: e.message, busy: false }))
+    launching.current = false
+    if (!r.ok && !r.busy) {
       sfx.error()
       setErrorPanel({ title: `Can't start ${g.title}`, result: r, index: 1 })
     }
@@ -1100,9 +1127,9 @@ export function App() {
             newConsole: () => newConsoleRef.current(),
             switchProfile,
             newProfile
-          }, shots, trophyData, profiles)
+          }, shots, profiles)
         : [],
-    [state, openPanel, command, openSearch, openEntry, shots, trophyData, profiles, switchProfile, newProfile]
+    [state, openPanel, command, openSearch, openEntry, shots, profiles, switchProfile, newProfile]
   )
 
   // initial column: first console with games, otherwise Settings

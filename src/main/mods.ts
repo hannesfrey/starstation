@@ -12,6 +12,7 @@ import { extract } from './emulators'
 import { makePatchedCopy, patchKind } from './patchmods'
 import { PatchError } from './formats/patch'
 import { logger } from './log'
+import { renameRetry } from './fsutil'
 import type { Game, ModInfo } from '../shared/types'
 
 /**
@@ -231,7 +232,7 @@ export async function finishAdd(g: Game, pending: string, targetId?: string): Pr
   let id = meta.name.replace(/[^\w.-]+/g, '_').slice(0, 40) || 'mod'
   while (st.mods.some((m) => m.id === id) || fs.existsSync(path.join(root, id))) id += '_'
   const relContent = path.relative(tmp, content).replace(/\\/g, '/')
-  await fsp.rename(tmp, path.join(root, id))
+  await renameRetry(tmp, path.join(root, id))
   const prefix = relContent ? `${relContent}/` : ''
   const entry: ModEntry = {
     id,
@@ -321,21 +322,30 @@ export async function setModEnabled(g: Game, id: string, on: boolean, winner?: '
       m.everEnabled = true
     }
     let skipped = 0
-    m.files.forEach((rel, i) => {
-      const to = path.join(base, m.placement[i])
-      const k = to.toLowerCase()
-      const owner = st.owners[k]
-      if (owner && owner !== m.id) {
-        if (winner === 'other') return
-        if (fs.existsSync(to)) fs.rmSync(to)
-      } else if (!owner && fs.existsSync(to)) {
-        skipped++ // a file Starstation didn't put there: never overwrite it
-        return
-      }
-      if (owner === m.id && fs.existsSync(to)) return
-      linkOrCopy(path.join(src, rel), to)
-      st.owners[k] = m.id
-    })
+    try {
+      m.files.forEach((rel, i) => {
+        const to = path.join(base, m.placement[i])
+        const k = to.toLowerCase()
+        const owner = st.owners[k]
+        if (owner && owner !== m.id) {
+          if (winner === 'other') return
+          if (fs.existsSync(to)) fs.rmSync(to)
+        } else if (!owner && fs.existsSync(to)) {
+          skipped++ // a file Starstation didn't put there: never overwrite it
+          return
+        }
+        if (owner === m.id && fs.existsSync(to)) return
+        linkOrCopy(path.join(src, rel), to)
+        st.owners[k] = m.id
+      })
+    } catch (e) {
+      // stopped half-way (disk full, a file in use): what was placed is recorded, then taken out again
+      log.warn(`${g.id}: mod ${id} could not be switched on`, e)
+      m.enabled = true
+      save(g, st)
+      await setModEnabled(g, id, false).catch((e2) => log.warn(`${g.id}: mod ${id} not fully taken out again`, e2))
+      return { ok: false, error: `The mod could not be switched on: ${(e as Error).message}` }
+    }
     m.enabled = true
     save(g, st)
     log.info(`${g.id}: mod ${id} on (${skipped} existing files left alone)`)
@@ -343,18 +353,25 @@ export async function setModEnabled(g: Game, id: string, on: boolean, winner?: '
   }
 
   // off: remove our files; another mod that is on and has the same file gets it back
-  for (const rel of m.placement) {
-    const to = path.join(base, rel)
-    const k = to.toLowerCase()
-    if (st.owners[k] !== m.id) continue
-    if (fs.existsSync(to)) fs.rmSync(to)
-    delete st.owners[k]
-    const heir = st.mods.find((x) => x.id !== m.id && x.enabled && x.target === m.target && x.placement.some((p) => key(p) === k))
-    if (heir) {
-      const i = heir.placement.findIndex((p) => key(p) === k)
-      linkOrCopy(path.join(modsRoot(g), heir.id, heir.files[i]), to)
-      st.owners[k] = heir.id
-    } else removeEmptyDirs(to, base)
+  // (what was done is saved even if a file can't be removed, so a second try picks up where this stopped)
+  try {
+    for (const rel of m.placement) {
+      const to = path.join(base, rel)
+      const k = to.toLowerCase()
+      if (st.owners[k] !== m.id) continue
+      if (fs.existsSync(to)) fs.rmSync(to)
+      delete st.owners[k]
+      const heir = st.mods.find((x) => x.id !== m.id && x.enabled && x.target === m.target && x.placement.some((p) => key(p) === k))
+      if (heir) {
+        const i = heir.placement.findIndex((p) => key(p) === k)
+        linkOrCopy(path.join(modsRoot(g), heir.id, heir.files[i]), to)
+        st.owners[k] = heir.id
+      } else removeEmptyDirs(to, base)
+    }
+  } catch (e) {
+    save(g, st)
+    log.warn(`${g.id}: mod ${id} could not be switched off completely`, e)
+    return { ok: false, error: `The mod could not be switched off completely: ${(e as Error).message}` }
   }
   m.enabled = false
   save(g, st)
@@ -448,7 +465,7 @@ async function keepManual(
       .slice(0, 30)
   if (!readme.length) readme = ['This mod came without instructions.', `Its files: ${files.slice(0, 5).join(', ')}${files.length > 5 ? ' …' : ''}`]
   await fsp.rm(path.join(tmp, '.pending.json'), { force: true })
-  await fsp.rename(tmp, path.join(root, id))
+  await renameRetry(tmp, path.join(root, id))
   st.mods.push({ id, name: meta.name, description: meta.description, target: 'manual', enabled: false, files, placement: [], source: meta.source ?? { type: 'file' }, image: meta.image, addedAt: Date.now(), manual: { readme } })
   save(g, st)
   log.info(`${g.id}: kept mod ${id} to install by hand`)

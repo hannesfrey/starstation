@@ -6,7 +6,7 @@ import { dir } from './paths'
 import { emulatorDir, getConsole, getEmulator, vars, type ConsolePreset } from './presets'
 import { readJson, writeJson } from './store'
 import { artKey, getGame, getStats } from './library/library'
-import { partsOf } from './fsutil'
+import { partsOf, renameRetry } from './fsutil'
 import { logger } from './log'
 import type { BackupInfo, Game, ResumeInfo } from '../shared/types'
 
@@ -197,7 +197,7 @@ export async function backupGame(g: Game, reason: BackupInfo['reason']): Promise
       bytes: fp.bytes,
       items
     } satisfies Manifest)
-    await fsp.rename(tmp, folder)
+    await renameRetry(tmp, folder)
   } catch (err) {
     await fsp.rm(tmp, { recursive: true, force: true })
     throw err

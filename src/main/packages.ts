@@ -18,7 +18,7 @@ import type { Inventory, PackageChoice, PackageManifest, PackageProgress, Profil
  * Sent by code with croc (encrypted, resumable) or saved to a folder. Receiving adds what's new and never
  * deletes or overwrites anything that is already there.
  * Never included: favorites, play time, recently played (stats.json), logins (secrets.json), logs, caches —
- * unless profiles are sent along on purpose (SPEC-v2 F), then those profiles' saves, play time, trophies and
+ * unless profiles are sent along on purpose (SPEC-v2 F), then those profiles' saves, play time and
  * favorites travel too.
  * Smart packages (SPEC-v2 F): the receiving Starstation first tells the sender what it has (an inventory:
  * file paths + sizes); the sender leaves those files out. "Only new since last time" also leaves out what
@@ -75,7 +75,6 @@ export function planPackage(c: PackageChoice): { entries: Entry[]; manifest: Pac
     if (!name) continue
     const base = path.join('profiles', safeName(name))
     add(p.stats, path.join(base, 'stats.json'))
-    add(p.trophies, path.join(base, 'trophies.json'))
     add(p.saves, path.join(base, 'saves'))
     for (const [key, from] of Object.entries(p.emu)) add(from, path.join(base, 'emulator-saves', key))
   }
@@ -378,7 +377,7 @@ async function receiveProfiles(from: string, choices: Record<string, ProfileMerg
     }
     await copy(path.join(src, 'saves'), to.saves)
     for (const [key, target] of Object.entries(to.emu)) await copy(path.join(src, 'emulator-saves', key), target)
-    // play time / favorites and trophies: replaced, or merged (longer play time, favorite if either, all trophies)
+    // play time / favorites: replaced, or merged (longer play time, favorite if either)
     const theirs = readJson<Stats>(path.join(src, 'stats.json'), {})
     const mine = replace || !existing ? {} : readJson<Stats>(to.stats, {})
     for (const [g, s] of Object.entries(theirs)) {
@@ -386,9 +385,6 @@ async function receiveProfiles(from: string, choices: Record<string, ProfileMerg
       mine[g] = { ...m, ...s, playTime: Math.max(m.playTime ?? 0, s.playTime ?? 0), playCount: Math.max(m.playCount ?? 0, s.playCount ?? 0), lastPlayed: Math.max(m.lastPlayed ?? 0, s.lastPlayed ?? 0) || undefined, favorite: !!(m.favorite || s.favorite) || undefined }
     }
     writeJson(to.stats, mine)
-    const tTheirs = readJson<{ unlocked?: Record<string, number>; firsts?: Record<string, number> }>(path.join(src, 'trophies.json'), {})
-    const tMine = replace || !existing ? { unlocked: {}, firsts: {} } : readJson<{ unlocked: Record<string, number>; firsts: Record<string, number> }>(to.trophies, { unlocked: {}, firsts: {} })
-    writeJson(to.trophies, { unlocked: { ...tTheirs.unlocked, ...tMine.unlocked }, firsts: { ...tTheirs.firsts, ...tMine.firsts } })
     log.info(`profile "${name}" received (${how}${existing ? '' : ', new'})`)
   }
 }

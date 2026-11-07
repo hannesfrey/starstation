@@ -47,13 +47,18 @@ export function healthCheck(): HealthIssue[] {
   for (const g of games) {
     if (g.kind === 'installed') continue
     let problem: string | null = null
-    if (!fs.existsSync(g.launchPath)) problem = 'The game file is missing.'
-    else if (g.kind === 'file' && fs.statSync(g.path).size === 0) problem = 'The game file is empty (0 bytes) — the download or copy probably failed.'
-    else if (/\.(cue|m3u)$/i.test(g.path)) {
-      const missing = referencedFiles(g.path).filter((f) => !fs.existsSync(f))
-      if (missing.length) problem = `${missing.length} file(s) it refers to are missing, e.g. ${path.basename(missing[0])}.`
+    // one game file that can't be read (in use, permissions) must not stop the whole check
+    try {
+      if (!fs.existsSync(g.launchPath)) problem = 'The game file is missing.'
+      else if (g.kind === 'file' && fs.statSync(g.path).size === 0) problem = 'The game file is empty (0 bytes) — the download or copy probably failed.'
+      else if (/\.(cue|m3u)$/i.test(g.path)) {
+        const missing = referencedFiles(g.path).filter((f) => !fs.existsSync(f))
+        if (missing.length) problem = `${missing.length} file(s) it refers to are missing, e.g. ${path.basename(missing[0])}.`
+      }
+      if (!problem && g.console === '3ds' && n3dsEncrypted(g.path)) problem = 'It is encrypted: Azahar only runs decrypted 3DS games (decrypt it on your own 3DS, e.g. with GodMode9).'
+    } catch (e) {
+      problem = `Starstation can't read the game file (${(e as NodeJS.ErrnoException).code ?? (e as Error).message}).`
     }
-    if (!problem && g.console === '3ds' && n3dsEncrypted(g.path)) problem = 'It is encrypted: Azahar only runs decrypted 3DS games (decrypt it on your own 3DS, e.g. with GodMode9).'
     if (problem) issues.push({ severity: 'warning', title: `${g.title} looks broken`, detail: problem, fix: { label: 'Open game folder', command: 'open-folder', arg: `game:${g.id}` } })
   }
 

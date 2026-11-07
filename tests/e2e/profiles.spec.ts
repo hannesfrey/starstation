@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { launchApp, makeFiles, makePresets, writeSettings } from './helpers'
 
-/** SPEC-v2 G: profiles — own saves (also inside emulators), play time, trophies, favorites; PIN; Guest. */
+/** SPEC-v2 G: profiles — own saves (also inside emulators), play time, favorites; PIN; Guest. */
 
 const api = <T>(page: Page, fn: string, ...args: unknown[]) =>
   page.evaluate(

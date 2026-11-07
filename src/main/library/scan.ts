@@ -17,6 +17,15 @@ export interface ScanEntry {
 const SKIP_DIRS = new Set(['shortcuts', 'media', 'images', 'manuals', 'videos', '$recycle.bin', 'system volume information'])
 const MAX_DEPTH = 4
 
+/** A file or folder that vanished between listing and looking (moved, being downloaded) is just skipped. */
+function statOrNull(p: string): fs.Stats | null {
+  try {
+    return fs.statSync(p)
+  } catch {
+    return null
+  }
+}
+
 export function gameIdFor(consoleId: string, rel: string): string {
   return `${consoleId}:${rel.replace(/\\/g, '/').toLowerCase()}`
 }
@@ -69,7 +78,8 @@ export function scanConsole(c: ConsolePreset, rootOverride?: string): ScanEntry[
       if (e.isDirectory()) {
         if (SKIP_DIRS.has(e.name.toLowerCase()) || e.name.startsWith('.')) continue
         if (marker && fs.existsSync(path.join(full, marker))) {
-          const st = fs.statSync(full)
+          const st = statOrNull(full)
+          if (!st) continue
           const launch = c.games?.folderLaunch ? path.join(full, ...c.games.folderLaunch.split('/')) : full
           out.push({
             id: gameIdFor(c.id, path.relative(root, full)),
@@ -98,7 +108,8 @@ export function scanConsole(c: ConsolePreset, rootOverride?: string): ScanEntry[
   }
   for (const f of files) {
     if (hidden.has(f.toLowerCase())) continue
-    const st = fs.statSync(f)
+    const st = statOrNull(f)
+    if (!st) continue
     out.push({
       id: gameIdFor(c.id, path.relative(root, f)),
       console: c.id,
@@ -124,6 +135,8 @@ export function scanConsole(c: ConsolePreset, rootOverride?: string): ScanEntry[
       const g = path.join(inst, e.name)
       const eboot = path.join(g, 'USRDIR', 'EBOOT.BIN')
       if (!fs.existsSync(path.join(g, 'PARAM.SFO')) || !fs.existsSync(eboot)) continue
+      const st = statOrNull(g)
+      if (!st) continue
       out.push({
         id: gameIdFor(c.id, `installed/${e.name}`),
         console: c.id,
@@ -131,7 +144,7 @@ export function scanConsole(c: ConsolePreset, rootOverride?: string): ScanEntry[
         launchPath: eboot,
         kind: 'installed',
         size: -1,
-        mtime: fs.statSync(g).mtimeMs
+        mtime: st.mtimeMs
       })
     }
   }

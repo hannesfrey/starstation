@@ -104,7 +104,7 @@ function candidateNames(g: Game): string[] {
 
 async function fetchTo(url: string, file: string): Promise<boolean> {
   try {
-    const r = await net.fetch(url, { headers: { 'User-Agent': 'Starstation' } })
+    const r = await net.fetch(url, { signal: AbortSignal.timeout(60_000), headers: { 'User-Agent': 'Starstation' } })
     if (!r.ok) return false
     const buf = Buffer.from(await r.arrayBuffer())
     // must really be an image (PNG/JPEG), not an error page
@@ -181,7 +181,7 @@ async function ssLookup(g: Game): Promise<SsMedia[]> {
   })
   if (g.serial) q.set('serialnum', g.serial)
   try {
-    const r = await net.fetch(`${ssBase()}/jeuInfos.php?${q}`, { headers: { 'User-Agent': 'Starstation' } })
+    const r = await net.fetch(`${ssBase()}/jeuInfos.php?${q}`, { signal: AbortSignal.timeout(30_000), headers: { 'User-Agent': 'Starstation' } })
     if (!r.ok) return []
     return ((await r.json()) as { response?: { jeu?: { medias?: SsMedia[] } } }).response?.jeu?.medias ?? []
   } catch (e) {
@@ -220,7 +220,7 @@ interface Tried {
 /** Download a file and check what it is (a PDF manual, an MP4 clip): error pages are not kept. */
 async function fetchFile(url: string, file: string, looksRight: (b: Buffer) => boolean): Promise<boolean> {
   try {
-    const r = await net.fetch(url, { headers: { 'User-Agent': 'Starstation' } })
+    const r = await net.fetch(url, { signal: AbortSignal.timeout(300_000), headers: { 'User-Agent': 'Starstation' } })
     if (!r.ok) return false
     const buf = Buffer.from(await r.arrayBuffer())
     if (!looksRight(buf)) return false
@@ -308,23 +308,29 @@ export function queueArtwork(games: Game[], onChange: () => void, retry = false)
   void (async () => {
     let changed = false
     let last = Date.now()
-    while (queue.length) {
-      const batch = queue.splice(0, 3)
-      const res = await Promise.all(
-        batch.map(async (q) => {
-          const art = await fetchArtwork(q.g, false, q.retry).catch(() => false)
-          const extras = await fetchExtras(q.g).catch(() => false)
-          return art || extras
-        })
-      )
-      if (res.some(Boolean)) changed = true
-      if (changed && Date.now() - last > 1500) {
-        onChange()
-        changed = false
-        last = Date.now()
+    try {
+      while (queue.length) {
+        const batch = queue.splice(0, 3)
+        const res = await Promise.all(
+          batch.map(async (q) => {
+            const art = await fetchArtwork(q.g, false, q.retry).catch(() => false)
+            const extras = await fetchExtras(q.g).catch(() => false)
+            return art || extras
+          })
+        )
+        if (res.some(Boolean)) changed = true
+        if (changed && Date.now() - last > 1500) {
+          onChange()
+          changed = false
+          last = Date.now()
+        }
       }
+      if (changed) onChange()
+    } catch (e) {
+      log.warn('artwork queue stopped', e)
+    } finally {
+      // never stuck as "busy": the next scan starts it again
+      busy = false
     }
-    if (changed) onChange()
-    busy = false
   })()
 }

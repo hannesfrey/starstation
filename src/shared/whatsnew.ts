@@ -12,6 +12,26 @@ export interface WhatsNew {
 
 export const WHATS_NEW: WhatsNew[] = [
   {
+    version: '2.0.13',
+    summary: ['Simpler: the Trophies column is gone', 'Steadier: many small fixes so things go wrong less often, and recover by themselves when they do'],
+    details: [
+      'The Trophies column was removed to keep the menu short. RetroAchievements still work and still show their unlocks after a game.',
+      'Closing Starstation while a game runs now saves and closes the game first, instead of ending it on the spot.',
+      'The PS button menu ignores buttons for a moment after it opens, so a second player’s button presses meant for the game can’t pick Screenshot or Quit.',
+      'Pressing ✕ twice quickly can no longer start a game twice.',
+      'If the menu itself runs into an error it loads again by itself, also while a game runs (the game keeps going).',
+      'If the PS button helper stops, it is started again by itself.',
+      'Settings, play times and mod lists are saved so a crash or power cut can’t leave them half written; a damaged file is replaced by its last good copy.',
+      'Emulator settings files are written the same safe way.',
+      'Moving saves (profiles), games and mods tries again when Windows briefly holds a file, instead of stopping half-way.',
+      'A half-finished profile switch blocks games until it’s finished, so nobody plays on mixed-up saves.',
+      'Games being compressed, and emulators being installed or updated, can’t be started meanwhile; emulators aren’t updated while a game runs.',
+      'New downloads and the mods folder wait until a file is fully copied in (e.g. from a USB drive) before touching it.',
+      'Online look-ups (artwork, compatibility, mods, updates) give up after a while instead of waiting forever.',
+      'Errors that used to vanish silently are now written to Starstation’s log.'
+    ]
+  },
+  {
     version: '2.0.12',
     summary: ['PS3 game updates: Starstation offers them when you start a game, like the PS3'],
     details: [

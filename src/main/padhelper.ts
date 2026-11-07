@@ -25,22 +25,30 @@ function answerTo(line: string): string {
   return a === 'ok' || a === 'err' ? b : a
 }
 
+/** Starstation is closing: the helper is meant to stop now (no restart). */
+let stopping = false
+/** Restarts after the helper stopped by itself (times), so a helper that keeps crashing isn't restarted forever. */
+let restarts: number[] = []
+
 export function startPadHelper(): void {
   if (proc) return
+  stopping = false
   if (process.env.STARSTATION_HEADLESS === '1' && process.env.STARSTATION_PADHELPER !== '1') return
   const exe = path.join(binDir(), 'padhelper.exe')
   if (!fs.existsSync(exe)) {
     log.warn(`missing ${exe}: the PS button menu is off`)
     return
   }
-  proc = spawn(exe, [], { stdio: ['pipe', 'pipe', 'ignore'], windowsHide: true })
-  proc.once('exit', (code) => {
-    log.warn(`helper stopped (code ${code})`)
-    proc = null
-    for (const w of waiting.splice(0)) w.done('err gone')
+  const p = spawn(exe, [], { stdio: ['pipe', 'pipe', 'ignore'], windowsHide: true })
+  proc = p
+  // writing to a helper that just died must not throw
+  p.stdin?.on('error', () => undefined)
+  p.once('exit', (code) => gone(p, `code ${code}`))
+  p.once('error', (e) => {
+    log.error('helper failed to start', e)
+    gone(p, e.message)
   })
-  proc.once('error', (e) => log.error('helper failed to start', e))
-  createInterface({ input: proc.stdout! }).on('line', (line) => {
+  createInterface({ input: p.stdout! }).on('line', (line) => {
     if (line.startsWith('home ')) {
       const pad = line.slice(5)
       log.info(`home button on ${pad}`)
@@ -57,7 +65,33 @@ export function startPadHelper(): void {
   })
 }
 
+/**
+ * The helper ended. Asked to (Starstation closing): fine. By itself (crash): it is started again — without it
+ * the PS button does nothing and "Save and quit" can't close the game window — at most 5 times in 10 minutes.
+ */
+function gone(p: ChildProcess, why: string): void {
+  if (proc !== p) return
+  proc = null
+  for (const w of waiting.splice(0)) w.done('err gone')
+  if (stopping) {
+    log.info(`helper stopped (${why})`)
+    return
+  }
+  const now = Date.now()
+  restarts = restarts.filter((t) => now - t < 10 * 60_000)
+  if (restarts.length >= 5) {
+    log.error(`helper stopped (${why}) and keeps stopping: the PS button menu is off until Starstation starts again`)
+    return
+  }
+  restarts.push(now)
+  log.warn(`helper stopped (${why}); starting it again`)
+  setTimeout(() => {
+    if (!stopping) startPadHelper()
+  }, 1000).unref()
+}
+
 export function stopPadHelper(): void {
+  stopping = true
   proc?.stdin?.write('quit\n')
   proc = null
 }

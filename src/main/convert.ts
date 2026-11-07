@@ -7,6 +7,7 @@ import { emulatorDir, emulatorExe, getConsole, getEmulator } from './presets'
 import { xboxImageKind } from './formats/xdvdfs'
 import { n3dsEncrypted } from './formats/gameid'
 import { logger } from './log'
+import { renameRetry } from './fsutil'
 import type { Notice } from '../shared/types'
 
 /**
@@ -64,7 +65,7 @@ export async function toXiso(file: string, trash: Trash): Promise<Note | null> {
     if (code !== 0 || !fs.existsSync(out) || xboxImageKind(out) !== 'xiso') throw new Error(`extract-xiso failed (code ${code})`)
     // checked: now the original can go (Recycle Bin), and the XISO takes its place
     await trash(file)
-    await fsp.rename(out, file)
+    await renameRetry(out, file)
     log.info(`${name}: XISO ${Math.round(size / 1024 ** 2)} MB → ${Math.round(fs.statSync(file).size / 1024 ** 2)} MB`)
     return { kind: 'success', title: 'Xbox game converted', detail: `${name} is now an XISO image (what xemu runs). The original is in the Recycle Bin.` }
   } catch (e) {

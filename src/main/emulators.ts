@@ -42,7 +42,7 @@ let testedCache: { at: number; list: Record<string, string> } | null = null
 async function remoteTested(): Promise<Record<string, string>> {
   if (testedCache && Date.now() - testedCache.at < 3600_000) return testedCache.list
   try {
-    const r = await net.fetch(`${rawBase()}/${TESTED_FILE}?t=${Date.now()}`, { headers: { 'User-Agent': 'Starstation' } })
+    const r = await net.fetch(`${rawBase()}/${TESTED_FILE}?t=${Date.now()}`, { signal: AbortSignal.timeout(20_000), headers: { 'User-Agent': 'Starstation' } })
     const list = r.ok ? ((await r.json()) as { emulators?: Record<string, string> }).emulators ?? {} : {}
     testedCache = { at: Date.now(), list }
   } catch (e) {
@@ -113,6 +113,7 @@ async function getJson<T>(url: string, init: { method?: string; body?: unknown }
   // the tester's GitHub login raises the rate limit (and is needed to mark versions as tested)
   const token = isTester() ? getSecrets().github?.token : undefined
   const r = await net.fetch(url, {
+    signal: AbortSignal.timeout(30_000),
     method: init.method ?? 'GET',
     headers: {
       'User-Agent': 'Starstation',
@@ -206,6 +207,8 @@ async function download(url: string, file: string, onProgress?: (done: number, t
     onProgress?.(done, total)
   }
   await new Promise<void>((res, rej) => out.end((err?: Error | null) => (err ? rej(err) : res())))
+  // a connection that ended early without an error: never unpack half a file
+  if (total && done !== total) throw new Error(`Download incomplete (${done} of ${total} bytes). Try again.`)
 }
 
 /** Install a RetroArch core from the official libretro buildbot. */

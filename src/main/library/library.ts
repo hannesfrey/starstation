@@ -66,7 +66,9 @@ export function rescan(): LibraryView {
     try {
       entries = scanConsole(c)
     } catch (e) {
+      // keep what was known: a failed look must not make the console's games disappear
       log.error(`scan failed for ${c.id}`, e)
+      next.push(...games.filter((g) => g.console === c.id))
       continue
     }
     for (const e of entries) {

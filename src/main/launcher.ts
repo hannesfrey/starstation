@@ -123,6 +123,14 @@ export function buildCommand(gameId: string, extraArgs: string[] = [], resumeArg
 
 export type LaunchMode = 'fresh' | 'resume'
 
+/** A game is being prepared (configs, backups) and its emulator isn't running yet. */
+let starting: string | null = null
+
+/**
+ * Start a game. Only one at a time: a second press while the first game is still being prepared
+ * (save backup, resume copy — can take seconds) is refused instead of starting a second emulator.
+ * Anything that goes wrong while preparing comes back as a message, never as a silent failure.
+ */
 export async function launch(
   gameId: string,
   mode: LaunchMode = 'fresh',
@@ -130,6 +138,19 @@ export async function launch(
   extra: { args?: string[]; vars?: Record<string, string> } = {}
 ): Promise<LaunchResult> {
   if (running) return { ok: false, error: `${running.title} is still running.` }
+  if (starting) return { ok: false, error: 'A game is already starting.', busy: true }
+  starting = gameId
+  try {
+    return await prepareAndStart(gameId, mode, extraArgs, extra)
+  } catch (e) {
+    log.error(`launch ${gameId} failed`, e)
+    return { ok: false, error: `The game could not be prepared: ${(e as Error).message}`, fix: { label: 'Open logs', command: 'open-folder', arg: 'logs' } }
+  } finally {
+    starting = null
+  }
+}
+
+async function prepareAndStart(gameId: string, mode: LaunchMode, extraArgs: string[], extra: { args?: string[]; vars?: Record<string, string> }): Promise<LaunchResult> {
   const game = getGame(gameId)
   const c = game ? getConsole(game.console) : undefined
   // safe mode: this game's mods are set aside before anything reads them
@@ -229,15 +250,17 @@ export async function launch(
 
   return await new Promise<LaunchResult>((resolve) => {
     let settled = false
-    proc.once('error', (err) => {
+    let failed = false
+    proc.on('error', (err) => {
       log.error(`emulator error for ${gameId}`, err)
+      // an error after it started (e.g. ending it failed) doesn't mean it is gone: 'exit' says that
+      if (settled) return
+      settled = true
+      failed = true
       holdNotices(false)
-      running = null
+      if (running?.proc === proc) running = null
       send('running', null)
-      if (!settled) {
-        settled = true
-        resolve({ ok: false, error: `The emulator could not start: ${err.message}` })
-      }
+      resolve({ ok: false, error: `The emulator could not start: ${err.message}` })
     })
     proc.once('spawn', () => {
       if (!settled) {
@@ -246,10 +269,12 @@ export async function launch(
       }
     })
     proc.once('exit', async (code) => {
+      // it never started: nothing was played
+      if (failed) return
       const seconds = Math.round((Date.now() - startedAt) / 1000)
       log.info(`exit ${gameId} code=${code} after ${seconds}s`)
-      const discard = running?.discard
-      running = null
+      const discard = running?.proc === proc ? running.discard : undefined
+      if (running?.proc === proc) running = null
       if (discard && game) await discardSessionResume(game, startedAt).catch((e) => log.warn('could not drop the resume state', e))
       holdNotices(false)
       couchMark('closed')

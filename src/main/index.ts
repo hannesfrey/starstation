@@ -26,9 +26,8 @@ import { compressGame, compressOption, decompressGame } from './compress'
 import { storageInfo } from './storage'
 import { describeNxm, downloadNxm, nexusKey, nxmFromArgs, registerNxm } from './nexus'
 import { patchStatus, updatePatches } from './patchsets'
-import { noteFirst, trophies } from './trophies'
 import { power, setWallpaper, wallpapers } from './consolefeel'
-import { activeProfile, addProfile, applyProfilePaths, deleteProfile, finishInterruptedSwitch, GUEST, listProfiles, setPin, switchProfile, updateProfile } from './profiles'
+import { activeProfile, addProfile, applyProfilePaths, deleteProfile, finishInterruptedSwitch, GUEST, switchPending, listProfiles, setPin, switchProfile, updateProfile } from './profiles'
 import { refreshCompat } from './compat'
 import { moveGameOptions } from './gameoptions'
 import { moveGameInCollections } from './collections'
@@ -44,7 +43,7 @@ import { readBattery } from './battery'
 import { moveStats, reattachArtwork, setCustomArt } from './library/library'
 import { healthCheck } from './health'
 import { checkDs3, installDs3Driver } from './ds3'
-import { assignInbox, startModInbox } from './modinbox'
+import { assignInbox, openInboxQuestions, startModInbox } from './modinbox'
 import { exportReport } from './diagnostics'
 import { lastUnlockCheck, raLogin, raLogout, raStatus, recentUnlocks } from './retroach'
 import { listRooms, netplayArgs, netplayVars } from './netplay'
@@ -55,7 +54,7 @@ import { cancelTransfer, packageSize, receiveByCode, receiveFromFolder, sendByCo
 import { applyModProfile, deleteModProfile, enablePending, modProfiles, saveModProfile } from './mods'
 import { readJson } from './store'
 import { consoleInfos } from './consoles'
-import { launch, setLauncherWindow, runningGame, runningPid, stopRunning, onBeforeLaunch, onAfterExit } from './launcher'
+import { closeRunning, launch, setLauncherWindow, runningGame, runningPid, stopRunning, onBeforeLaunch, onAfterExit } from './launcher'
 import { keepEmulatorLog } from './emulogs'
 import { hideOverlay, overlayAction, overlayOpen, overlayState, setupOverlay, toggleOverlay } from './overlay'
 import { audioOutputs, bluetoothDevices, bluetoothPair, bluetoothRemove, displayModes, foregroundPid, onHome, setAudioOutput, setDisplayMode, startPadHelper, stopPadHelper } from './padhelper'
@@ -64,7 +63,7 @@ import { couchMark, couchStatus, saveCouchCheck, startCouchCheck } from './couch
 import type { OverlayAction } from '../shared/types'
 import { attachWindow, notify, send } from './notify'
 import { startDownloadWatcher } from './downloads'
-import type { Achievement, AddGamesResult, AppState, CustomConsoleForm, EmulatorInfo, GameDetails, Inventory, NetplayRoom, PackageChoice, PackageProgress, PlayerPad, ProfileMerge, Settings, StartNotes, Trophy } from '../shared/types'
+import type { AddGamesResult, AppState, CustomConsoleForm, EmulatorInfo, GameDetails, Inventory, NetplayRoom, PackageChoice, PackageProgress, PlayerPad, ProfileMerge, Settings, StartNotes } from '../shared/types'
 
 // ---- before ready: keep everything inside Files\ ----
 redirectElectronPaths()
@@ -91,6 +90,8 @@ function applyTvMode(): void {
   const f = getSettings().tvMode ? 1.25 : 1
   for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.setZoomFactor(f)
 }
+
+let lastMenuReload = 0
 
 function createWindow(): BrowserWindow {
   const s = getSettings()
@@ -126,8 +127,16 @@ function createWindow(): BrowserWindow {
   w.webContents.on('will-navigate', (e) => e.preventDefault())
   w.webContents.on('render-process-gone', (_e, d) => {
     log.error('renderer gone', d)
-    // the menu crashed: that counts as a Starstation crash (safe mode is offered next time)
-    if (d.reason !== 'clean-exit') app.exit(1)
+    if (d.reason === 'clean-exit' || w.isDestroyed()) return
+    // the menu crashed: it is loaded again. A running game is never ended for it; otherwise a second crash
+    // within a minute ends Starstation (counted as a crash: safe mode is offered next time)
+    const since = Date.now() - lastMenuReload
+    if (runningGame() || since > 60_000) {
+      lastMenuReload = Date.now()
+      setTimeout(() => !w.isDestroyed() && w.webContents.reload(), runningGame() ? Math.max(0, 10_000 - since) : 0)
+      return
+    }
+    app.exit(1)
   })
   loadPage(w)
   w.webContents.on('did-finish-load', () => applyTvMode())
@@ -217,7 +226,8 @@ async function runCommand(command: string, arg?: string): Promise<void> {
       if (arg) await doInstallEmulator(arg)
       return
     case 'install-core':
-      if (!arg) return
+      if (!arg || runningGame() || installing.has('retroarch')) return
+      installing.add('retroarch')
       try {
         await installCore(arg, (text) => send('emulator-progress', { id: 'retroarch', text }))
         notify({ kind: 'success', title: 'Core installed', detail: arg })
@@ -225,6 +235,7 @@ async function runCommand(command: string, arg?: string): Promise<void> {
       } catch (e) {
         notify({ kind: 'error', title: 'Core install failed', detail: (e as Error).message })
       } finally {
+        installing.delete('retroarch')
         send('emulator-progress', { id: 'retroarch', text: '' })
       }
       return
@@ -249,7 +260,17 @@ async function runCommand(command: string, arg?: string): Promise<void> {
   }
 }
 
+/** Emulators being installed / updated right now (a second press doesn't start a second download). */
+const installing = new Set<string>()
+
 async function doInstallEmulator(id: string): Promise<{ ok: boolean; error?: string; info?: EmulatorInfo }> {
+  // a running game has the emulator's files open: updating now would leave it half old, half new
+  if (runningGame()) {
+    notify({ kind: 'warning', title: 'Close the game first', detail: 'Emulators are installed and updated while no game is running.' })
+    return { ok: false, error: 'Close the game first.' }
+  }
+  if (installing.has(id)) return { ok: false, error: 'It is being installed already.' }
+  installing.add(id)
   try {
     const info = await installEmulator(id, (text) => send('emulator-progress', { id, text }))
     notify({ kind: 'success', title: `${info.name} installed`, detail: info.version ? `Version ${info.version}` : undefined })
@@ -260,6 +281,7 @@ async function doInstallEmulator(id: string): Promise<{ ok: boolean; error?: str
     notify({ kind: 'error', title: 'Install failed', detail: (e as Error).message })
     return { ok: false, error: (e as Error).message }
   } finally {
+    installing.delete(id)
     send('emulator-progress', { id, text: '' })
   }
 }
@@ -300,15 +322,30 @@ async function installPs3Firmware(): Promise<void> {
   send('consoles', consoleInfos())
 }
 
+/**
+ * Every request from the menu goes through here: a failure is written to the log with its name
+ * (the menu then shows its own message), instead of disappearing without a trace.
+ */
+function handle(channel: string, fn: (e: Electron.IpcMainInvokeEvent, ...args: any[]) => unknown): void {
+  ipcMain.handle(channel, async (e, ...args) => {
+    try {
+      return await fn(e, ...args)
+    } catch (err) {
+      log.error(`${channel} failed`, err)
+      throw err
+    }
+  })
+}
+
 function registerIpc(): void {
-  ipcMain.handle('state', () => state())
-  ipcMain.handle('import-scan', () =>
+  handle('state', () => state())
+  handle('import-scan', () =>
     findSources().map((s, index) => {
       const plan = planImport(s)
       return { index, label: s.label, summary: summarize(plan), skipped: plan.skipped }
     })
   )
-  ipcMain.handle('import-run', async (_e, index: number) => {
+  handle('import-run', async (_e, index: number) => {
     const source = findSources()[index]
     if (!source) return { ok: false, copied: 0, moved: 0, conflicts: [], errors: ['Source not found'] }
     const result = await runImport(planImport(source), (p) => send('import-progress', p))
@@ -322,33 +359,36 @@ function registerIpc(): void {
     })
     return result
   })
-  ipcMain.handle('emulators', () => emulatorInfos())
-  ipcMain.handle('emulators-check', () => checkUpdates())
-  ipcMain.handle('emulator-install', (_e, id: string) => doInstallEmulator(id))
-  ipcMain.handle('set-setting', (_e, key: keyof Settings, value: Settings[keyof Settings]) => {
+  handle('emulators', () => emulatorInfos())
+  handle('emulators-check', () => checkUpdates())
+  handle('emulator-install', (_e, id: string) => doInstallEmulator(id))
+  handle('set-setting', (_e, key: keyof Settings, value: Settings[keyof Settings]) => {
     const s = setSetting(key, value as never)
     if (key === 'showEmptyConsoles') send('consoles', consoleInfos())
     if (key === 'startWithWindows' && app.isPackaged) app.setLoginItemSettings({ openAtLogin: !!value })
     if (key === 'tvMode') applyTvMode()
     return s
   })
-  ipcMain.handle('rescan', () => {
+  handle('rescan', () => {
     const l = rescan()
     send('consoles', consoleInfos())
     return l
   })
-  ipcMain.handle('launch', (_e, id: string, mode?: 'fresh' | 'resume', np?: { host: true } | { join: NetplayRoom }, pads?: PlayerPad[]) => {
+  handle('launch', (_e, id: string, mode?: 'fresh' | 'resume', np?: { host: true } | { join: NetplayRoom }, pads?: PlayerPad[]) => {
     const g = getGame(id)
     if (updatingGame() === id) return { ok: false, error: 'This game is being updated. It can start when the update is done.' }
+    if (compressing === id) return { ok: false, error: 'This game is being compressed. It can start when that is done.' }
+    const emu = g ? getConsole(g.console)?.emulator : undefined
+    if (emu && installing.has(emu)) return { ok: false, error: 'Its emulator is being installed or updated. The game can start when that is done.' }
+    if (switchPending()) return { ok: false, error: 'Switching profiles didn’t finish. Close Starstation and start it again, then play.' }
     const online = np && g && getConsole(g.console)?.netplay ? np : undefined
     // controller assignment: player N → that pad, in every emulator's own way (controllers.ts)
     const order = Array.isArray(pads) ? pads.filter((p) => (p.api === 'xinput' || p.api === 'sdl') && Number.isInteger(p.index)).slice(0, 4) : []
     const vars = { ...(order.length ? padVars(order) : {}), ...(online ? netplayVars('host' in online) : {}) }
-    if (online) noteFirst('netplay')
     return launch(id, mode === 'resume' ? 'resume' : 'fresh', [], { args: online ? netplayArgs(online) : [], vars })
   })
-  ipcMain.handle('health', () => healthCheck())
-  ipcMain.handle('export-report', async () => {
+  handle('health', () => healthCheck())
+  handle('export-report', async () => {
     const name = `starstation-report-${new Date().toISOString().slice(0, 10)}.zip`
     let to = dir('config', 'diagnostics', name)
     if (!HEADLESS) {
@@ -360,25 +400,25 @@ function registerIpc(): void {
     notify({ kind: 'success', title: 'Report saved', detail: to, action: { label: 'Show file', command: 'show-file', arg: to } })
     return to
   })
-  ipcMain.handle('ra-status', () => raStatus())
-  ipcMain.handle('ra-login', async () => {
+  handle('ra-status', () => raStatus())
+  handle('ra-login', async () => {
     const r = await raLogin()
     notify(r.ok ? { kind: 'achievement', title: 'Logged in to RetroAchievements', detail: raStatus().username } : { kind: 'error', title: 'RetroAchievements login failed', detail: r.error })
     return r
   })
-  ipcMain.handle('ra-logout', () => raLogout())
-  ipcMain.handle('netplay-rooms', (_e, id: string) => {
+  handle('ra-logout', () => raLogout())
+  handle('netplay-rooms', (_e, id: string) => {
     const g = getGame(id)
     return g ? listRooms(g) : []
   })
-  ipcMain.handle('steam-status', () => steamStatus())
-  ipcMain.handle('steam-add', () => {
+  handle('steam-status', () => steamStatus())
+  handle('steam-add', () => {
     const r = addToSteam()
     notify(r.ok ? { kind: 'success', title: 'Added to Steam', detail: 'Start Steam: Starstation is in your library (Non-Steam).' } : { kind: 'error', title: 'Not added to Steam', detail: r.error })
     return r
   })
-  ipcMain.handle('custom-console', (_e, id: string) => customConsoleForm(id))
-  ipcMain.handle('custom-console-save', (_e, form: CustomConsoleForm) => {
+  handle('custom-console', (_e, id: string) => customConsoleForm(id))
+  handle('custom-console-save', (_e, form: CustomConsoleForm) => {
     const r = saveCustomConsole(form)
     if (r.ok) {
       send('library', rescan())
@@ -386,16 +426,16 @@ function registerIpc(): void {
     }
     return r
   })
-  ipcMain.handle('custom-console-remove', (_e, id: string) => {
+  handle('custom-console-remove', (_e, id: string) => {
     removeCustomConsole(id)
     send('library', rescan())
     send('consoles', consoleInfos())
   })
-  ipcMain.handle('pick-exe', async () => {
+  handle('pick-exe', async () => {
     const pick = await dialog.showOpenDialog(win!, { title: 'Choose the emulator program', properties: ['openFile'], filters: [{ name: 'Programs', extensions: ['exe'] }] })
     return pick.canceled ? null : (pick.filePaths[0] ?? null)
   })
-  ipcMain.handle('library-clear-cache', () => {
+  handle('library-clear-cache', () => {
     fs.rmSync(dir('config', 'library', 'library.json'), { force: true })
     loadLibrary()
     scanAndArt()
@@ -424,14 +464,14 @@ function registerIpc(): void {
     notify({ kind: 'success', title: 'Package received', detail: `${r.added ?? 0} file(s) added${r.kept ? `, ${r.kept} already here and kept` : ''}.` })
     return r
   }
-  ipcMain.handle('package-size', (_e, c: PackageChoice) => packageSize(c))
-  ipcMain.handle('package-send', async (_e, c: PackageChoice) => {
+  handle('package-size', (_e, c: PackageChoice) => packageSize(c))
+  handle('package-send', async (_e, c: PackageChoice) => {
     const r = await sendByCode(c, () => undefined, pkgProgress).catch((e) => ({ ok: false, error: (e as Error).message }))
     if (!r.ok) pkgProgress({ phase: 'error', pct: 0, detail: r.error })
     else notify({ kind: 'success', title: 'Package sent' })
     return r
   })
-  ipcMain.handle('package-save-folder', async (_e, c: PackageChoice) => {
+  handle('package-save-folder', async (_e, c: PackageChoice) => {
     let base = dir('backups', 'packages')
     if (!HEADLESS) {
       const pick = await dialog.showOpenDialog(win!, { title: 'Choose where to save the package (e.g. a USB drive)', properties: ['openDirectory', 'createDirectory'] })
@@ -452,10 +492,10 @@ function registerIpc(): void {
       return { ok: false, error: (e as Error).message }
     }
   })
-  ipcMain.handle('package-receive', async (_e, code: string, useSettings: boolean) =>
+  handle('package-receive', async (_e, code: string, useSettings: boolean) =>
     afterReceive(await receiveByCode(String(code), { useSettings: !!useSettings }, pkgProgress).catch((e) => ({ ok: false, error: (e as Error).message })))
   )
-  ipcMain.handle('package-receive-folder', async (_e, useSettings: boolean, folder?: string) => {
+  handle('package-receive-folder', async (_e, useSettings: boolean, folder?: string) => {
     let f = folder
     if (!f || !HEADLESS) {
       if (HEADLESS) return null
@@ -465,9 +505,9 @@ function registerIpc(): void {
     }
     return afterReceive({ ...(await receiveFromFolder(f, { useSettings: !!useSettings }, pkgProgress).catch((e) => ({ ok: false, error: (e as Error).message, added: 0, kept: 0 }))), folder: f })
   })
-  ipcMain.handle('package-cancel', () => cancelTransfer())
+  handle('package-cancel', () => cancelTransfer())
   // receiving PC: put "what I have" on a USB drive, so the package saved there only holds the rest
-  ipcMain.handle('package-prepare-folder', async (_e, folder?: string) => {
+  handle('package-prepare-folder', async (_e, folder?: string) => {
     let f = HEADLESS && typeof folder === 'string' ? folder : null
     if (!f) {
       const pick = await dialog.showOpenDialog(win!, { title: 'Choose the drive or folder the package will be saved to', properties: ['openDirectory', 'createDirectory'] })
@@ -479,7 +519,7 @@ function registerIpc(): void {
     return f
   })
   // profiles with names that exist here: the answers (merge / replace / keep both) finish the receiving
-  ipcMain.handle('package-finish', async (_e, folder: string, useSettings: boolean, choices: Record<string, ProfileMerge>) => {
+  handle('package-finish', async (_e, folder: string, useSettings: boolean, choices: Record<string, ProfileMerge>) => {
     const f = path.resolve(String(folder))
     if (!f.toLowerCase().startsWith(dir('config', 'packages').toLowerCase()) && !(HEADLESS || pkgAskFolders.has(f.toLowerCase())))
       return { ok: false, error: 'Unknown package folder' }
@@ -488,7 +528,7 @@ function registerIpc(): void {
     return r
   })
   // ---- first start ----
-  ipcMain.handle('setup-status', () => {
+  handle('setup-status', () => {
     const done = !!readJson<{ done?: boolean }>(dir('config', 'setup.json'), {}).done
     // the first scan may still be running: also look into the games folders themselves
     const gamesOnDisk = allConsoles().some((c) => {
@@ -501,27 +541,26 @@ function registerIpc(): void {
     const existing = gamesOnDisk || view().games.length > 0 || allEmulators().some((e) => !path.isAbsolute(e.folder) && fs.existsSync(emulatorExe(e)))
     return { done, existing, filesDir: filesDir() }
   })
-  ipcMain.handle('setup-done', () => writeJson(dir('config', 'setup.json'), { done: true, at: new Date().toISOString() }))
-  ipcMain.handle('update-state', () => updateState())
-  ipcMain.handle('update-check', () => checkNow(notify))
+  handle('setup-done', () => writeJson(dir('config', 'setup.json'), { done: true, at: new Date().toISOString() }))
+  handle('update-state', () => updateState())
+  handle('update-check', () => checkNow(notify))
   // ---- safe updates + safe mode (SPEC-v2 B, G) ----
-  ipcMain.handle('start-notes', () => takeStartNotes())
-  ipcMain.handle('guide-seen', (_e, keys: string[]) => markGuideSeen(Array.isArray(keys) ? keys.map(String) : []))
+  handle('start-notes', () => takeStartNotes())
+  handle('guide-seen', (_e, keys: string[]) => markGuideSeen(Array.isArray(keys) ? keys.map(String) : []))
   // ---- PS button menu (SPEC-v2 A) ----
-  ipcMain.handle('overlay-state', () => overlayState())
+  handle('overlay-state', () => overlayState())
   // ---- library & storage (SPEC-v2 D) ----
-  ipcMain.handle('storage', (_e, fresh?: boolean) => storageInfo(!!fresh))
-  ipcMain.handle('trophies', () => trophyView())
+  handle('storage', (_e, fresh?: boolean) => storageInfo(!!fresh))
   // ---- system settings from the menu (SPEC-v2 G; Hannes allowed changing them when picked here) ----
-  ipcMain.handle('sys-audio', () => audioOutputs())
-  ipcMain.handle('sys-audio-set', async (_e, id: string) => {
+  handle('sys-audio', () => audioOutputs())
+  handle('sys-audio-set', async (_e, id: string) => {
     const ok = await setAudioOutput(String(id))
     log.info(`sound output → ${id}: ${ok}`)
     return ok
   })
-  ipcMain.handle('sys-display', () => displayModes())
+  handle('sys-display', () => displayModes())
   let displayRevert: { timer: NodeJS.Timeout; back: { w: number; h: number; hz: number } } | null = null
-  ipcMain.handle('sys-display-set', async (_e, w: number, h: number, hz: number) => {
+  handle('sys-display-set', async (_e, w: number, h: number, hz: number) => {
     const before = (await displayModes()).find((m) => m.current)
     if (!(await setDisplayMode(Number(w), Number(h), Number(hz), true))) return { ok: false, error: 'This screen doesn’t take that mode.' }
     if (!(await setDisplayMode(Number(w), Number(h), Number(hz)))) return { ok: false, error: 'Windows didn’t change the screen.' }
@@ -540,26 +579,26 @@ function registerIpc(): void {
       }
     return { ok: true }
   })
-  ipcMain.handle('sys-display-keep', async (_e, keep: boolean) => {
+  handle('sys-display-keep', async (_e, keep: boolean) => {
     if (!displayRevert) return
     clearTimeout(displayRevert.timer)
     if (!keep) await setDisplayMode(displayRevert.back.w, displayRevert.back.h, displayRevert.back.hz)
     displayRevert = null
   })
-  ipcMain.handle('sys-bt', (_e, scan: boolean) => bluetoothDevices(!!scan))
-  ipcMain.handle('sys-bt-pair', async (_e, address: string) => {
+  handle('sys-bt', (_e, scan: boolean) => bluetoothDevices(!!scan))
+  handle('sys-bt-pair', async (_e, address: string) => {
     const r = await bluetoothPair(String(address))
     log.info(`bluetooth pair ${address}: ${r.ok ? 'ok' : r.error}`)
     return r
   })
-  ipcMain.handle('sys-bt-remove', (_e, address: string) => bluetoothRemove(String(address)))
+  handle('sys-bt-remove', (_e, address: string) => bluetoothRemove(String(address)))
   // ---- profiles (SPEC-v2 G) ----
-  ipcMain.handle('profiles', () => listProfiles())
-  ipcMain.handle('profile-add', (_e, name: string, icon?: string) => addProfile(String(name), icon ? String(icon) : undefined))
-  ipcMain.handle('profile-update', (_e, id: string, change: { name?: string; icon?: string }) => updateProfile(String(id), { name: change?.name, icon: change?.icon }))
-  ipcMain.handle('profile-pin', (_e, id: string, pin: string | null, oldPin?: string) => setPin(String(id), pin === null ? null : String(pin), oldPin, true))
-  ipcMain.handle('profile-delete', (_e, id: string) => deleteProfile(String(id), trash))
-  ipcMain.handle('profile-picture', async (_e, id: string, file?: string) => {
+  handle('profiles', () => listProfiles())
+  handle('profile-add', (_e, name: string, icon?: string) => addProfile(String(name), icon ? String(icon) : undefined))
+  handle('profile-update', (_e, id: string, change: { name?: string; icon?: string }) => updateProfile(String(id), { name: change?.name, icon: change?.icon }))
+  handle('profile-pin', (_e, id: string, pin: string | null, oldPin?: string) => setPin(String(id), pin === null ? null : String(pin), oldPin, true))
+  handle('profile-delete', (_e, id: string) => deleteProfile(String(id), trash))
+  handle('profile-picture', async (_e, id: string, file?: string) => {
     let src = HEADLESS && typeof file === 'string' ? file : null
     if (!src) {
       const pick = await dialog.showOpenDialog(win!, { title: 'Choose a profile picture', properties: ['openFile'], filters: [{ name: 'Pictures', extensions: ['png', 'jpg', 'jpeg'] }] })
@@ -574,7 +613,7 @@ function registerIpc(): void {
     fs.writeFileSync(to, img.toPNG())
     return updateProfile(String(id), { image: to })
   })
-  ipcMain.handle('profile-switch', async (_e, id: string, pin?: string) => {
+  handle('profile-switch', async (_e, id: string, pin?: string) => {
     if (runningGame()) return { ok: false, error: 'Close the game first.' }
     const r = await switchProfile(String(id), pin === undefined ? undefined : String(pin))
     if (!r.ok) return r
@@ -585,8 +624,8 @@ function registerIpc(): void {
     return r
   })
   // ---- console feel (SPEC-v2 C) ----
-  ipcMain.handle('wallpapers', () => wallpapers())
-  ipcMain.handle('wallpaper-set', async (_e, kind: string, file?: string | null) => {
+  handle('wallpapers', () => wallpapers())
+  handle('wallpaper-set', async (_e, kind: string, file?: string | null) => {
     let src: string | null = HEADLESS && typeof file === 'string' ? file : null
     if (file === null) src = null
     else if (!src) {
@@ -598,13 +637,13 @@ function registerIpc(): void {
     if (r.ok) send('wallpapers', wallpapers())
     return r
   })
-  ipcMain.handle('power', (_e, action: string) => {
+  handle('power', (_e, action: string) => {
     if (action === 'sleep' || action === 'shutdown') power(action)
   })
   // ---- Nexus Mods ----
-  ipcMain.handle('nxm-open', (_e, url: string) => openNxm(String(url)))
-  ipcMain.handle('nexus-status', () => ({ key: !!nexusKey(), registered: registerNxm(), patches: patchStatus() }))
-  ipcMain.handle('update-patches', async () => {
+  handle('nxm-open', (_e, url: string) => openNxm(String(url)))
+  handle('nexus-status', () => ({ key: !!nexusKey(), registered: registerNxm(), patches: patchStatus() }))
+  handle('update-patches', async () => {
     const r = await updatePatches()
     notify(
       r.errors.length
@@ -613,7 +652,7 @@ function registerIpc(): void {
     )
     return r
   })
-  ipcMain.handle('nexus-install', async (_e, url: string, gameId: string) => {
+  handle('nexus-install', async (_e, url: string, gameId: string) => {
     const g = getGame(String(gameId))
     if (!g) return { ok: false, error: 'Game not found' }
     try {
@@ -628,7 +667,7 @@ function registerIpc(): void {
       return { ok: false, error: (e as Error).message }
     }
   })
-  ipcMain.handle('read-media', async (_e, p: string) => {
+  handle('read-media', async (_e, p: string) => {
     // only files inside Files\ (manuals in media\artwork), and not huge ones
     const abs = path.resolve(String(p))
     if (!abs.toLowerCase().startsWith(path.resolve(filesDir()).toLowerCase() + path.sep)) return null
@@ -639,12 +678,12 @@ function registerIpc(): void {
       return null
     }
   })
-  ipcMain.handle('compress-game', (_e, id: string) => doCompress(String(id)))
-  ipcMain.handle('ps3-update-info', async (_e, id: string) => {
+  handle('compress-game', (_e, id: string) => doCompress(String(id)))
+  handle('ps3-update-info', async (_e, id: string) => {
     const g = getGame(String(id))
     return g ? updateInfo(g).catch(() => null) : null
   })
-  ipcMain.handle('ps3-update', async (_e, id: string) => {
+  handle('ps3-update', async (_e, id: string) => {
     const g = getGame(String(id))
     if (!g) return { ok: false, error: 'Game not found' }
     if (runningGame()) return { ok: false, error: 'Close the game first.' }
@@ -653,22 +692,22 @@ function registerIpc(): void {
     else if (!r.ok) notify({ kind: 'error', title: `${g.title} was not updated`, detail: r.error ?? '' })
     return r
   })
-  ipcMain.handle('couch-start', () => startCouchCheck())
-  ipcMain.handle('couch-status', () => couchStatus())
-  ipcMain.handle('couch-pad', () => couchMark('pad'))
-  ipcMain.handle('couch-save', () => {
+  handle('couch-start', () => startCouchCheck())
+  handle('couch-status', () => couchStatus())
+  handle('couch-pad', () => couchMark('pad'))
+  handle('couch-save', () => {
     const f = saveCouchCheck()
     notify({ kind: 'success', title: 'Couch check saved', detail: f, action: { label: 'Show file', command: 'show-file', arg: f } })
     return f
   })
-  ipcMain.handle('overlay-action', (_e, a: OverlayAction) => overlayAction(a))
-  ipcMain.handle('test-home', () => {
+  handle('overlay-action', (_e, a: OverlayAction) => overlayAction(a))
+  handle('test-home', () => {
     if (HEADLESS || COUCH_TEST) toggleOverlay()
   })
   // couch test: who has the focus right now (the game, the PS button menu or Starstation)?
-  ipcMain.handle('test-fg', async () => (COUCH_TEST ? { fg: await foregroundPid(), emulator: runningPid(), starstation: process.pid } : null))
-  ipcMain.handle('undo-update', (_e, to: string) => undoUpdate(String(to)))
-  ipcMain.handle('release-everyone', async () => {
+  handle('test-fg', async () => (COUCH_TEST ? { fg: await foregroundPid(), emulator: runningPid(), starstation: process.pid } : null))
+  handle('undo-update', (_e, to: string) => undoUpdate(String(to)))
+  handle('release-everyone', async () => {
     const r = await releaseToEveryone()
     notify(
       r.ok
@@ -677,12 +716,12 @@ function registerIpc(): void {
     )
     return r
   })
-  ipcMain.handle('emulator-mark-tested', async (_e, id: string) => {
+  handle('emulator-mark-tested', async (_e, id: string) => {
     const r = await markTested(String(id))
     notify(r.ok ? { kind: 'success', title: 'Marked as tested', detail: 'The other PCs are offered this version now.' } : { kind: 'error', title: 'Not marked as tested', detail: r.error })
     return r
   })
-  ipcMain.handle('safe-mode', async (_e, on: boolean) => {
+  handle('safe-mode', async (_e, on: boolean) => {
     if (runningGame()) return { ok: false, error: 'Close the game first.' }
     if (on) enterSafeMode()
     else await leaveSafeMode()
@@ -690,7 +729,7 @@ function registerIpc(): void {
     win?.webContents.reload()
     return { ok: true }
   })
-  ipcMain.handle('licenses', () =>
+  handle('licenses', () =>
     allEmulators()
       .filter((e) => !path.isAbsolute(e.folder))
       .map((e) => {
@@ -699,13 +738,13 @@ function registerIpc(): void {
         return { id: e.id, name: e.name, license: e.license ?? 'see the emulator', file: f }
       })
   )
-  ipcMain.handle('game-details', (_e, id: string): GameDetails | null => {
+  handle('game-details', (_e, id: string): GameDetails | null => {
     const g = getGame(id)
     if (!g) return null
     const ml = listMods(g)
     return { mods: { total: ml.length, on: ml.filter((m) => m.enabled).length, supported: modSupport(g).targets.length > 0 }, options: gameOptions(g), available: availableOptions(g), resume: resumeInfo(g), backups: listBackups(g), ownSaves: ownSaves(g).length, canBackup: !!getConsole(g.console)?.backup?.length, previousResume: previousResume(g)?.savedAt ?? null, compress: compressOption(g) ?? undefined }
   })
-  ipcMain.handle('backup-now', async (_e, id: string) => {
+  handle('backup-now', async (_e, id: string) => {
     const g = getGame(id)
     if (!g) return null
     const b = await backupGame(g, 'manual')
@@ -713,7 +752,7 @@ function registerIpc(): void {
     notify(b ? { kind: 'save', title: 'Saves backed up', detail: g.title } : { kind: 'info', title: saveEntries(g).length ? 'Saves unchanged since the last backup' : 'No saves found yet', detail: g.title })
     return b
   })
-  ipcMain.handle('backup-restore', async (_e, id: string, backupId: string) => {
+  handle('backup-restore', async (_e, id: string, backupId: string) => {
     const g = getGame(id)
     if (!g) return { ok: false, error: 'Game not found' }
     if (runningGame()) return { ok: false, error: 'Close the game first.' }
@@ -726,7 +765,7 @@ function registerIpc(): void {
       return { ok: false, error: (e as Error).message }
     }
   })
-  ipcMain.handle('resume-restore-previous', async (_e, id: string) => {
+  handle('resume-restore-previous', async (_e, id: string) => {
     const g = getGame(id)
     if (!g) return { ok: false, error: 'Game not found' }
     if (runningGame()) return { ok: false, error: 'Close the game first.' }
@@ -738,13 +777,13 @@ function registerIpc(): void {
       return { ok: false, error: (e as Error).message }
     }
   })
-  ipcMain.handle('game-option-set', (_e, id: string, key: 'graphics' | 'crt' | 'patch', value: string | boolean, patchId?: string) => {
+  handle('game-option-set', (_e, id: string, key: 'graphics' | 'crt' | 'patch', value: string | boolean, patchId?: string) => {
     const g = getGame(id)
     return g ? setGameOption(g, key, value, patchId) : null
   })
-  ipcMain.handle('report-pads', (_e, ids: string[]) => reportPads(Array.isArray(ids) ? ids.map(String) : []))
-  ipcMain.handle('screenshots', () => listScreenshots())
-  ipcMain.handle('refresh-artwork', async (_e, id: string) => {
+  handle('report-pads', (_e, ids: string[]) => reportPads(Array.isArray(ids) ? ids.map(String) : []))
+  handle('screenshots', () => listScreenshots())
+  handle('refresh-artwork', async (_e, id: string) => {
     const g = getGame(id)
     if (!g) return false
     const got = await fetchArtwork(g, true)
@@ -752,7 +791,7 @@ function registerIpc(): void {
     if (!got) notify({ kind: 'info', title: 'No new artwork found', detail: g.title })
     return got
   })
-  ipcMain.handle('custom-art', async (_e, id: string, kind: string, file?: string) => {
+  handle('custom-art', async (_e, id: string, kind: string, file?: string) => {
     const g = getGame(id)
     if (!g) return { ok: false, error: 'Game not found' }
     if (kind === 'reset') {
@@ -794,16 +833,18 @@ function registerIpc(): void {
     return g ? fn(g) : { ok: false, error: 'Game not found' }
   }
   const notRunning = (id: string) => (runningGame()?.gameId === id ? { ok: false as const, error: 'Close the game first.' } : null)
-  ipcMain.handle('mods', (_e, id: string) => {
+  handle('mods', (_e, id: string) => {
     const g = getGame(id)
     return g ? { mods: listMods(g), ...modSupport(g), ...modProfiles(g) } : null
   })
-  ipcMain.handle('mod-profile-save', (_e, id: string, name: string) => withGame(id, (g) => void saveModProfile(g, String(name))))
-  ipcMain.handle('mod-profile-delete', (_e, id: string, pid: string) => withGame(id, (g) => deleteModProfile(g, String(pid))))
-  ipcMain.handle('mod-profile-apply', (_e, id: string, pid: string) => notRunning(id) ?? withGame(id, (g) => applyModProfile(g, String(pid))))
-  ipcMain.handle('mod-inbox-assign', (_e, id: string, gameId: string) => assignInbox(String(id), String(gameId ?? '')))
-  ipcMain.handle('mod-add', (_e, id: string, p: string) => withGame(id, (g) => addMod(g, p).then(modAdded(g))))
-  ipcMain.handle('mod-add-dialog', async (_e, id: string, folder: boolean) => {
+  handle('mod-profile-save', (_e, id: string, name: string) => withGame(id, (g) => void saveModProfile(g, String(name))))
+  handle('mod-profile-delete', (_e, id: string, pid: string) => withGame(id, (g) => deleteModProfile(g, String(pid))))
+  handle('mod-profile-apply', (_e, id: string, pid: string) => notRunning(id) ?? withGame(id, (g) => applyModProfile(g, String(pid))))
+  // the menu (re)loaded (start, safe mode, profile switch, after a crash): it asks for questions still open
+  handle('mod-inbox-open', () => openInboxQuestions())
+  handle('mod-inbox-assign', (_e, id: string, gameId: string) => assignInbox(String(id), String(gameId ?? '')))
+  handle('mod-add', (_e, id: string, p: string) => withGame(id, (g) => addMod(g, p).then(modAdded(g))))
+  handle('mod-add-dialog', async (_e, id: string, folder: boolean) => {
     const g = getGame(id)
     if (!g) return null
     const pick = await dialog.showOpenDialog(win!, {
@@ -814,45 +855,46 @@ function registerIpc(): void {
     if (pick.canceled || !pick.filePaths[0]) return null
     return addMod(g, pick.filePaths[0]).then(modAdded(g))
   })
-  ipcMain.handle('mod-place', (_e, id: string, pending: string, target: string) => withGame(id, (g) => finishAdd(g, pending, target).then(modAdded(g))))
-  ipcMain.handle('mod-toggle', (_e, id: string, modId: string, on: boolean, winner?: 'this' | 'other') =>
+  handle('mod-place', (_e, id: string, pending: string, target: string) => withGame(id, (g) => finishAdd(g, pending, target).then(modAdded(g))))
+  handle('mod-toggle', (_e, id: string, modId: string, on: boolean, winner?: 'this' | 'other') =>
     notRunning(id) ?? withGame(id, (g) => setModEnabled(g, modId, !!on, winner === 'this' || winner === 'other' ? winner : undefined))
   )
-  ipcMain.handle('mod-delete', (_e, id: string, modId: string) => notRunning(id) ?? withGame(id, (g) => deleteMod(g, modId)))
-  ipcMain.handle('gb-search', async (_e, id: string, name?: string) => {
+  handle('mod-delete', (_e, id: string, modId: string) => notRunning(id) ?? withGame(id, (g) => deleteMod(g, modId)))
+  handle('gb-search', async (_e, id: string, name?: string) => {
     const g = getGame(id)
     if (!g) return { games: [] }
     return { games: await searchGames(name ?? g.title), chosen: gamebananaGame(g) }
   })
-  ipcMain.handle('gb-choose', (_e, id: string, gbId: number) => {
+  handle('gb-choose', (_e, id: string, gbId: number) => {
     const g = getGame(id)
     if (g) setGamebananaGame(g, Number(gbId))
   })
-  ipcMain.handle('gb-mods', (_e, gbId: number, page: number) => listGbMods(Number(gbId), Number(page) || 1))
-  ipcMain.handle('gb-mod', (_e, modId: number) => gbModDetails(Number(modId)))
-  ipcMain.handle('gb-install', (_e, id: string, modId: number, fileId: number) =>
+  handle('gb-mods', (_e, gbId: number, page: number) => listGbMods(Number(gbId), Number(page) || 1))
+  handle('gb-mod', (_e, modId: number) => gbModDetails(Number(modId)))
+  handle('gb-install', (_e, id: string, modId: number, fileId: number) =>
     withGame(id, (g) => installGbMod(g, Number(modId), Number(fileId)).then(modAdded(g)))
   )
-  ipcMain.handle('delete-game', (_e, id: string, withSaves: boolean) => deleteGame(id, !!withSaves))
-  ipcMain.handle('collection-create', (_e, name: string, first?: string) => pushCollections(createCollection(name, first)))
-  ipcMain.handle('collection-rename', (_e, id: string, name: string) => pushCollections(renameCollection(id, name)))
-  ipcMain.handle('collection-delete', (_e, id: string) => pushCollections(deleteCollection(id)))
-  ipcMain.handle('collection-toggle', (_e, id: string, gameId: string) => pushCollections(toggleInCollection(id, gameId)))
-  ipcMain.handle('add-games', (_e, paths: string[], consoleId?: string) => doAddGames(paths, consoleId))
-  ipcMain.handle('add-games-dialog', async () => {
+  handle('delete-game', (_e, id: string, withSaves: boolean) => deleteGame(id, !!withSaves))
+  handle('collection-create', (_e, name: string, first?: string) => pushCollections(createCollection(name, first)))
+  handle('collection-rename', (_e, id: string, name: string) => pushCollections(renameCollection(id, name)))
+  handle('collection-delete', (_e, id: string) => pushCollections(deleteCollection(id)))
+  handle('collection-toggle', (_e, id: string, gameId: string) => pushCollections(toggleInCollection(id, gameId)))
+  handle('add-games', (_e, paths: string[], consoleId?: string) => doAddGames(paths, consoleId))
+  handle('add-games-dialog', async () => {
     const pick = await dialog.showOpenDialog(win!, { title: 'Add games', properties: ['openFile', 'multiSelections'] })
     if (pick.canceled || !pick.filePaths.length) return null
     return doAddGames(pick.filePaths)
   })
-  ipcMain.handle('toggle-favorite', (_e, id: string) => toggleFavorite(id))
-  ipcMain.handle('open-folder', (_e, kind: string, arg?: string) => runCommand('open-folder', arg ? `${kind}:${arg}` : kind))
-  ipcMain.handle('run-command', (_e, command: string, arg?: string) => runCommand(command, arg))
-  ipcMain.handle('toggle-fullscreen', () => {
+  handle('toggle-favorite', (_e, id: string) => toggleFavorite(id))
+  handle('open-folder', (_e, kind: string, arg?: string) => runCommand('open-folder', arg ? `${kind}:${arg}` : kind))
+  handle('run-command', (_e, command: string, arg?: string) => runCommand(command, arg))
+  handle('toggle-fullscreen', () => {
     if (!win) return false
     win.setFullScreen(!win.isFullScreen())
     return win.isFullScreen()
   })
-  ipcMain.handle('quit', () => app.quit())
+  handle('quit', () => app.quit())
+  handle('renderer-error', (_e, where: string, message: string) => log.error(`menu error (${String(where).slice(0, 40)})`, String(message).slice(0, 4000)))
 }
 
 /** Compress or decompress one game (only one at a time; never while it runs). */
@@ -890,32 +932,12 @@ async function doCompress(id: string): Promise<{ ok: boolean; error?: string }> 
   }
 }
 
-/** Trophies earned just now: a notice each (held while a game runs), and the column updates. */
-const TIER_NAME = { bronze: 'Bronze', silver: 'Silver', gold: 'Gold', platinum: 'Platinum' }
-function checkTrophies(): void {
-  const { fresh } = trophies()
-  for (const t of fresh) notify({ kind: 'achievement', title: `Trophy unlocked: ${t.name}`, detail: `${TIER_NAME[t.tier]} · ${t.description}` })
-  if (fresh.length) void trophyView().then((v) => send('trophies', v))
-}
-
-/** RetroAchievements of the last 30 days for the Trophies column (asked at most every 10 minutes). */
-let raCache: { at: number; list: Achievement[] } | null = null
-async function trophyView(): Promise<{ list: Trophy[]; ra: Achievement[] }> {
-  if (raStatus().hasApiKey && (!raCache || Date.now() - raCache.at > 600_000)) {
-    raCache = { at: Date.now(), list: await recentUnlocks(30 * 24 * 60).catch(() => raCache?.list ?? []) }
-  }
-  return { list: trophies().list, ra: raCache?.list ?? [] }
-}
-
 /** Notification after a mod was added (or why not). */
 function modAdded(g: { title: string }) {
   return <T extends { ok: boolean; mod?: { name: string }; error?: string; ask?: unknown }>(r: T): T => {
     if (r.ok && r.mod) {
       notify({ kind: 'mod', title: 'Mod installed', detail: `${r.mod.name} · ${g.title}` })
-      noteFirst('mod')
-      checkTrophies()
-    }
-    else if (!r.ok && r.error && r.error !== 'Cancelled.') notify({ kind: 'error', title: 'Mod not added', detail: r.error })
+    } else if (!r.ok && r.error && r.error !== 'Cancelled.') notify({ kind: 'error', title: 'Mod not added', detail: r.error })
     return r
   }
 }
@@ -955,6 +977,7 @@ async function deleteGame(id: string, withSaves: boolean): Promise<{ ok: boolean
   const g = getGame(id)
   if (!g) return { ok: false, error: 'Game not found' }
   if (runningGame()?.gameId === id) return { ok: false, error: 'Close the game first.' }
+  if (compressing === id) return { ok: false, error: 'This game is being compressed. Delete it when that is done.' }
   const targets = [...gameFiles(g), ...(withSaves ? ownSaves(g) : [])].filter((p) => fs.existsSync(p))
   try {
     for (const t of targets) await trash(t)
@@ -992,7 +1015,6 @@ function scanAndArt(atStart = false): void {
   const lib = rescan()
   send('library', lib)
   send('consoles', consoleInfos())
-  checkTrophies() // e.g. "Collector" after games were added
   // PS3 game updates: only Sony's small update lists, once a day per game
   void checkPs3Updates(lib.games)
   // PS3 / Xbox 360 compatibility labels, looked up slowly in the background
@@ -1033,7 +1055,6 @@ function registerHooks(): void {
     for (const a of list.slice(0, 3)) notify({ kind: 'achievement', title: `Achievement unlocked: ${a.title}`, detail: a.description })
     if (list.length > 3) notify({ kind: 'achievement', title: `${list.length - 3} more achievements unlocked`, detail: g.title })
   })
-  onAfterExit(() => checkTrophies())
   onAfterExit(() => {
     // Nexus links that came in during the game
     const waiting = nxmWaiting
@@ -1122,7 +1143,7 @@ async function openNxm(url: string): Promise<void> {
   }
 }
 
-app.whenReady().then(async () => {
+async function start(): Promise<void> {
   if (!primary) return
   ensureDataDirs()
   log.info(`Starstation ${app.getVersion()} starting; Files=${filesDir()}${inSafeMode() ? ' (safe mode)' : ''}`)
@@ -1131,7 +1152,7 @@ app.whenReady().then(async () => {
   if (session.crashedLastTime) log.warn(`last run ended unexpectedly (${session.crashesInARow} in a row)`)
   if (await maybeRescue(session).catch((e) => (log.error('rescue failed', e), false))) return
   loadPresets()
-  // profiles: a switch cut off half-way is finished, then saves / play time / trophies point at the active profile
+  // profiles: a switch cut off half-way is finished, then saves / play time / favorites point at the active profile
   await finishInterruptedSwitch().catch((e) => log.error('could not finish the profile switch', e))
   applyProfilePaths()
   loadLibrary()
@@ -1146,13 +1167,20 @@ app.whenReady().then(async () => {
     win = null
     quitAll()
   })
+  win.on('session-end', onWindowsEnding)
   attachWindow(win)
   setLauncherWindow(win)
   // the PS button menu window comes after the menu has loaded (keeps start-up fast)
   win.webContents.once('did-finish-load', () => setupOverlay(path.join(__dirname, '../preload/index.js'), (w) => loadPage(w, 'overlay')))
   startPadHelper()
   loadGpuDrivers()
+  // one press = one toggle: presses closer than this are a bounce or mashing (2026-11-07 log: the menu opened
+  // again 90 ms after it closed, over and over)
+  let lastHome = 0
   onHome(() => {
+    const now = Date.now()
+    if (now - lastHome < 400) return
+    lastHome = now
     couchMark('home')
     toggleOverlay()
   })
@@ -1176,10 +1204,6 @@ app.whenReady().then(async () => {
         if (win && !win.isDestroyed() && !HEADLESS) win.focus()
       },
       added: (gameId, r) => {
-        if (r.ok) {
-          noteFirst('mod')
-          checkTrophies()
-        }
         send('mod-result', { gameId, result: r })
       },
       paused: () => !!runningGame()
@@ -1192,7 +1216,23 @@ app.whenReady().then(async () => {
       paused: () => !getSettings().sortDownloads || !!runningGame()
     })
   })
-})
+}
+
+/**
+ * Starting failed before the menu could show: say so and end (counted as a crash, so safe mode is offered next
+ * time). Before, Starstation stayed running without a window, and starting it again only handed over to it.
+ */
+app.whenReady().then(() =>
+  start().catch((e) => {
+    log.error('start failed', e)
+    if (!HEADLESS)
+      dialog.showErrorBox(
+        'Starstation could not start',
+        `${(e as Error).message}\n\nStart Starstation again. The log in ${dir('config', 'logs')} has the details.`
+      )
+    app.exit(1)
+  })
+)
 
 /** PS3 controller plugged in without its driver: offer to install it (once per plug-in). Checked every 20 s. */
 function watchDs3(): void {
@@ -1218,14 +1258,30 @@ function watchDs3(): void {
 }
 
 function quitAll(): void {
-  stopRunning()
-  stopPadHelper()
   app.quit()
 }
 app.on('window-all-closed', quitAll)
-// the guest session ends when Starstation closes: back to the first profile first (the guest's things go)
 let guestCleared = false
+let closingGameForQuit = false
+/** Windows is shutting down: it closes the emulator itself, Starstation doesn't wait. */
+let windowsEnding = false
 app.on('before-quit', (e) => {
+  // a game is running: it is saved and closed first, like "Save and quit" — never cut off mid-save
+  if (runningGame() && !windowsEnding) {
+    e.preventDefault()
+    if (closingGameForQuit) return
+    closingGameForQuit = true
+    log.info('closing Starstation: the running game is saved and closed first')
+    void closeRunning(true)
+    // closeRunning ends the emulator by itself if it hasn't closed within its time limit
+    const t = setInterval(() => {
+      if (runningGame()) return
+      clearInterval(t)
+      app.quit()
+    }, 200)
+    return
+  }
+  // the guest session ends when Starstation closes: back to the first profile first (the guest's things go)
   if (guestCleared || activeProfile() !== GUEST) return
   e.preventDefault()
   guestCleared = true
@@ -1233,9 +1289,17 @@ app.on('before-quit', (e) => {
     .catch((err) => log.error('could not end the guest session', err))
     .finally(() => app.quit())
 })
-// a normal close or Windows shutting down is not a crash
-app.on('will-quit', () => endSession())
-app.on('session-end' as 'will-quit', () => endSession())
+app.on('will-quit', () => {
+  stopRunning()
+  stopPadHelper()
+  // a normal close is not a crash
+  endSession()
+})
+/** Windows is logging off / shutting down (a window event: `app` has none). Not a crash. */
+function onWindowsEnding(): void {
+  windowsEnding = true
+  endSession()
+}
 
 process.on('uncaughtException', (e) => log.error('uncaught', e))
 process.on('unhandledRejection', (e) => log.error('unhandled rejection', e))

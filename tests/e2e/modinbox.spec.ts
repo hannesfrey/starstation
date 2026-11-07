@@ -63,14 +63,18 @@ test('mods folder: recognised, asked when unclear, switched on, binned; wrong ga
 
   const { app, page } = await launchApp(files, presets)
   try {
-    await page.waitForFunction(() => !!(window as unknown as { starstation?: unknown }).starstation)
-    await page.evaluate(() => {
-      const w = window as unknown as { __n: unknown[]; __ask: unknown[]; starstation: { on: (c: string, f: (x: unknown) => void) => void } }
-      w.__n = []
-      w.__ask = []
-      w.starstation.on('notice', (n) => w.__n.push(n))
-      w.starstation.on('mod-inbox-ask', (q) => w.__ask.push(q))
-    })
+    // the test's own record of notices and questions (again after a page reload)
+    const listen = async () => {
+      await page.waitForFunction(() => !!(window as unknown as { starstation?: unknown }).starstation)
+      await page.evaluate(() => {
+        const w = window as unknown as { __n: unknown[]; __ask: unknown[]; starstation: { on: (c: string, f: (x: unknown) => void) => void } }
+        w.__n = []
+        w.__ask = []
+        w.starstation.on('notice', (n) => w.__n.push(n))
+        w.starstation.on('mod-inbox-ask', (q) => w.__ask.push(q))
+      })
+    }
+    await listen()
     const notices = () => page.evaluate(() => (window as unknown as { __n: Notice[] }).__n.slice())
     await expect.poll(async () => (await api<{ library: { games: unknown[] } }>(page, 'getState')).library.games.length).toBe(3)
 
@@ -95,6 +99,13 @@ test('mods folder: recognised, asked when unclear, switched on, binned; wrong ga
     const q = await page.evaluate(() => (window as unknown as { __ask: { id: string; name: string; games: string[] }[] }).__ask[0])
     expect(q.name).toBe('Retexture Mod 3.0')
     expect(q.games).toHaveLength(3)
+    await expect(page.getByTestId('panel-mod-inbox')).toBeVisible()
+    // the menu reloads before it's answered (safe mode, profile switch, crash recovery): asked again
+    // (2.0.12: the question was lost and the mods folder waited for an answer for the rest of the session)
+    await page.reload()
+    await expect(page.getByTestId('panel-mod-inbox')).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByTestId('panel-mod-inbox')).toContainText('Retexture Mod 3.0')
+    await listen()
     await api(page, 'modInboxAssign', q.id, 'testcon:alpha.tst')
     await expect.poll(() => fs.existsSync(path.join(emu, 'textures', 'Alpha', 'replacements', 'cars', 'car.png')), { timeout: 20_000 }).toBe(true)
     expect(fs.existsSync(path.join(inbox, 'Retexture Mod 3.0.zip'))).toBe(false)

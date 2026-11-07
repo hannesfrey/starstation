@@ -50,6 +50,7 @@ function skipped(): string | undefined {
 async function github<T>(p: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
   const token = getSecrets().github?.token
   const r = await net.fetch(`${apiBase()}${p}`, {
+    signal: AbortSignal.timeout(30_000),
     method: init.method ?? 'GET',
     headers: {
       'User-Agent': 'Starstation',

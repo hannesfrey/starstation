@@ -4,10 +4,11 @@ Read SPEC.md first. This file tracks where the build stands and every small deci
 
 ## Current state
 
-- **Phase:** v2 done. Latest beta: **2.0.12** (2026-11-07, commit d32451b, PROGRESS 33e69af, all pushed, working tree clean). v1.0.0 is still what everyone else gets; only Hannes presses "Release to everyone".
-- **Last session (2026-11-07):** 2.0.10 player 2 from the first start (padVars count + RPCS3 new pad copies player 1's Config, fresh = VID 1356/PID 616); 2.0.11 RPCS3 "Exclusive Fullscreen Mode": "Disable" + emulator-refused settings logged; 2.0.12 PS3 game updates from Sony (`src/main/ps3updates.ts`, `formats/ps3update.ts`, panel 'ps3-update'). Black Ops II updated for real to 01.19. Gran Turismo 6 (BCUS98296) still 01.00: 21 updates / 11.2 GB offered at its next start.
-- **Waiting on Hannes:** restart Starstation to get 2.0.12; play BO2 to see if the freezes are gone (earlier crash = RPCS3 stall tripping the game's own 30 s hang watchdog, not Starstation). If it crashes again: read `Files\config\logs\emulators` (RPCS3 log is kept).
+- **Phase:** v2 done. Latest beta: **2.0.13** (2026-11-07: trophies removed + reliability round, see its section). v1.0.0 is still what everyone else gets; only Hannes presses "Release to everyone".
+- **Earlier sessions (2026-11-07):** 2.0.10 player 2 from the first start (padVars count + RPCS3 new pad copies player 1's Config, fresh = VID 1356/PID 616); 2.0.11 RPCS3 "Exclusive Fullscreen Mode": "Disable" + emulator-refused settings logged; 2.0.12 PS3 game updates from Sony (`src/main/ps3updates.ts`, `formats/ps3update.ts`, panel 'ps3-update'). Black Ops II updated for real to 01.19. Gran Turismo 6 (BCUS98296) still 01.00: 21 updates / 11.2 GB offered at its next start.
+- **Waiting on Hannes:** restart Starstation to get 2.0.13 (also brings 2.0.12); play BO2 to see if the freezes are gone (earlier crash = RPCS3 stall tripping the game's own 30 s hang watchdog, not Starstation). If it crashes again: read `Files\config\logs\emulators` (RPCS3 log is kept).
 - **Still open:** DsHidMini driver install on a real DS3; real-pad check of the PS button; MK7 Mii + 3DS controller check.
+- **Reliability round, part 2 (Hannes asked for this session + half the next):** still to look at — `packages.ts` receive (paths from another PC), `compress.ts` verify-then-delete, `steam.ts` VDF writer, `customconsole.ts`, renderer `api.x().then` calls without `.catch` (only logged now), overlay input from other players beyond the first 400 ms (only the pad that pressed PS should drive the menu: needs the helper to map XInput slots to Gamepad API indices).
 - **Release routine:** bump package.json + whatsnew.ts entry → tests (`npx vitest run`, `npx playwright test`) → commit → `git tag vX` → push tag → `node scripts/release.mjs "<notes>"` (beta pre-release) → note "Released: commit …" here and push.
 - **Allowed download sources** (Hannes): emudeck.com, emulators' official GitHub/sites, Sony PS3 firmware page, and (2026-11-07) Sony's PS3 game-update server.
 
@@ -79,7 +80,7 @@ Read SPEC.md first. This file tracks where the build stands and every small deci
 
 ### v2 step 6 — Console feel (2026-11-05)
 
-- **Trophies** (`trophies.ts`): Starstation's own (play time, library size, first mod / netplay) in bronze / silver / gold + platinum for all; RetroAchievements shown alongside when logged in. Trophies column in the menu.
+- ~~**Trophies**~~ (removed in 2.0.13, Hannes: "simplify this program as much as possible"; was `trophies.ts`): Starstation's own (play time, library size, first mod / netplay) in bronze / silver / gold + platinum for all; RetroAchievements shown alongside when logged in. Trophies column in the menu.
 - **Video previews:** ScreenScraper `video-normalized` clip after resting ~2 s on a game (needs the dev login, see step 4). **TV mode** (bigger everything).
 - **Themes** (`Background.tsx` `THEMES`): monthly colours as before plus fixed ones. "Starvis" from the spec is read as a starry night sky (animated stars) — original design, no Sony assets. Safe mode uses the default theme.
 - **Wallpapers + power** (`consolefeel.ts`): own picture per menu background; Power menu: sleep (SetSuspendState) / shut down (`shutdown /s /t 0`).
@@ -191,6 +192,23 @@ The kept log (`rpcs3_20261107183640_…`) caught it: after 33 min of multiplayer
 - `dev_hdd0\game\TEST12345` (empty, from 2026-11-04) is a leftover, not Hannes's; left alone.
 - Tests: unit 58 (new `ps3update`), e2e 51 passed (13 opt-in skipped); new e2e `ps3update` (asked before playing, Play without updating, two updates installed in order then the game starts, damaged package refused twice, cache emptied).
 - Released: commit d32451b, tag `v2.0.12`, GitHub pre-release (beta).
+
+### 2.0.13 — simpler + reliability round (2026-11-07, Hannes: "get rid of the trophy section … simplify this program as much as possible … look at all the things that could become problems in the future … round out the edges")
+
+- **Trophies removed:** `trophies.ts`, the Trophies column, tier icons, IPC `trophies`, trophies.json in profile packages. RetroAchievements stay (Settings entry, unlock notices after a game). Old `trophies.json` files are simply ignored.
+- **Found in Hannes's log:** Black Ops II with two players — the PS menu opened and "Screenshot" fired 0.1–0.4 s later, again and again (the other player's in-game presses drive the menu: every pad does); PS presses 90 ms apart reopened the menu. → controller presses in the first 400 ms after the menu opens are dropped (keyboard isn't); PS presses < 400 ms apart are one press.
+- **Launch:** the "already running?" check came before seconds of preparing (backup, resume copy) → a double ✕ could start two emulators. Now one start at a time (`starting`, `busy` result shown as nothing), renderer guard too; preparing errors come back as a message (were a silent IPC rejection); a failed spawn isn't counted as a session; compressing / emulator installing / half-done profile switch block a start.
+- **Quit while a game runs:** was `proc.kill()` (mid-save!). Now before-quit → Save and quit (closeRunning, killed only after its 20 s) → quit. `app.on('session-end')` never fired (it's a window event) → moved to the window; Windows ending doesn't wait for the game.
+- **Menu crash:** renderer gone → reload (game running: always, ≥10 s apart; else once a minute, a second crash ends Starstation as before). React ErrorBoundary (log + reload, gives up after 3 in a minute), window errors / unhandled rejections → `renderer-error` IPC → log. PS menu window: crashed page → destroyed, rebuilt on the next press. Start failure before the window → error box + exit(1) (was: invisible Starstation that every new start handed over to).
+- **Pad helper:** restarted when it stops by itself (max 5 in 10 min); stdin errors ignored; quit no longer logs a warning.
+- **Files:** `store.ts` writes temp → fsync → rename with retries (EPERM/EBUSY/EACCES ~1 s, antivirus); JSON keeps `.bak` of the last good version; a damaged file (cut off, NUL bytes) → `.bak`, kept as `.broken`. Emulator configs (`emuconfig.ts`) written atomically too; BIOS selection inside the error guard. `renameRetry` (fsutil) for profile save swaps, backups, mods, compress, convert, moves. Profile switch: a failed swap is tried again after 2 s, else "restart to finish" (journal kept, games blocked until done).
+- **Library scan:** a file vanishing mid-scan threw away the whole console's games (and their added dates) → skipped file; a failed console keeps its known games.
+- **Mods:** on/off stopped half-way left untracked files (never removed, never overwritten) → placed files are recorded and taken out again; off saves what it did.
+- **Watchers:** New downloads / mods inbox skip files another program still writes (`stillWriting`: open r+ → EBUSY), e.g. Explorer copying from USB (sets full size first). Mod inbox questions are asked again after any menu reload (a lost question froze the inbox).
+- **Network:** time limits on API / image requests (15–60 s, manuals/clips 5 min); big downloads unchanged. Emulator download checks the length. Emulator install refused while a game runs, and while the same one installs.
+- **Logging:** every IPC handler goes through `handle()` → failures logged with the channel name.
+- Artwork queue: `busy` always released.
+- Tests: unit `store`, `fsutil` (renameRetry), `downloads` (stillWriting with a real share-locked file), `presets` (every {placeholder} in a preset is one Starstation fills — the v1 {n64res} bug class; known step types; mutation-checked); e2e `reliability.spec.ts` (double start, quit while playing → saved/counted/clean, pending switch blocks start, menu errors logged + crashed menu reloads), `modinbox` (open question asked again after a menu reload — the menu pulls `mod-inbox-open` on load). Health check: one unreadable game no longer breaks it; the screen shows an error instead of waiting forever.
 
 ## How to work on it
 

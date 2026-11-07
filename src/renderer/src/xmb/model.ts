@@ -1,9 +1,4 @@
-import type { AppState, ConsoleInfo, Game, GameStats, Screenshot, Trophy, Achievement, ProfileInfo } from '../../../shared/types'
-
-export interface TrophiesView {
-  list: Trophy[]
-  ra: Achievement[]
-}
+import type { AppState, ConsoleInfo, Game, GameStats, Screenshot, ProfileInfo } from '../../../shared/types'
 
 export interface XItem {
   key: string
@@ -70,9 +65,8 @@ export function gameItem(g: Game, s?: GameStats, c?: ConsoleInfo): XItem {
 
 const byTitle = (a: Game, b: Game) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base', numeric: true })
 
-const TIER = { bronze: 'Bronze', silver: 'Silver', gold: 'Gold', platinum: 'Platinum' }
 
-export function buildColumns(state: AppState, h: ModelHandlers, shots: Screenshot[] = [], trophies?: TrophiesView, profiles: ProfileInfo[] = []): XColumn[] {
+export function buildColumns(state: AppState, h: ModelHandlers, shots: Screenshot[] = [], profiles: ProfileInfo[] = []): XColumn[] {
   const { library, consoles, settings } = state
   const stats = library.stats
   const cols: XColumn[] = []
@@ -94,7 +88,7 @@ export function buildColumns(state: AppState, h: ModelHandlers, shots: Screensho
           run: () => h.switchProfile(p),
           options: p.guest ? undefined : () => h.openPanel('profile', p.id)
         })),
-        { key: 'user-new', label: 'Add a profile', sub: 'Own saves, play time, trophies and favorites', icon: 'p-planet', kind: 'action' as const, run: () => h.newProfile() }
+        { key: 'user-new', label: 'Add a profile', sub: 'Own saves, play time and favorites', icon: 'p-planet', kind: 'action' as const, run: () => h.newProfile() }
       ]
     })
 
@@ -219,48 +213,6 @@ export function buildColumns(state: AppState, h: ModelHandlers, shots: Screensho
       }))
     ]
   })
-
-  // ---- Trophies: Starstation's own + RetroAchievements ----
-  if (trophies) {
-    const got = trophies.list.filter((t) => t.unlockedAt)
-    const plat = trophies.list.find((t) => t.tier === 'platinum')
-    const trophyItem = (t: Trophy): XItem => ({
-      key: `trophy-${t.id}`,
-      label: t.name,
-      sub: `${TIER[t.tier]} · ${t.unlockedAt ? `unlocked ${new Date(t.unlockedAt).toLocaleDateString()}` : t.progress ? `${t.description} (${t.progress[0]} / ${t.progress[1]})` : t.description}`,
-      icon: t.unlockedAt ? `trophy-${t.tier}` : 'trophy-locked',
-      kind: 'info'
-    })
-    const order = { platinum: 0, gold: 1, silver: 2, bronze: 3 }
-    cols.push({
-      id: 'trophies',
-      label: 'Trophies',
-      icon: 'trophy',
-      items: [
-        {
-          key: 'trophies-starstation',
-          label: 'Starstation trophies',
-          sub: `${got.length} of ${trophies.list.length} unlocked${plat?.unlockedAt ? ' · Platinum!' : ''}`,
-          icon: plat?.unlockedAt ? 'trophy-platinum' : 'trophy',
-          kind: 'folder',
-          children: () => [...trophies.list].sort((a, b) => Number(!!b.unlockedAt) - Number(!!a.unlockedAt) || order[a.tier] - order[b.tier]).map(trophyItem)
-        },
-        ...(trophies.ra.length
-          ? [
-              {
-                key: 'trophies-ra',
-                label: 'RetroAchievements',
-                sub: `${trophies.ra.length} unlocked in the last 30 days`,
-                icon: 'trophy',
-                kind: 'folder' as const,
-                children: () =>
-                  trophies.ra.map((a, i) => ({ key: `ra-${i}`, label: a.title, sub: [a.game, a.description].filter(Boolean).join(' · '), icon: 'trophy-gold', kind: 'info' as const }))
-              }
-            ]
-          : [])
-      ]
-    })
-  }
 
   // ---- Collections ----
   const byId = new Map(consoles.map((c) => [c.id, c]))

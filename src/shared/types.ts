@@ -145,6 +145,8 @@ export interface LaunchResult {
   ok: boolean
   error?: string
   fix?: { label: string; command: string; arg?: string }
+  /** Refused only because another game is starting right now (a second press): nothing to show. */
+  busy?: boolean
 }
 
 export interface RunningGame {
@@ -284,8 +286,6 @@ export interface StarstationApi {
   nexusStatus(): Promise<{ key: boolean; registered: boolean; patches: { pcsx2?: string; rpcs3?: string } }>
   /** Community patch collections (PCSX2, RPCS3): only when the user asks. */
   updatePatches(): Promise<{ done: string[]; errors: string[] }>
-  /** Trophies column: Starstation's trophies + RetroAchievements of the last 30 days. */
-  trophies(): Promise<{ list: Trophy[]; ra: Achievement[] }>
   wallpapers(): Promise<Wallpapers>
   /** kind "own" or "console:<id>"; file null = remove (a file path only in hidden tests, else a file dialog). */
   setWallpaper(kind: string, file?: string | null): Promise<{ ok: boolean; error?: string }>
@@ -354,6 +354,10 @@ export interface StarstationApi {
   runCommand(command: string, arg?: string): Promise<void>
   toggleFullscreen(): Promise<boolean>
   quit(): Promise<void>
+  /** A menu page hit an error: written to Starstation's log. */
+  logError(where: string, message: string): Promise<void>
+  /** Mods-folder questions still waiting for an answer (asked again after the menu reloads). */
+  modInboxOpen(): Promise<{ id: string; name: string; games: string[] }[]>
   mediaUrl(absPath: string): string
   on(channel: 'notice', cb: (n: Notice) => void): () => void
   on(channel: 'library', cb: (l: LibraryView) => void): () => void
@@ -370,7 +374,6 @@ export interface StarstationApi {
   on(channel: 'nexus-request', cb: (r: NexusRequest) => void): () => void
   on(channel: 'mod-inbox-ask', cb: (q: { id: string; name: string; games: string[] }) => void): () => void
   on(channel: 'mod-result', cb: (r: { gameId: string; result: ModAddResult }) => void): () => void
-  on(channel: 'trophies', cb: (t: { list: Trophy[]; ra: Achievement[] }) => void): () => void
   on(channel: 'wallpapers', cb: (w: Wallpapers) => void): () => void
   on(channel: 'package-ask', cb: (a: { profiles: string[]; folder?: string }) => void): () => void
   on(channel: 'display-revert', cb: () => void): () => void
@@ -536,7 +539,7 @@ export interface PackageChoice {
   saves: boolean
   /** Only what was added or changed since the last package to that PC. */
   onlyNew?: boolean
-  /** Profiles to send along (their saves, play time, trophies, favorites). */
+  /** Profiles to send along (their saves, play time, favorites). */
   profiles?: string[]
 }
 
@@ -669,17 +672,6 @@ export interface NexusRequest {
   /** The game on Nexus (its own name; Starstation's game is picked by the user). */
   gameName: string
   fileName?: string
-}
-
-/** A Starstation trophy (Trophies column). */
-export interface Trophy {
-  id: string
-  name: string
-  description: string
-  tier: 'bronze' | 'silver' | 'gold' | 'platinum'
-  /** [done, needed] for trophies that count up. */
-  progress?: [number, number]
-  unlockedAt?: number
 }
 
 /** Backgrounds: the user's own picture, and one per console (shown on that console's column). */

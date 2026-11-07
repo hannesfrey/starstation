@@ -536,7 +536,7 @@ export function buildPanel(id: string, arg: string | undefined, state: AppState,
             .map((p) => ({
               key: `prof-${p.id}`,
               label: `Profile: ${p.name}`,
-              value: (c.profiles ?? []).includes(p.id) ? 'On: saves, play time, trophies, favorites' : 'Off',
+              value: (c.profiles ?? []).includes(p.id) ? 'On: saves, play time, favorites' : 'Off',
               run: () => (h.pkgToggle(`profile:${p.id}` as keyof PackageChoice), 'keep' as const)
             })),
           { key: 'onlynew', label: 'Only new since last time', value: c.onlyNew ? 'On' : 'Off', run: () => (h.pkgToggle('onlyNew'), 'keep') },

@@ -4,7 +4,7 @@ import path from 'node:path'
 import zlib from 'node:zlib'
 import { launchApp, makeFiles, makePresets, writeSettings } from './helpers'
 
-/** SPEC-v2 C: trophies, themes + TV mode, wallpapers, video previews, power menu. */
+/** SPEC-v2 C: themes + TV mode, wallpapers, video previews, power menu. */
 
 const api = <T>(page: Page, fn: string, ...args: unknown[]) =>
   page.evaluate(
@@ -35,47 +35,6 @@ function png(w: number, h: number): Buffer {
 async function scrollTo(page: Page, testId: string): Promise<void> {
   for (let i = 0; i < 30 && !(await page.getByTestId(testId).count()); i++) await page.keyboard.press('ArrowDown')
 }
-
-type Trophy = { id: string; name: string; tier: string; unlockedAt?: number; progress?: [number, number] }
-
-test('trophies unlock as you play and mod; the Trophies column lists them', async () => {
-  test.setTimeout(60_000)
-  const files = makeFiles('trophies')
-  const presets = makePresets(files, 300, { extra: { mods: { targets: [{ id: 'patches', label: 'Patch', dir: '{emu}/patches', match: '\\.pnach$', flatten: true }] } } })
-  writeSettings(files, { bootAnimation: false })
-  fs.mkdirSync(path.join(files, 'games', 'testcon'), { recursive: true })
-  for (const n of ['A', 'B', 'C']) fs.writeFileSync(path.join(files, 'games', 'testcon', `${n}.tst`), n)
-  // 9 h 59 min already played: the next minute brings the 10-hour trophy
-  fs.mkdirSync(path.join(files, 'config', 'library'), { recursive: true })
-  fs.writeFileSync(path.join(files, 'config', 'library', 'stats.json'), JSON.stringify({ 'testcon:a.tst': { playTime: 10 * 3600 - 1, playCount: 1 }, 'testcon:b.tst': { playTime: 10, playCount: 1 } }))
-  fs.writeFileSync(path.join(files, 'mod.pnach'), 'x')
-  const { app, page } = await launchApp(files, presets)
-  try {
-    const get = async () => (await api<{ list: Trophy[] }>(page, 'trophies')).list
-    await expect.poll(async () => (await get()).find((t) => t.id === 'console-testcon')?.progress, { timeout: 10_000 }).toEqual([2, 3])
-    let list = await get()
-    expect(list.find((t) => t.id === 'platinum')?.unlockedAt).toBeUndefined()
-
-    // play the third game: 10 hours + "TEST explorer"
-    expect((await api<{ ok: boolean }>(page, 'launch', 'testcon:c.tst')).ok).toBe(true)
-    await expect.poll(async () => (await api<{ running: unknown }>(page, 'getState')).running, { timeout: 10_000 }).toBeNull()
-    await expect.poll(async () => (await get()).find((t) => t.id === 'time-10')?.unlockedAt, { timeout: 10_000 }).toBeTruthy()
-    list = await get()
-    expect(list.find((t) => t.id === 'console-testcon')?.unlockedAt).toBeTruthy()
-    await expect(page.getByTestId('notices')).toContainText('Trophy unlocked')
-
-    // first mod → "Tinkerer"
-    await api(page, 'modAdd', 'testcon:a.tst', path.join(files, 'mod.pnach'))
-    await expect.poll(async () => (await get()).find((t) => t.id === 'first-mod')?.unlockedAt).toBeTruthy()
-
-    // the column
-    await page.getByTestId('cat-trophies').dispatchEvent('click')
-    await expect(page.getByTestId('items')).toContainText('Starstation trophies')
-    await expect(page.getByTestId('items')).toContainText(/3 of \d+ unlocked/)
-  } finally {
-    await app.close()
-  }
-})
 
 test('themes, TV mode, wallpapers, video preview, power menu', async () => {
   test.setTimeout(60_000)

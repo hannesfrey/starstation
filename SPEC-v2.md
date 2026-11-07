@@ -56,7 +56,7 @@ A broken update must never reach the siblings, and any update can be undone in o
 
 New touches that make Starstation feel more like a real console.
 
-- **Trophies:** a Trophies column collecting RetroAchievements plus Starstation's own trophies, with bronze / silver / gold tiers and a platinum for unlocking all Starstation trophies. Starstation trophies: play time milestones (10 / 50 / 100 / 500 hours), games played per console, first mod installed, first netplay session, every console played at least once, "Collector" for big libraries.
+- ~~**Trophies:**~~ *Removed in 2.0.13 (Hannes: simplify the program as much as possible).* a Trophies column collecting RetroAchievements plus Starstation's own trophies, with bronze / silver / gold tiers and a platinum for unlocking all Starstation trophies. Starstation trophies: play time milestones (10 / 50 / 100 / 500 hours), games played per console, first mod installed, first netplay session, every console played at least once, "Collector" for big libraries.
 - **Video previews:** a short gameplay clip starts after resting on a game for about 2 seconds, sound on (quiet). Clips come from ScreenScraper, downloaded in the background together with artwork and manuals; games without a clip show their background image.
 - **TV mode:** a setting for bigger text and icons when playing from the couch.
 - **Power menu:** Sleep and Turn off PC in the XMB.

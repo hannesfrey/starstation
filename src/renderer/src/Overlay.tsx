@@ -11,6 +11,9 @@ import type { OverlayAction, OverlayState } from '../../shared/types'
 
 type Item = { key: string; label: string; action?: OverlayAction; sub?: 'pads' }
 
+/** Controller presses this soon after the menu opens were meant for the game (see openedAt). */
+const OPEN_GRACE_MS = 400
+
 function items(s: OverlayState): Item[] {
   const list: Item[] = [{ key: 'resume', label: 'Resume', action: 'resume' }]
   if (s.canSaveState) list.push({ key: 'save', label: 'Save state', action: 'save-state' })
@@ -29,11 +32,18 @@ export function Overlay() {
   const [busy, setBusy] = useState(false)
   const stateRef = useRef(state)
   stateRef.current = state
+  /**
+   * When the menu opened. Presses in the first moment are dropped: they were meant for the game
+   * (2026-11-07, Black Ops II with two players: the other player's buttons picked "Screenshot" within 0.1 s
+   * of the menu opening, again and again). A button pressed then counts only after it is let go.
+   */
+  const openedAt = useRef(0)
 
   useEffect(() => {
     document.documentElement.classList.add('overlay-page')
     void api.overlayState().then(setState)
     const off = api.on('overlay', (s) => {
+      if (s.open && !stateRef.current?.open) openedAt.current = performance.now()
       setState(s)
       if (s.open) {
         setRow(0)
@@ -64,9 +74,10 @@ export function Overlay() {
 
   useEffect(
     () =>
-      input.on((a) => {
+      input.on((a, source) => {
         const s = stateRef.current
         if (!s?.open || s.closing || busy) return
+        if (source === 'gamepad' && performance.now() - openedAt.current < OPEN_GRACE_MS) return
         const list = items(s)
         if (view === 'pads') {
           if (a === 'back' || a === 'confirm') {

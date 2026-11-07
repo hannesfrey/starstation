@@ -30,6 +30,7 @@ export async function raLogin(): Promise<{ ok: boolean; error?: string }> {
   if (!r.username || !r.password) return { ok: false, error: 'Fill in your RetroAchievements username and password in Files\\config\\secrets.json first.' }
   try {
     const res = await net.fetch(`${base()}/dorequest.php`, {
+      signal: AbortSignal.timeout(30_000),
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'Starstation' },
       body: new URLSearchParams({ r: 'login2', u: r.username, p: r.password }).toString()
@@ -58,7 +59,7 @@ export async function recentUnlocks(minutes: number): Promise<Achievement[]> {
   if (!r.username || !r.token || !r.webApiKey) return []
   try {
     const q = new URLSearchParams({ u: r.username, y: r.webApiKey, m: String(Math.max(1, Math.ceil(minutes))) })
-    const res = await net.fetch(`${base()}/API/API_GetUserRecentAchievements.php?${q}`, { headers: { 'User-Agent': 'Starstation' } })
+    const res = await net.fetch(`${base()}/API/API_GetUserRecentAchievements.php?${q}`, { signal: AbortSignal.timeout(30_000), headers: { 'User-Agent': 'Starstation' } })
     if (!res.ok) return []
     const list = (await res.json()) as { Title?: string; Description?: string; GameTitle?: string; Points?: number }[]
     return (Array.isArray(list) ? list : []).map((a) => ({ title: a.Title ?? 'Achievement', description: a.Description, game: a.GameTitle, points: a.Points }))
