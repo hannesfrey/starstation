@@ -770,8 +770,9 @@ export function buildPanel(id: string, arg: string | undefined, state: AppState,
         items: [
           { key: 'what', label: `Version ${state.info.version} becomes the version every other Starstation updates to.`, info: true },
           { key: 'when', label: 'They get it on their next start. Undo update still works on every PC.', info: true },
-          { key: 'go', label: `Release ${state.info.version} to everyone`, run: () => h.releaseToEveryone() },
-          { key: 'no', label: 'Not yet', run: () => undefined }
+          // "Not yet" first: a second quick ✕ must not publish to every PC
+          { key: 'no', label: 'Not yet', run: () => undefined },
+          { key: 'go', label: `Release ${state.info.version} to everyone`, run: () => h.releaseToEveryone() }
         ]
       }
     case 'undo-update': {
@@ -781,8 +782,9 @@ export function buildPanel(id: string, arg: string | undefined, state: AppState,
         title: 'Undo update',
         items: [
           { key: 'what', label: 'Starstation closes, installs the older version and starts again. Games, saves and settings stay.', info: true },
-          ...prev.map((v) => ({ key: `to-${v}`, label: `Go back to ${v}`, run: () => h.undoUpdate(v) })),
-          { key: 'no', label: 'Keep this version', run: () => undefined }
+          // "Keep" first: a second quick ✕ must not reinstall an older version
+          { key: 'no', label: 'Keep this version', run: () => undefined },
+          ...prev.map((v) => ({ key: `to-${v}`, label: `Go back to ${v}`, run: () => h.undoUpdate(v) }))
         ]
       }
     }
@@ -1142,11 +1144,12 @@ export function buildPanel(id: string, arg: string | undefined, state: AppState,
       const d = x.details[g.id]
       const items: PItem[] = [
         { key: 'msg', label: `${g.title} goes to the Recycle Bin, so you can still get it back.`, info: true },
+        // Cancel first, like the PS3: a second quick ✕ must not delete anything
+        { key: 'cancel', label: 'Cancel' },
         { key: 'keep', label: 'Delete game, keep saves', run: () => h.deleteGame(g, false) }
       ]
       if (d?.ownSaves) items.push({ key: 'all', label: 'Delete game and its saves', run: () => h.deleteGame(g, true) })
       else items.push({ key: 'shared', label: 'Its saves stay: none belong only to this game (memory cards are shared).', info: true })
-      items.push({ key: 'cancel', label: 'Cancel' })
       return { id, title: 'Delete game?', items }
     }
     case 'mods': {
@@ -1319,6 +1322,20 @@ export function buildPanel(id: string, arg: string | undefined, state: AppState,
         }))
       }
     }
+    case 'profile-delete': {
+      const p = x.profiles?.find((y) => y.id === arg)
+      if (!p) return null
+      return {
+        id,
+        title: `Delete ${p.name}?`,
+        items: [
+          { key: 'msg', label: 'Its saves, play times and favorites go to the Recycle Bin.', info: true },
+          // Cancel first: a second quick ✕ must not delete anyone's saves
+          { key: 'no', label: 'Cancel' },
+          { key: 'yes', label: 'Delete profile', run: () => h.profileEdit(p.id, 'delete') }
+        ]
+      }
+    }
     case 'profile': {
       const p = x.profiles?.find((y) => y.id === arg)
       if (!p) return null
@@ -1333,7 +1350,7 @@ export function buildPanel(id: string, arg: string | undefined, state: AppState,
           { key: 'own', label: 'Use your own picture…', run: () => (h.profileEdit(p.id, 'own-picture'), 'keep') },
           { key: 'pin', label: p.hasPin ? 'Change PIN…' : 'Set a PIN…', value: '4 digits', run: () => h.profileEdit(p.id, 'pin') },
           ...(p.hasPin ? [{ key: 'nopin', label: me?.main && !p.main ? 'Reset PIN (first profile)' : 'Remove PIN', run: () => h.profileEdit(p.id, 'nopin') }] : []),
-          ...(p.main || p.active ? [] : [{ key: 'del', label: 'Delete profile…', value: 'its saves go to the Recycle Bin', run: () => h.profileEdit(p.id, 'delete') }])
+          ...(p.main || p.active ? [] : [{ key: 'del', label: 'Delete profile…', value: 'its saves go to the Recycle Bin', run: () => (h.openPanel('profile-delete', p.id), 'keep' as const) }])
         ]
       }
     }
@@ -1387,8 +1404,9 @@ export function buildPanel(id: string, arg: string | undefined, state: AppState,
         title: 'Turn off the PC?',
         items: [
           { key: 'what', label: running(state) ? 'A game is still running: close it first.' : 'Windows shuts down right away.', info: true },
-          { key: 'go', label: 'Turn off PC', disabled: running(state), run: () => h.power('shutdown') },
-          { key: 'no', label: 'Cancel', run: () => undefined }
+          // Cancel comes first, so a second quick ✕ doesn't turn the PC off
+          { key: 'no', label: 'Cancel', run: () => undefined },
+          { key: 'go', label: 'Turn off PC', disabled: running(state), run: () => h.power('shutdown') }
         ]
       }
     case 'mod-sources': {

@@ -328,14 +328,22 @@ async function installPs3Firmware(): Promise<void> {
  */
 function handle(channel: string, fn: (e: Electron.IpcMainInvokeEvent, ...args: any[]) => unknown): void {
   ipcMain.handle(channel, async (e, ...args) => {
+    // package transfers one at a time: two would share croc and the staging folders
+    const exclusive = TRANSFERS.has(channel)
+    if (exclusive && transferring) return { ok: false, error: 'Another package transfer is running.' }
+    if (exclusive) transferring = true
     try {
       return await fn(e, ...args)
     } catch (err) {
       log.error(`${channel} failed`, err)
       throw err
+    } finally {
+      if (exclusive) transferring = false
     }
   })
 }
+const TRANSFERS = new Set(['package-send', 'package-save-folder', 'package-receive', 'package-receive-folder', 'package-finish'])
+let transferring = false
 
 function registerIpc(): void {
   handle('state', () => state())
@@ -345,10 +353,14 @@ function registerIpc(): void {
       return { index, label: s.label, summary: summarize(plan), skipped: plan.skipped }
     })
   )
+  let importing = false
   handle('import-run', async (_e, index: number) => {
     const source = findSources()[index]
     if (!source) return { ok: false, copied: 0, moved: 0, conflicts: [], errors: ['Source not found'] }
-    const result = await runImport(planImport(source), (p) => send('import-progress', p))
+    // one import at a time: two would copy and move the same files at once
+    if (importing) return { ok: false, copied: 0, moved: 0, conflicts: [], errors: ['An import is already running.'] }
+    importing = true
+    const result = await runImport(planImport(source), (p) => send('import-progress', p)).finally(() => (importing = false))
     for (const c of allConsoles()) applyConsoleConfig(c)
     send('library', rescan())
     send('consoles', consoleInfos())
@@ -646,6 +658,8 @@ function registerIpc(): void {
     return r
   })
   handle('power', (_e, action: string) => {
+    // never with a game running: it would end without saving
+    if (runningGame()) return
     if (action === 'sleep' || action === 'shutdown') power(action)
   })
   // ---- Nexus Mods ----

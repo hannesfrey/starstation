@@ -154,3 +154,31 @@ test('updating from 2.0.12: settings, profile and play time stay, the old trophi
     await app.close()
   }
 })
+
+test('deleting a profile asks first, and the question opens on Cancel', async () => {
+  const { files, presets } = setup('profile-delete', 300)
+  const { app, page } = await launchApp(files, presets)
+  try {
+    await expect(page.getByTestId('game-info')).toContainText('Alpha')
+    await api(page, 'profileAdd', 'Sis')
+    await page.reload() // the Users column reads the profiles when the menu loads
+    await page.getByTestId('cat-users').dispatchEvent('click')
+    const sis = (await api<{ id: string; name: string }[]>(page, 'profiles')).find((p) => p.name === 'Sis')!
+    await page.getByTestId(`item-user-${sis.id}`).dispatchEvent('click')
+    await page.keyboard.press(' ') // △: the profile's options
+    await expect(page.getByTestId('panel-profile')).toBeVisible()
+    await page.getByTestId('pitem-del').dblclick()
+    await expect(page.getByTestId('panel-profile-delete')).toBeVisible()
+    await expect(page.getByTestId('pitem-no')).toHaveClass(/active/)
+    await page.keyboard.press('Enter') // the second quick ✕: nothing happens
+    await expect(page.getByTestId('panel-profile-delete')).toHaveCount(0)
+    expect((await api<{ name: string }[]>(page, 'profiles')).some((p) => p.name === 'Sis')).toBe(true)
+
+    await page.keyboard.press(' ')
+    await page.getByTestId('pitem-del').dblclick()
+    await page.getByTestId('pitem-yes').dblclick()
+    await expect.poll(async () => (await api<{ name: string }[]>(page, 'profiles')).some((p) => p.name === 'Sis')).toBe(false)
+  } finally {
+    await app.close()
+  }
+})

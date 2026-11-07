@@ -126,3 +126,34 @@ test('packages: save to folder, send by code, receive into an existing setup wit
     relayProc.kill()
   }
 })
+
+test('Cancel stops receiving for good (it used to keep trying for 10 minutes); one transfer at a time', async () => {
+  test.setTimeout(90_000)
+  const r = makeFiles('pkg-cancel')
+  writeSettings(r, { bootAnimation: false })
+  const relayProc = relay([9319, 9320, 9321, 9322, 9323])
+  process.env.STARSTATION_CROC_RELAY = '127.0.0.1:9319'
+  process.env.STARSTATION_INVENTORY_WAIT = '1500'
+  const B = await launchApp(r)
+  delete process.env.STARSTATION_CROC_RELAY
+  delete process.env.STARSTATION_INVENTORY_WAIT
+  try {
+    await B.page.waitForFunction(() => !!(window as unknown as { starstation?: unknown }).starstation)
+    // nobody sends with this code: receiving waits and tries again…
+    const receiving = api<{ ok: boolean; error?: string }>(B.page, 'packageReceive', '1234-nobody-sends-this', false)
+    await B.page.waitForTimeout(4000)
+    // …a second transfer meanwhile is refused
+    expect((await api<{ ok: boolean; error?: string }>(B.page, 'packageReceive', '5678-another-code-here', false)).error).toContain('Another package transfer')
+    const t0 = Date.now()
+    await api(B.page, 'packageCancel')
+    const res = await receiving
+    expect(res.ok).toBe(false)
+    expect(res.error).toBe('Cancelled.')
+    expect(Date.now() - t0).toBeLessThan(15_000)
+    // nothing half-received left behind
+    expect(fs.readdirSync(path.join(r, 'config', 'packages')).filter((n) => n.startsWith('receive-'))).toEqual([])
+  } finally {
+    await B.app.close()
+    relayProc.kill()
+  }
+})

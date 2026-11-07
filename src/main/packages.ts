@@ -400,9 +400,12 @@ export function makeCode(): string {
 }
 
 let running: ChildProcess | null = null
+/** Cancel was pressed: the transfer stops for good (receiving used to try again for up to 10 minutes). */
+let cancelled = false
 
 function croc(args: string[], onLine: (l: string) => void): Promise<number> {
   const relay = process.env.STARSTATION_CROC_RELAY ? ['--relay', process.env.STARSTATION_CROC_RELAY] : []
+  if (cancelled) return Promise.resolve(-1)
   return new Promise((resolve, reject) => {
     const p = spawn(path.join(binDir(), 'croc.exe'), ['--yes', '--disable-clipboard', ...relay, ...args], { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
     running = p
@@ -411,7 +414,7 @@ function croc(args: string[], onLine: (l: string) => void): Promise<number> {
     p.stderr.on('data', feed)
     p.once('error', reject)
     p.once('exit', (code) => {
-      running = null
+      if (running === p) running = null
       resolve(code ?? -1)
     })
   })
@@ -427,6 +430,7 @@ export function crocProgress(line: string): number | null {
 }
 
 export function cancelTransfer(): void {
+  cancelled = true
   running?.kill()
 }
 
@@ -456,7 +460,8 @@ async function sendInventory(code: string, waitMs: number): Promise<void> {
   await fsp.mkdir(d, { recursive: true })
   const f = path.join(d, 'inventory.json')
   writeJson(f, inventory())
-  const t = setTimeout(() => cancelTransfer(), waitMs)
+  // stops only this croc (not a Cancel: receiving goes on afterwards)
+  const t = setTimeout(() => running?.kill(), waitMs)
   try {
     await croc(['send', '--code', `${code}-have`, f], () => undefined)
   } finally {
@@ -468,6 +473,7 @@ async function sendInventory(code: string, waitMs: number): Promise<void> {
 export async function sendByCode(c: PackageChoice, onCode: (code: string) => void, progress: (p: PackageProgress) => void): Promise<{ ok: boolean; error?: string }> {
   const stage = dir('config', 'packages', `send-${Date.now()}`)
   const folder = path.join(stage, `Starstation package ${new Date().toISOString().slice(0, 10)}`)
+  cancelled = false
   try {
     const code = makeCode()
     onCode(code)
@@ -480,6 +486,7 @@ export async function sendByCode(c: PackageChoice, onCode: (code: string) => voi
       const pct = crocProgress(l)
       if (pct !== null) progress({ phase: 'sending', pct, code })
     })
+    if (cancelled) return { ok: false, error: 'Cancelled.' }
     if (exit !== 0) return { ok: false, error: 'The transfer stopped. Start it again — croc continues where it left off.' }
     if (have) noteSent(have.pcId)
     progress({ phase: 'done', pct: 1, code })
@@ -496,6 +503,7 @@ export async function receiveByCode(
 ): Promise<{ ok: boolean; error?: string; added?: number; kept?: number; ask?: string[]; folder?: string }> {
   const clean = code.trim().toLowerCase().replace(/\s+/g, '-')
   if (clean.length < 6) return { ok: false, error: 'The code is too short.' }
+  cancelled = false
   // download into Files\config\packages (same drive: no extra copy later), keep it until it's unpacked
   const out = dir('config', 'packages', `receive-${clean.replace(/[^\w-]/g, '')}`)
   await fsp.mkdir(out, { recursive: true })
@@ -506,13 +514,17 @@ export async function receiveByCode(
   // the sender packs after it got the list: try again until it is ready (up to 10 minutes)
   let exit = -1
   const until = Date.now() + 10 * 60_000
-  while (Date.now() < until) {
+  while (Date.now() < until && !cancelled) {
     exit = await croc(['--overwrite', '--out', out, clean], (l) => {
       const pct = crocProgress(l)
       if (pct !== null) progress({ phase: 'receiving', pct })
     })
     if (exit === 0 && findPackageRoot(out)) break
     await sleep(2000)
+  }
+  if (cancelled) {
+    await fsp.rm(out, { recursive: true, force: true })
+    return { ok: false, error: 'Cancelled.' }
   }
   if (exit !== 0) return { ok: false, error: 'Nothing received. Check the code, and that the other PC is still sending.' }
   const r = await receiveFromFolder(out, opts, progress)

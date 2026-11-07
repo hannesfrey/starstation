@@ -12,6 +12,16 @@ export interface WhatsNew {
 
 export const WHATS_NEW: WhatsNew[] = [
   {
+    version: '2.0.17',
+    summary: ['Questions that delete or change something now start on the safe answer'],
+    details: [
+      'Turn off PC, Delete game, Delete profile, Undo update and Release to everyone open on Cancel (or Keep / Not yet), so pressing ✕ twice by accident does nothing.',
+      'Deleting a profile now asks first (it used to happen at once).',
+      'The PC can’t be turned off or put to sleep from Starstation while a game is running.',
+      'Packages: Cancel now really stops receiving (it used to keep trying for up to 10 minutes), and only one transfer runs at a time.'
+    ]
+  },
+  {
     version: '2.0.16',
     summary: ['Safer online play and downloads'],
     details: [

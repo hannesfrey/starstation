@@ -4,9 +4,9 @@ Read SPEC.md first. This file tracks where the build stands and every small deci
 
 ## Current state
 
-- **Phase:** v2 done. Latest beta: **2.0.16** (2026-11-07: 2.0.13 trophies removed + reliability round, 2.0.14 follow-ups, 2.0.15 compact Settings + PS menu per player, 2.0.16 netplay + downloads). v1.0.0 is still what everyone else gets; only Hannes presses "Release to everyone".
+- **Phase:** v2 done. Latest beta: **2.0.17** (2026-11-07: 2.0.13 trophies removed + reliability round, 2.0.14 follow-ups, 2.0.15 compact Settings + PS menu per player, 2.0.16 netplay + downloads, 2.0.17 safe default answers). v1.0.0 is still what everyone else gets; only Hannes presses "Release to everyone".
 - **Earlier sessions (2026-11-07):** 2.0.10 player 2 from the first start (padVars count + RPCS3 new pad copies player 1's Config, fresh = VID 1356/PID 616); 2.0.11 RPCS3 "Exclusive Fullscreen Mode": "Disable" + emulator-refused settings logged; 2.0.12 PS3 game updates from Sony (`src/main/ps3updates.ts`, `formats/ps3update.ts`, panel 'ps3-update'). Black Ops II updated for real to 01.19. Gran Turismo 6 (BCUS98296) still 01.00: 21 updates / 11.2 GB offered at its next start.
-- **Waiting on Hannes:** restart Starstation to get 2.0.16 (also brings 2.0.12–2.0.15); check the PS menu with two players (only the one who pressed PS should move it) and the new Settings groups; play BO2 to see if the freezes are gone (earlier crash = RPCS3 stall tripping the game's own 30 s hang watchdog, not Starstation). If it crashes again: read `Files\config\logs\emulators` (RPCS3 log is kept).
+- **Waiting on Hannes:** restart Starstation to get 2.0.17 (also brings 2.0.12–2.0.16); check the PS menu with two players (only the one who pressed PS should move it) and the new Settings groups; play BO2 to see if the freezes are gone (earlier crash = RPCS3 stall tripping the game's own 30 s hang watchdog, not Starstation). If it crashes again: read `Files\config\logs\emulators` (RPCS3 log is kept).
 - **Still open:** DsHidMini driver install on a real DS3; real-pad check of the PS button; MK7 Mii + 3DS controller check.
 - **Reliability round, part 2 (Hannes asked for this session + half the next):** done in 2.0.14–2.0.15: packages receive, compress, Steam writer, custom consoles, stuck screens (health, storage, import, packages, player screen), PS menu per player (ground truth only), packaged-build check before every release. Still open: the remaining renderer `api.x().then` calls without `.catch` are one-shot loads (only logged on failure); a real two-pad check of the PS menu lock.
 - **Release routine:** bump package.json + whatsnew.ts entry → tests (`npx vitest run`, `npx playwright test`) → commit → `git tag vX` → push tag → `node scripts/release.mjs "<notes>"` (beta pre-release) → note "Released: commit …" here and push.
@@ -238,6 +238,14 @@ The kept log (`rpcs3_20261107183640_…`) caught it: after 33 min of multiplayer
 - **Downloads in memory:** GameBanana downloaded with `arrayBuffer()` (multi-GB texture packs → main process out of memory) and hashed with readFile → streamed (`emulators.download`, exported; length-checked) + streamed MD5. Updater `fetchInstaller` (230 MB) streamed to `.part`, "MZ" checked on disk, `.part` removed on failure. PS3 update download: the half-written file is closed when the connection breaks.
 - Tests: `safe.spec` rescue with no kept installer — downloaded from a fake server (2 MB, size checked); an HTML error page → no rescue, normal start, no file left.
 - Full e2e 57 passed (14 opt-in skipped), unit 77. Released: commit 307efca, tag `v2.0.16`, GitHub pre-release (beta); its packaged check passed.
+
+### 2.0.17 — safe default answers (2026-11-07)
+
+- Confirmation panels opened on the destructive choice (first selectable item), so ✕ twice = done: Turn off PC (shut Windows down at once), Delete game, Undo update, Release to everyone. Now Cancel / Keep this version / Not yet come first. Delete profile had **no** confirmation at all (one ✕ deleted it) → new `profile-delete` panel, Cancel first. Mod delete was already last in its list.
+- Main process refuses sleep / shut down while a game runs (the panel disabled it; IPC didn't).
+- **Packages: Cancel didn't stop receiving** — it killed croc, and the receive loop took that as "not ready yet" and tried again for up to 10 minutes. Now a `cancelled` flag ends send/receive (and croc calls after it); the half-received folder is removed. The inventory step had used `cancelTransfer()` as its own timeout: it now kills only its croc (the new flag would otherwise have cancelled every receive — caught by the new test). One package transfer at a time (`handle()` marks the transfer channels exclusive); one EmuDeck import at a time. `packages.spec` — Cancel ends a waiting receive within seconds with nothing left, a second transfer meanwhile is refused.
+- Tests: `feel.spec` power — confirm opens on Cancel, ✕ does nothing, shutdown refused during a game; `reliability.spec` — profile delete asks, opens on Cancel, deletes only on the explicit choice.
+- Full e2e 59 passed (14 opt-in skipped), unit 77.
 
 ## How to work on it
 

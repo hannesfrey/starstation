@@ -89,6 +89,26 @@ test('themes, TV mode, wallpapers, video preview, power menu', async () => {
 
     await api(page, 'power', 'sleep')
     expect(JSON.parse(fs.readFileSync(path.join(files, 'config', 'test-power.json'), 'utf8')).action).toBe('sleep')
+    fs.rmSync(path.join(files, 'config', 'test-power.json'))
+
+    // "Turn off PC?" opens on Cancel: a second quick ✕ must not turn the PC off
+    await page.keyboard.press('Home') // top of Settings (out of any folder)
+    await scrollTo(page, 'item-power')
+    await page.getByTestId('item-power').dispatchEvent('click')
+    await page.keyboard.press('Enter')
+    await expect(page.getByTestId('panel-power')).toBeVisible()
+    await page.getByTestId('pitem-off').dblclick()
+    await expect(page.getByTestId('panel-power-off')).toBeVisible()
+    await expect(page.getByTestId('pitem-no')).toHaveClass(/active/)
+    await page.keyboard.press('Enter')
+    await expect(page.getByTestId('panel-power-off')).toHaveCount(0)
+    expect(fs.existsSync(path.join(files, 'config', 'test-power.json'))).toBe(false)
+
+    // never while a game runs
+    expect((await api<{ ok: boolean }>(page, 'launch', 'testcon:clip game.tst')).ok).toBe(true)
+    await api(page, 'power', 'shutdown')
+    expect(fs.existsSync(path.join(files, 'config', 'test-power.json'))).toBe(false)
+    await expect.poll(async () => (await api<{ running: unknown }>(page, 'getState')).running, { timeout: 15_000 }).toBeNull()
   } finally {
     await app.close()
   }
