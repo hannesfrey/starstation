@@ -164,6 +164,7 @@ His log: 2 XInput pads known, but the first Black Ops II start wrote RPCS3 playe
 - `setYamlPlayers(text, players, config, fresh)`: a block whose handler changes copies the full `Config:` of another player with that handler (usually player 1), else `fresh` + `config`. PS3 preset `fresh`: Vendor ID 1356, Product ID 616.
 - Dry run on a copy of the real Default.yml: the new player 2 block equals player 1's except Buddy Device.
 - Tests: unit 52; e2e `game` controller test extended (two pads, no order → 2 players; fails on the old code).
+- Released: commit 0052375, tag `v2.0.10`, GitHub pre-release (beta).
 
 ## How to work on it
 
