@@ -12,6 +12,11 @@ export interface WhatsNew {
 
 export const WHATS_NEW: WhatsNew[] = [
   {
+    version: '2.0.7',
+    summary: ['3DS games work with your controller'],
+    details: ['Azahar (3DS) was left on keyboard keys. Starstation now sets it up for any connected controller: right button = A, bottom = B, triggers = ZL/ZR, left stick = circle pad, right stick = C-stick.']
+  },
+  {
     version: '2.0.6',
     summary: ['Game sound is back: games are never left muted in Windows'],
     details: [

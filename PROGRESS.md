@@ -133,6 +133,12 @@ Read SPEC.md first. This file tracks where the build stands and every small deci
 - **Fix** (`launcher.ts`): every normal game start (not the couch test, not hidden tests) calls the helper's `mute <pid> 0` every 2 s until the emulator has an audio session (max 90 s), then stops — the same API Windows' mixer uses, so Windows stores "not muted" again. Nobody can reach the volume mixer from the couch, so a game is never left muted. The couch test still mutes; the next real game start undoes it.
 - Not tested with sound on (rules: no audible tests); to be confirmed from Hannes's next game: log line "game sound on" and PropertyStore value 5 back to 0.
 
+### 2.0.7 — 3DS controller (2026-11-07)
+
+- Azahar had only keyboard defaults (the preset left mapping to the user). Now the 3DS preset writes Azahar's own "all controllers" SDL bindings (api:controller, maptype:all, guid 0 — sdl_impl.cpp ignores the GUID then), positional like Azahar's auto-map. Not tested with a real pad (Hannes was using the PC).
+- **Open:** Mario Kart 7 says "There are no Mii characters… create at least one": Azahar's shared-extdata CFL_DB.dat (0xF000000B) is empty. Plan: Starstation writes CFL_DB.dat itself with one original Mii — format in mikage-emu/3dbrew content/Mii.md (CFOG header, 100×0x5C Miis at 0x8, CFHE section, CRC-16/XMODEM BE at 0xC81E, second block 0xC820–0xE4BE with own CRC, size 0xE4C0) and RedShyGuy/acnl-decomp lib/cfl cfl_Database.cpp (how games validate it). Also consider System lle_applets=false (Azahar default true; no system applets present).
+- Lesson: a visible test opened over Hannes's live GT4 + Discord screen share; screenshots deleted. Check he isn't using the PC first; never capture the whole screen.
+
 ## How to work on it
 
 - Open a PowerShell, `. .\env.ps1` (portable Node/gh, caches in `tools\`).
