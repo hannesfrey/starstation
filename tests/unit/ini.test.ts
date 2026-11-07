@@ -112,4 +112,16 @@ describe('fatalLines (emulator logs)', () => {
     const preset = JSON.parse(readFileSync(new URL('../../presets/emulators/rpcs3.json', import.meta.url), 'utf8'))
     expect(preset.log.fatal).toBe(FATAL)
   })
+  // 2026-11-07: RPCS3 refused "Prefer borderless fullscreen" (its GUI label) at every start
+  it('finds the settings RPCS3 refused', () => {
+    const preset = JSON.parse(readFileSync(new URL('../../presets/emulators/rpcs3.json', import.meta.url), 'utf8'))
+    const line = "·E 0:00:00.111469 CFG: cfg::try_to_enum_value('Prefer borderless fullscreen', 'Exclusive Fullscreen Mode'): invalid enum or integer"
+    expect(fatalLines(line, preset.log.config)).toEqual(["cfg::try_to_enum_value('Prefer borderless fullscreen', 'Exclusive Fullscreen Mode'): invalid enum or integer"])
+    expect(fatalLines('·E 0:00:08.3 SYS: sceNpInit failed', preset.log.config)).toEqual([])
+  })
+  it('the PS3 preset writes a fullscreen mode RPCS3 accepts (Automatic / Disable / Enable)', () => {
+    const ps3 = JSON.parse(readFileSync(new URL('../../presets/consoles/ps3.json', import.meta.url), 'utf8'))
+    const kv = ps3.config.find((s: { set?: Record<string, string> }) => s.set && 'Exclusive Fullscreen Mode' in s.set)
+    expect(['Automatic', 'Disable', 'Enable']).toContain(kv.set['Exclusive Fullscreen Mode'])
+  })
 })

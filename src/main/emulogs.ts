@@ -46,8 +46,12 @@ export async function keepEmulatorLog(gameId: string, startedAt: number): Promis
   const mine = (await fsp.readdir(keptLogsDir())).filter((f) => f.startsWith(`${e.id}_`) && f.endsWith('.log.gz')).sort()
   for (const old of mine.slice(0, Math.max(0, mine.length - KEEP))) await fsp.rm(path.join(keptLogsDir(), old), { force: true })
 
-  if (e.log.fatal && st.size <= MAX_FATAL_SCAN) {
-    const fatal = fatalLines(await fsp.readFile(src, 'utf8'), e.log.fatal)
+  const text = st.size <= MAX_FATAL_SCAN && (e.log.fatal || e.log.config) ? await fsp.readFile(src, 'utf8') : ''
+  // a setting the emulator refused (2026-11-07: RPCS3 ignored "Prefer borderless fullscreen", its GUI label):
+  // only for Starstation's log, the player can't do anything about it
+  if (e.log.config && text) for (const bad of new Set(fatalLines(text, e.log.config))) log.warn(`${e.name} refused a setting: ${bad}`)
+  if (e.log.fatal && text) {
+    const fatal = fatalLines(text, e.log.fatal)
     if (fatal.length) {
       const last = fatal[fatal.length - 1]
       log.warn(`${gameId}: ${e.name} reported a fatal error: ${last}`)

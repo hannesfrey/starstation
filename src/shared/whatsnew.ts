@@ -12,6 +12,14 @@ export interface WhatsNew {
 
 export const WHATS_NEW: WhatsNew[] = [
   {
+    version: '2.0.11',
+    summary: ['PS3 games really run in borderless fullscreen now'],
+    details: [
+      'RPCS3 ignored Starstation’s fullscreen setting and picked a mode by itself, which can switch the screen to exclusive fullscreen and trouble the PS button menu. It now gets a value it accepts.',
+      'If an emulator refuses one of Starstation’s settings, that is now noted in Starstation’s log.'
+    ]
+  },
+  {
     version: '2.0.10',
     summary: ['Player 2 works from the first start, without restarting the game'],
     details: [

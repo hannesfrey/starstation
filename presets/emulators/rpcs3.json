@@ -17,6 +17,7 @@
   "license": "GPL-2.0",
   "log": {
     "file": "{emu}/log/RPCS3.log",
-    "fatal": "^·F \\S+ (.*)$"
+    "fatal": "^·F \\S+ (.*)$",
+    "config": "^·E \\S+ CFG: (.*)$"
   }
 }

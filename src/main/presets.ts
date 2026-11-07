@@ -173,7 +173,7 @@ export interface EmulatorPreset {
   /** License of the emulator (shown in Settings → About). */
   license?: string
   /** The emulator's own log (kept after every session); fatal: regex for its fatal-error lines, group 1 = message. */
-  log?: { file: string; fatal?: string }
+  log?: { file: string; fatal?: string; config?: string }
   /** PS-button menu: keys the emulator is set up to use for save / load state (missing = no save states). */
   /** resumeKeys: pressed in the emulator when the PS button menu closes (xemu: Esc closes its own Guide menu). */
   overlay?: { saveState?: string; loadState?: string; resumeKeys?: string }

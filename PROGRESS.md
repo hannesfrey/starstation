@@ -166,6 +166,14 @@ His log: 2 XInput pads known, but the first Black Ops II start wrote RPCS3 playe
 - Tests: unit 52; e2e `game` controller test extended (two pads, no order → 2 players; fails on the old code).
 - Released: commit 0052375, tag `v2.0.10`, GitHub pre-release (beta).
 
+### 2.0.11 — Black Ops II crash analysed (2026-11-07, Hannes: "the game crashed again")
+
+The kept log (`rpcs3_20261107183640_…`) caught it: after 33 min of multiplayer (t6mp), RSX stopped logging at 0:32:31 while 3 cores stayed at 100 %; 30 s later the game's own "hang detect" thread crashed it on purpose (`li r3,0x17; stw` after `now - last > 0x7530` ms) → `VM: Access violation writing location 0x17`. The PS menu (0:32:49, 0.9 s pause) came after the stall began: not the cause. Game is 1.00 (no 1.19 update), RPCS3 database config was applied, Resolution Scale 200. Likely an RPCS3 emulation stall in an "Ingame" title; the 1.19 update is the main thing left to try (Hannes's decision on the Sony update server still open).
+- Found on the way: RPCS3 refused `Exclusive Fullscreen Mode: Prefer borderless fullscreen` (GUI label; valid values per RPCS3 source `system_config_types.cpp`: Automatic / Disable / Enable) and fell back to Automatic at every start → preset writes `Disable`.
+- Emulator presets' `log.config` regex: lines where the emulator refused a setting go into Starstation's log as warnings (RPCS3: `^·E \S+ CFG: (.*)$`). Only one such line in today's logs.
+- Other BO2 sessions today ended normally (no ·F).
+- Tests: unit 54, e2e 50 passed (13 opt-in skipped); `emulogs` checks a refused setting lands in Starstation’s log, not in a notice.
+
 ## How to work on it
 
 - Open a PowerShell, `. .\env.ps1` (portable Node/gh, caches in `tools\`).

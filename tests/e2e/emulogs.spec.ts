@@ -36,6 +36,11 @@ test("the emulator's log is kept after every game, a fatal error is shown", asyn
     expect(zlib.gunzipSync(fs.readFileSync(path.join(kept, list()[0]))).toString('utf8')).toContain('booting Alpha')
     await page.waitForTimeout(300)
     await expect(page.getByTestId('notices')).not.toContainText('stopped with an error')
+    // a setting the emulator refused goes into Starstation's own log only
+    const logs = path.join(files, 'config', 'logs')
+    const ownLog = () => fs.readdirSync(logs).filter((f) => f.startsWith('starstation-')).map((f) => fs.readFileSync(path.join(logs, f), 'utf8')).join('')
+    await expect.poll(ownLog).toContain('Fake Emu refused a setting: bad value for Fullscreen')
+    await expect(page.getByTestId('notices')).not.toContainText('bad value')
 
     expect((await api<{ ok: boolean }>(page, 'launch', 'testcon:crash test.tst', 'fresh')).ok).toBe(true)
     await expect.poll(running, { timeout: 15_000 }).toBeNull()
