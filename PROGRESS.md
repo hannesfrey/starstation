@@ -154,7 +154,8 @@ Found in his log: GT6 "Save and quit" didn't close RPCS3 for 12 s; the second "S
 - **Updates:** differential download always failed (no `installer.exe` in the updater cache) → every update was the full 230 MB instead of ~1.5 MB. The downloaded installer is now also kept as `installer.exe`, seeded at start from `config\updates\installers`; `disableWebInstaller = true`.
 - RPCS3 `config.yml` "Emulated Midi devices" was mojibake (an earlier PowerShell edit) → the PS3 preset writes RPCS3's default.
 - A starting game's focus loop no longer takes the focus from an open PS menu.
-- Still open: Hannes's choice on PS3 game updates; real-pad check that RPCS3/PCSX2/RetroArch/xemu no longer show their own menu.
+- Released: commit b73e366, tag `v2.0.9`, GitHub pre-release (beta). Tests: unit 49, e2e 50 passed (13 opt-in skipped); new e2e `heldbutton`, `emulogs`, duplicate case in `downloads`; dry run of the new preset steps on copies of the real configs (RPCS3 PS Button "", no Guide lines left in PCSX2/DuckStation, Xenia guide_button=false, 135 RetroArch profiles to strip).
+- Still open: Hannes's choice on PS3 game updates (Sony update server); real-pad check that RPCS3/PCSX2/RetroArch/xemu no longer show their own menu.
 
 ## How to work on it
 
