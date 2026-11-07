@@ -12,6 +12,18 @@ export interface WhatsNew {
 
 export const WHATS_NEW: WhatsNew[] = [
   {
+    version: '2.0.9',
+    summary: ['The PS button only opens Starstation’s menu now', 'Save and quit waits for slow games instead of cutting them off'],
+    details: [
+      'RPCS3, PCSX2, DuckStation, RetroArch and Xenia no longer react to the PS / Guide button themselves (RPCS3 opened its own menu, PS1/PS2 switched the sticks’ analog mode). xemu’s own small menu is closed again when you resume.',
+      'Save and quit: the menu shows "Closing…" until the game is really gone. A game that takes long to close gets 20 seconds before it is ended — even if you choose Save and quit twice.',
+      'The ✕ you pressed to quit can no longer start the game again by itself.',
+      'When an emulator closes, its log is kept (Files\\config\\logs\\emulators), and if RPCS3 reports a fatal error you see it as a notice.',
+      'A game you download twice is recognised: "Already in your library", and the extra download goes to the Recycle Bin.',
+      'Starstation updates only download what changed (about 2 MB instead of 230 MB).'
+    ]
+  },
+  {
     version: '2.0.8',
     summary: ['3DS games that need a Mii start now (Mario Kart 7)'],
     details: ['Some 3DS games refuse to start without a Mii. Starstation now puts its own Mii, called Player, into the 3DS Mii list when it is empty. Miis that are already there are never changed.']

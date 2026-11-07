@@ -19,5 +19,11 @@
     "xemu",
     "Xemu"
   ],
-  "license": "GPL-2.0"
+  "license": "GPL-2.0",
+  "overlay": {
+    "resumeKeys": "ESC"
+  },
+  "log": {
+    "file": "{emu}/xemu.log"
+  }
 }

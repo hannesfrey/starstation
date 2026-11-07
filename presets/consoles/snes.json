@@ -92,6 +92,12 @@
     {
       "type": "mkdir",
       "path": "{saves}/states"
+    },
+    {
+      "type": "strip-lines",
+      "dir": "{emu}/autoconfig",
+      "ext": ".cfg",
+      "match": "^\\s*input_menu_toggle_btn\\s*="
     }
   ],
   "quickResume": true,

@@ -32,8 +32,11 @@ export type ConfigStep =
   /**
    * RPCS3 input config (YAML): "Player N Input:" → Handler + Device for players 1..upTo.
    * A player whose handler changes loses its old button list, so RPCS3 uses its defaults for the new pad type.
+   * config: buttons always set under "Config:" (e.g. the PS button left unbound: it belongs to Starstation's menu).
    */
-  | { type: 'yaml-players'; file: string; players: { Handler: string; Device: string }[]; upTo: string }
+  | { type: 'yaml-players'; file: string; players: { Handler: string; Device: string }[]; upTo: string; config?: Record<string, string> }
+  /** Remove matching lines from every file with this extension under a folder (RetroArch's controller profiles). */
+  | { type: 'strip-lines'; dir: string; ext: string; match: string }
 
 export interface BiosFile {
   label: string
@@ -169,8 +172,11 @@ export interface EmulatorPreset {
   versionHint?: string
   /** License of the emulator (shown in Settings → About). */
   license?: string
+  /** The emulator's own log (kept after every session); fatal: regex for its fatal-error lines, group 1 = message. */
+  log?: { file: string; fatal?: string }
   /** PS-button menu: keys the emulator is set up to use for save / load state (missing = no save states). */
-  overlay?: { saveState?: string; loadState?: string }
+  /** resumeKeys: pressed in the emulator when the PS button menu closes (xemu: Esc closes its own Guide menu). */
+  overlay?: { saveState?: string; loadState?: string; resumeKeys?: string }
 }
 
 let consoles: ConsolePreset[] = []

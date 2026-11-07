@@ -213,10 +213,17 @@ function wireUpdater(notify: (n: Omit<Notice, 'id'>) => void): void {
   autoUpdater.autoDownload = true
   autoUpdater.autoInstallOnAppQuit = true
   autoUpdater.allowPrerelease = true // Starstation chooses the release itself (pickRelease)
+  autoUpdater.disableWebInstaller = true
   autoUpdater.logger = { info: (m: unknown) => log.info(String(m)), warn: (m: unknown) => log.warn(String(m)), error: (m: unknown) => log.error(String(m)), debug: () => undefined }
   autoUpdater.on('update-downloaded', (i) => {
     state = { status: 'ready', version: i.version }
     void keepInstaller(i.downloadedFile, i.version).catch((e) => log.warn('could not keep the installer', e))
+    // the next update only downloads what changed: the updater compares against the installed version's
+    // installer, which it looks for as installer.exe in its cache folder (it never found one, so every update
+    // downloaded all 150 MB)
+    void fsp
+      .copyFile(i.downloadedFile, path.join(path.dirname(path.dirname(i.downloadedFile)), 'installer.exe'))
+      .catch((e) => log.warn('could not keep the installer for smaller updates', e))
     notify({ kind: 'update', title: 'Starstation update ready', detail: `Version ${i.version} is used from the next start.` })
   })
   autoUpdater.on('error', (e) => {
@@ -255,8 +262,27 @@ export async function checkNow(notify: (n: Omit<Notice, 'id'>) => void = () => u
 }
 
 /** At start: check for updates, and make sure the running version's installer is kept (for Undo update). */
+/** The running version's installer as the updater's installer.exe, so updates only download what changed. */
+async function seedDifferential(): Promise<void> {
+  const cache = path.join(process.env.LOCALAPPDATA ?? '', 'starstation-updater')
+  const kept = path.join(installersDir(), installerName(version()))
+  if (!fs.existsSync(cache) || !fs.existsSync(kept)) return
+  const target = path.join(cache, 'installer.exe')
+  const st = fs.existsSync(target) ? await fsp.stat(target) : null
+  if (st && st.size === (await fsp.stat(kept)).size) return
+  await fsp.copyFile(kept, target)
+  log.info(`installer ${version()} ready for smaller updates`)
+}
+
 export function startUpdater(notify: (n: Omit<Notice, 'id'>) => void): void {
   if (!app.isPackaged || HEADLESS) return
+  void seedDifferential().catch((e) => log.warn('could not prepare smaller updates', e))
   setTimeout(() => void checkNow(notify), 8000)
-  setTimeout(() => void fetchInstaller(version()).catch((e) => log.warn(`could not keep installer ${version()}`, e)), 30_000)
+  setTimeout(
+    () =>
+      void fetchInstaller(version())
+        .then(() => seedDifferential())
+        .catch((e) => log.warn(`could not keep installer ${version()}`, e)),
+    30_000
+  )
 }

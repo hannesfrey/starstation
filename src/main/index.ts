@@ -55,6 +55,7 @@ import { applyModProfile, deleteModProfile, enablePending, modProfiles, saveModP
 import { readJson } from './store'
 import { consoleInfos } from './consoles'
 import { launch, setLauncherWindow, runningGame, runningPid, stopRunning, onBeforeLaunch, onAfterExit } from './launcher'
+import { keepEmulatorLog } from './emulogs'
 import { hideOverlay, overlayAction, overlayOpen, overlayState, setupOverlay, toggleOverlay } from './overlay'
 import { audioOutputs, bluetoothDevices, bluetoothPair, bluetoothRemove, displayModes, foregroundPid, onHome, setAudioOutput, setDisplayMode, startPadHelper, stopPadHelper } from './padhelper'
 import { loadGpuDrivers, markGuideSeen, newHomeConflicts } from './system'
@@ -1021,6 +1022,10 @@ function registerHooks(): void {
     const waiting = nxmWaiting
     nxmWaiting = []
     for (const u of waiting) void openNxm(u)
+  })
+  onAfterExit((id, _s, _c, startedAt) => {
+    // the emulator's log, before the next game overwrites it (and its fatal error as a notice)
+    void keepEmulatorLog(id, startedAt).catch((e) => log.warn('could not keep the emulator log', e))
   })
   onAfterExit(() => {
     // the game is gone: so is its menu

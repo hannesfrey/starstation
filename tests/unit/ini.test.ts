@@ -1,5 +1,7 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { setIniValues, setKvValues, setYamlPlayers } from '../../src/main/ini'
+import { setIniValues, setKvValues, setYamlPlayers, stripLines } from '../../src/main/ini'
+import { fatalLines } from '../../src/main/formats/emulog'
 
 describe('ini lists and YAML indentation', () => {
   it('writes one line per value and replaces the old lines in place', () => {
@@ -46,5 +48,48 @@ describe('setYamlPlayers (RPCS3 input config)', () => {
   it('adds missing players at the end', () => {
     const out = setYamlPlayers('', [{ Handler: 'XInput', Device: '"XInput Pad #1"' }, { Handler: 'XInput', Device: '"XInput Pad #2"' }])
     expect(out).toBe('Player 1 Input:\n  Handler: XInput\n  Device: "XInput Pad #1"\nPlayer 2 Input:\n  Handler: XInput\n  Device: "XInput Pad #2"\n')
+  })
+})
+
+describe('setYamlPlayers: buttons that are always set (the PS button stays with Starstation)', () => {
+  const yml = ['Player 1 Input:', '  Handler: XInput', '  Device: "XInput Pad #1"', '  Config:', '    Start: Start', '    PS Button: Guide', '    Cross: A', '  Buddy Device: ""', 'Player 2 Input:', '  Handler: "Null"', ''].join('\n')
+  const cfg = { 'PS Button': '""' }
+  it('same handler: only that button changes, the rest of the list stays', () => {
+    const out = setYamlPlayers(yml, [{ Handler: 'XInput', Device: '"XInput Pad #1"' }], cfg)
+    expect(out.split('\n').slice(0, 9)).toEqual(['Player 1 Input:', '  Handler: XInput', '  Device: "XInput Pad #1"', '  Config:', '    Start: Start', '    PS Button: ""', '    Cross: A', '  Buddy Device: ""', 'Player 2 Input:'])
+  })
+  it('other handler: the new block already has it unbound (RPCS3 fills in the rest)', () => {
+    const out = setYamlPlayers(yml, [{ Handler: 'DualShock 3', Device: '"DS3 Pad #1"' }], cfg)
+    expect(out.split('\n').slice(0, 6)).toEqual(['Player 1 Input:', '  Handler: DualShock 3', '  Device: "DS3 Pad #1"', '  Config:', '    PS Button: ""', 'Player 2 Input:'])
+  })
+  it('a block without a button list gets one with just that button', () => {
+    const out = setYamlPlayers('Player 1 Input:\n  Handler: XInput\n  Device: "XInput Pad #1"\n', [{ Handler: 'XInput', Device: '"XInput Pad #2"' }], cfg)
+    expect(out).toBe('Player 1 Input:\n  Handler: XInput\n  Device: "XInput Pad #2"\n  Config:\n    PS Button: ""\n')
+  })
+  it('missing button is added to the existing list', () => {
+    const out = setYamlPlayers('Player 1 Input:\n  Handler: XInput\n  Device: "X"\n  Config:\n    Cross: A\n  Buddy Device: ""\n', [{ Handler: 'XInput', Device: '"X"' }], cfg)
+    expect(out).toBe('Player 1 Input:\n  Handler: XInput\n  Device: "X"\n  Config:\n    Cross: A\n    PS Button: ""\n  Buddy Device: ""\n')
+  })
+})
+
+describe('stripLines (RetroArch controller profiles without the Guide → menu button)', () => {
+  const MATCH = String.raw`^\s*input_menu_toggle_btn\s*=`
+  it('drops only the matching lines and keeps the line endings', () => {
+    const cfg = 'input_device = "XInput Controller"\r\ninput_menu_toggle_btn = "10"\r\ninput_menu_toggle_btn_label = "Guide"\r\ninput_a_btn = "1"\r\n'
+    expect(stripLines(cfg, MATCH)).toBe('input_device = "XInput Controller"\r\ninput_menu_toggle_btn_label = "Guide"\r\ninput_a_btn = "1"\r\n')
+  })
+  it('null when there is nothing to change (the file is not rewritten)', () => {
+    expect(stripLines('input_a_btn = "1"\n', MATCH)).toBeNull()
+  })
+})
+
+describe('fatalLines (emulator logs)', () => {
+  it("finds RPCS3's fatal lines without their timestamp", () => {
+    const text = ['·! 0:00:00.1 SYS: booting', '·E 0:00:01.2 sys_fs: not found', '·F 0:12:03.456789 {PPU[0x1000000] main_thread} VM: Access violation reading location 0x0', ''].join('\n')
+    const FATAL = String.raw`^·F \S+ (.*)$` // as in presets/emulators/rpcs3.json
+    expect(fatalLines(text, FATAL)).toEqual(['{PPU[0x1000000] main_thread} VM: Access violation reading location 0x0'])
+    expect(fatalLines('·E 0:00:01.2 nothing fatal', FATAL)).toEqual([])
+    const preset = JSON.parse(readFileSync(new URL('../../presets/emulators/rpcs3.json', import.meta.url), 'utf8'))
+    expect(preset.log.fatal).toBe(FATAL)
   })
 })

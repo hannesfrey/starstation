@@ -19,11 +19,17 @@ import { dir } from './paths'
 import type { LaunchResult, RunningGame } from '../shared/types'
 
 const log = logger('launcher')
-let running: (RunningGame & { proc: ChildProcess; discard?: boolean }) | null = null
+let running: (RunningGame & { proc: ChildProcess; discard?: boolean; closing?: number }) | null = null
 let mainWindow: BrowserWindow | null = null
 /** Hooks run before launch (save backup) and after exit (quick resume bookkeeping). */
 const beforeHooks: ((gameId: string) => Promise<void> | void)[] = []
 const afterHooks: ((gameId: string, seconds: number, code: number | null, startedAt: number) => Promise<void> | void)[] = []
+
+/** While this says so (the PS button menu is open), a starting game doesn't take the focus back. */
+let menuOpen: () => boolean = () => false
+export function setMenuOpenCheck(fn: () => boolean): void {
+  menuOpen = fn
+}
 
 export function setLauncherWindow(w: BrowserWindow): void {
   mainWindow = w
@@ -40,24 +46,40 @@ export function runningPid(): number | null {
   return running?.proc.pid ?? null
 }
 
+export const CLOSE_TIMEOUT = Number(process.env.STARSTATION_CLOSE_TIMEOUT ?? 20_000)
+
 /**
  * PS button menu: close the game like clicking the window's X.
  * save = true: "Save and quit" (the emulator writes its resume state). false: "Quit" (the state from before stays).
- * If the window doesn't close within 20 s (a stuck emulator), it is ended.
+ * An emulator without a window yet (still starting) or any more (already closing) is asked again every second;
+ * only if it is still running 20 s after the first ask is it ended — never at once, so it can finish writing
+ * (2026-11-07: GT6 in RPCS3 took over 12 s to close, a second "Save and quit" ended it right away).
  */
 export async function closeRunning(save: boolean): Promise<boolean> {
   const r = running
   if (!r) return false
   r.discard = !save
-  const asked = await closeWindow(r.proc.pid ?? 0)
-  if (!asked) log.warn('could not ask the emulator window to close')
-  setTimeout(() => {
-    if (running === r) {
-      log.warn(`${r.gameId}: still running 20 s after closing, ending it`)
+  if (r.closing) return true // already on its way out
+  r.closing = Date.now()
+  const pid = r.proc.pid ?? 0
+  let asked = await closeWindow(pid)
+  if (!asked) log.warn(`${r.gameId}: no emulator window to close yet, asking again until it closes`)
+  const t = setInterval(() => {
+    if (running !== r) return clearInterval(t)
+    if (Date.now() - r.closing! >= CLOSE_TIMEOUT) {
+      clearInterval(t)
+      log.warn(`${r.gameId}: still running ${Math.round(CLOSE_TIMEOUT / 1000)} s after closing, ending it`)
       r.proc.kill()
+      return
     }
-  }, asked ? 20_000 : 0)
+    if (!asked) void closeWindow(pid).then((ok) => (asked = ok))
+  }, 1000)
   return true
+}
+
+/** The game is being closed (Save and quit / Quit was chosen and it hasn't gone yet). */
+export function runningClosing(): boolean {
+  return !!running?.closing
 }
 
 export function runningGame(): RunningGame | null {
@@ -174,6 +196,7 @@ export async function launch(
     let tries = 0
     const t = setInterval(() => {
       if (!running || running.proc.pid !== pid || ++tries > 20) return clearInterval(t)
+      if (menuOpen() || running.closing) return
       void foregroundPid().then(async (fg) => {
         if (fg === pid) return clearInterval(t)
         await focusWindow(pid)

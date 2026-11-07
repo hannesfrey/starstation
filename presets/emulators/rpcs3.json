@@ -14,5 +14,9 @@
     "RPCS3",
     "rpcs3"
   ],
-  "license": "GPL-2.0"
+  "license": "GPL-2.0",
+  "log": {
+    "file": "{emu}/log/RPCS3.log",
+    "fatal": "^·F \\S+ (.*)$"
+  }
 }

@@ -110,12 +110,15 @@ function collect(root: string): string[] {
  * Sort the games in `root`. Files whose console is unclear are moved into New downloads and asked
  * about. ok = at least one game and every one of them was added or asked about.
  */
-async function sortTree(h: DownloadHooks, root: string): Promise<{ ok: boolean; found: number }> {
+async function sortTree(h: DownloadHooks, root: string): Promise<{ ok: boolean; found: number; added: number; dup: number }> {
   const candidates = collect(root)
-  if (!candidates.length) return { ok: false, found: 0 }
+  if (!candidates.length) return { ok: false, found: 0, added: 0, dup: 0 }
   const r = await h.addGames(candidates)
   const asked: AddGamesResult['ask'] = []
-  let failed = r.errors.length
+  // a game that is already there is not a failure (2026-11-05: a second Mario Kart 7 download was kept and
+  // tried again at every start)
+  const dup = r.errors.filter((e) => / is already in the /.test(e)).length
+  let failed = r.errors.length - dup
   for (const a of r.ask) {
     const target = path.join(downloadsDir(), path.basename(a.path))
     if (path.dirname(a.path) === downloadsDir()) {
@@ -136,7 +139,7 @@ async function sortTree(h: DownloadHooks, root: string): Promise<{ ok: boolean; 
     }
   }
   if (asked.length) h.ask(asked)
-  return { ok: failed === 0 && r.added.length + asked.length > 0, found: candidates.length }
+  return { ok: failed === 0 && r.added.length + asked.length + dup > 0, found: candidates.length, added: r.added.length + asked.length, dup }
 }
 
 async function handleArchive(h: DownloadHooks, p: string): Promise<void> {
@@ -166,7 +169,8 @@ async function handleArchive(h: DownloadHooks, p: string): Promise<void> {
         ? fs.readdirSync(path.dirname(p)).filter((n) => n.toLowerCase().startsWith(name.slice(0, -3).toLowerCase()) && /\.\d{3}$/.test(n))
         : [name]
       for (const n of parts) await h.trash(path.join(path.dirname(p), n))
-      log.info(`${name}: unpacked, games sorted, archive in the Recycle Bin`)
+      log.info(`${name}: unpacked, games sorted, archive in the Recycle Bin${r.dup ? ` (${r.dup} already in the library)` : ""}`)
+      if (!r.added && r.dup) h.notify({ kind: "info", title: "Already in your library", detail: `${name} went to the Recycle Bin.` })
     } else if (!r.found) {
       h.notify({ kind: 'warning', title: 'No game found in a download', detail: `${name} stays in New downloads.` })
     } else {

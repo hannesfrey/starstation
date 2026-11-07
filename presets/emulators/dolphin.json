@@ -24,5 +24,8 @@
   "overlay": {
     "saveState": "SHIFT+F1",
     "loadState": "F1"
+  },
+  "log": {
+    "file": "{emu}/User/Logs/dolphin.log"
   }
 }

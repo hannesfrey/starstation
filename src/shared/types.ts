@@ -607,6 +607,8 @@ export interface OverlayState {
   canLoadState: boolean
   /** Save and quit keeps a resume state (consoles with quick resume). */
   quickResume: boolean
+  /** Save and quit / Quit was chosen: the menu shows "Closing…" until the emulator is gone. */
+  closing: boolean
 }
 export type OverlayAction = 'resume' | 'save-state' | 'load-state' | 'screenshot' | 'save-quit' | 'quit'
 

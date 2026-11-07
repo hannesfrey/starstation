@@ -25,5 +25,8 @@
   "overlay": {
     "saveState": "F1",
     "loadState": "F3"
+  },
+  "log": {
+    "file": "{emu}/logs/emulog.txt"
   }
 }

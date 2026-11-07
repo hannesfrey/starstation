@@ -4,7 +4,7 @@ import { BrowserWindow, desktopCapturer, screen } from 'electron'
 import { dir } from './paths'
 import { getConsole, getEmulator } from './presets'
 import { getGame } from './library/library'
-import { closeRunning, runningGame, runningPid } from './launcher'
+import { closeRunning, runningClosing, runningGame, runningPid, setMenuOpenCheck } from './launcher'
 import { focusHwnd, focusWindow, sendKeys } from './padhelper'
 import { notify } from './notify'
 import { couchMark } from './couchcheck'
@@ -26,6 +26,7 @@ let preloadPath = ''
 
 export function setupOverlay(preload: string, load: (w: BrowserWindow) => void): void {
   preloadPath = preload
+  setMenuOpenCheck(() => open)
   loader = load
   ensure()
 }
@@ -67,7 +68,8 @@ export function overlayState(): OverlayState {
     console: c?.short ?? '',
     canSaveState: !!e?.overlay?.saveState,
     canLoadState: !!e?.overlay?.loadState,
-    quickResume: !!c?.quickResume
+    quickResume: !!c?.quickResume,
+    closing: runningClosing()
   }
 }
 
@@ -81,6 +83,7 @@ export function overlayOpen(): boolean {
 
 /** PS button: open the menu over the game, or close it again (= Resume). */
 export function toggleOverlay(): void {
+  if (runningClosing()) return // "Closing…" stays until the game is gone
   if (open) void hideOverlay(true)
   else showOverlay()
 }
@@ -114,7 +117,18 @@ export async function hideOverlay(resume: boolean): Promise<void> {
   // Starstation's own main window instead
   if (resume && pid && !HEADLESS) await focusWindow(pid)
   if (win && !win.isDestroyed() && !HEADLESS) win.hide()
-  if (resume && pid && !HEADLESS) await focusWindow(pid)
+  if (resume && pid && !HEADLESS) {
+    await focusWindow(pid)
+    await closeEmulatorMenu(pid)
+  }
+}
+
+/** Emulators that open their own menu on the PS / Guide button too (xemu can't be told not to): close it. */
+async function closeEmulatorMenu(pid: number): Promise<void> {
+  const r = runningGame()
+  const g = r ? getGame(r.gameId) : undefined
+  const keys = g ? getEmulator(getConsole(g.console)?.emulator ?? '')?.overlay?.resumeKeys : undefined
+  if (keys) await sendKeys(pid, keys)
 }
 
 /** Picture of the whole screen with the menu hidden, saved where the Photo column finds it. */
@@ -158,6 +172,7 @@ export async function overlayAction(action: OverlayAction): Promise<{ ok: boolea
     }
     case 'screenshot': {
       await hideOverlay(false)
+      if (!HEADLESS) await closeEmulatorMenu(pid) // (xemu's own menu would be in the picture)
       const file = HEADLESS ? null : await screenshot().catch((err) => (log.warn('screenshot failed', err), null))
       if (!HEADLESS) await focusWindow(pid)
       if (file) notify({ kind: 'info', title: 'Screenshot saved', detail: r.title })
@@ -166,8 +181,10 @@ export async function overlayAction(action: OverlayAction): Promise<{ ok: boolea
     case 'save-quit':
     case 'quit':
       if (action === 'save-quit') couchMark('savequit')
-      await hideOverlay(false)
+      // the menu stays up showing "Closing…" until the emulator is gone (a stuck or slow emulator would
+      // otherwise sit there frozen, inviting a second "Save and quit"); index.ts hides it on exit
       await closeRunning(action === 'save-quit')
+      push()
       return { ok: true }
   }
   return { ok: false, error: 'Unknown action' }

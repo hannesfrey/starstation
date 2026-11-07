@@ -160,7 +160,8 @@
           "RDown": "{pad}/+RightY",
           "RLeft": "{pad}/-RightX",
           "LargeMotor": "{pad}/LargeMotor",
-          "SmallMotor": "{pad}/SmallMotor"
+          "SmallMotor": "{pad}/SmallMotor",
+          "Analog": []
         },
         "Hotkeys": {
           "Screenshot": [
@@ -196,7 +197,8 @@
           "RDown": "{pad2}/+RightY",
           "RLeft": "{pad2}/-RightX",
           "LargeMotor": "{pad2}/LargeMotor",
-          "SmallMotor": "{pad2}/SmallMotor"
+          "SmallMotor": "{pad2}/SmallMotor",
+          "Analog": []
         }
       }
     }

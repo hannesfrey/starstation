@@ -76,6 +76,10 @@ test('PS button menu: open over the game, Quit keeps the old resume state, Save 
     fs.writeFileSync(state, 'state from the second session')
     await api(page, 'testHome')
     await ov.getByTestId('overlay-savequit').click()
+    // until the emulator is gone the menu says so, and the PS button can't take it away
+    await expect(ov.getByTestId('overlay-closing')).toContainText('Saving and closing')
+    await api(page, 'testHome')
+    await expect(ov.getByTestId('overlay-closing')).toBeVisible()
     await expect.poll(async () => (await api<{ running: unknown }>(page, 'getState')).running, { timeout: 15_000 }).toBeNull()
     expect(fs.readFileSync(state, 'utf8')).toBe('state from the second session')
   } finally {

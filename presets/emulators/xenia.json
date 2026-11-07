@@ -20,5 +20,8 @@
     "xenia",
     "Xenia"
   ],
-  "license": "BSD-3-Clause"
+  "license": "BSD-3-Clause",
+  "log": {
+    "file": "{emu}/xenia.log"
+  }
 }

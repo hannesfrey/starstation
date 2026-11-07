@@ -143,6 +143,19 @@ Read SPEC.md first. This file tracks where the build stands and every small deci
 
 - New step type `mii-db` (`formats/miidb.ts`): before a 3DS game, Azahar's shared-extdata `CFL_DB.dat` gets one Mii ("Player", face of Azahar's open-source Standard Mii, own ID) when it is missing, broken or empty. A database with any Miis is never touched (even with a bad checksum). Built empty database is byte-for-byte in its checksums identical to the one Mario Kart 7 wrote (0x6308 / 0x4F53). Tests: unit `miidb.test.ts`, e2e `miidb.spec.ts`. Not yet confirmed in Mario Kart 7 itself (no visible test while Hannes uses the PC) → on his checklist.
 
+### 2.0.9 — refinement round (2026-11-07, Hannes: "GT6 and Black Ops 2 crashed a few times", "the emulator's own menu pops up under Starstation's", "a few rounds of analysis and fixing")
+
+Found in his log: GT6 "Save and quit" didn't close RPCS3 for 12 s; the second "Save and quit" found no window and ended RPCS3 at once (`asked ? 20_000 : 0`), and 20 ms later the still-held ✕ started GT6 again — five times in a row.
+- **Closing:** `closeRunning` asks again every second while the emulator has no window (booting / already closing) and only ends it after 20 s from the first ask (`STARSTATION_CLOSE_TIMEOUT`, tests 2.5 s). A second Save and quit doesn't restart anything. The PS menu stays up with "Saving and closing…" / "Closing…" until the process is gone (the PS button can't hide it).
+- **Held button:** `InputManager` blocks every button already down when the menu (re)gains focus or input is switched back on, until it is let go. e2e `heldbutton.spec.ts` (fails on the old input.ts, checked).
+- **Second menu under Starstation's:** RPCS3 `PS Button: Guide` → now `""` for every player (`yaml-players` got `config`, kept when the handler changes); PCSX2 / DuckStation had `Analog = …/Guide` (DualShock analog toggle) → removed; Xenia `[HID] guide_button=false`; RetroArch's autoconfig profiles map `input_menu_toggle_btn = "10"` (Guide/PS; 21 of 30 XInput profiles) and a user bind can't override an autoconfig hotkey → new step `strip-lines` removes those lines before N64/NES/SNES launches; xemu always opens its popup on Guide (xui main.cc, no setting) → emulator `overlay.resumeKeys: "ESC"` closes it on Resume / before a screenshot (popup-menu.cc pops on Escape).
+- **Crashes:** no Windows crash records for RPCS3; RPCS3's log was already overwritten. RPCS3 applies its own per-game database config by itself (log: "Trying to retrieve database config"). Both games are "Ingame" in RPCS3's list (not "Playable"), and its notes assume updates GT6 1.22 / BO2 1.19 — installed: GT6 1.00 data only, BO2 none. Game updates come from Sony's update server, not on the allowed-sources list → asked Hannes. New `emulogs.ts`: after every session the emulator's log (preset `log.file`) is kept zipped in `config\logs\emulators` (last 10 per emulator); RPCS3 "·F" lines (`log.fatal`) become a notice.
+- **Downloads:** an archive whose games are all already in the library counted as failed → kept and retried at every start (Mario Kart 7 twice, 2026-11-05). Now "Already in your library" and the archive goes to the Recycle Bin.
+- **Updates:** differential download always failed (no `installer.exe` in the updater cache) → every update was the full 230 MB instead of ~1.5 MB. The downloaded installer is now also kept as `installer.exe`, seeded at start from `config\updates\installers`; `disableWebInstaller = true`.
+- RPCS3 `config.yml` "Emulated Midi devices" was mojibake (an earlier PowerShell edit) → the PS3 preset writes RPCS3's default.
+- A starting game's focus loop no longer takes the focus from an open PS menu.
+- Still open: Hannes's choice on PS3 game updates; real-pad check that RPCS3/PCSX2/RetroArch/xemu no longer show their own menu.
+
 ## How to work on it
 
 - Open a PowerShell, `. .\env.ps1` (portable Node/gh, caches in `tools\`).

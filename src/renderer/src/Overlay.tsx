@@ -66,7 +66,7 @@ export function Overlay() {
     () =>
       input.on((a) => {
         const s = stateRef.current
-        if (!s?.open || busy) return
+        if (!s?.open || s.closing || busy) return
         const list = items(s)
         if (view === 'pads') {
           if (a === 'back' || a === 'confirm') {
@@ -88,6 +88,21 @@ export function Overlay() {
   )
 
   if (!state?.open) return <div className="overlay-root" data-testid="overlay-closed" />
+  if (state.closing)
+    return (
+      <div className="overlay-root open" data-testid="overlay">
+        <div className="overlay-panel">
+          <div className="overlay-game">
+            <div className="overlay-title">{state.title}</div>
+            <div className="overlay-console">{state.console}</div>
+          </div>
+          <div className="overlay-items" data-testid="overlay-closing">
+            <div className="overlay-info">{state.quickResume ? 'Saving and closing…' : 'Closing…'}</div>
+          </div>
+          <div className="overlay-hint">Back to Starstation in a moment</div>
+        </div>
+      </div>
+    )
   const list = items(state)
   const pads = [...(navigator.getGamepads ? navigator.getGamepads() : [])].filter((p): p is Gamepad => !!p && p.connected && isMenuPad(p))
   return (

@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fill, getEmulator, emulatorDir, vars, type ConfigStep, type ConsolePreset } from './presets'
-import { getIniValue, setIniValues, setKvValues, setYamlPlayers } from './ini'
+import { getIniValue, setIniValues, setKvValues, setYamlPlayers, stripLines } from './ini'
 import { candidateBios } from './bios'
 import { dir } from './paths'
 import { logger } from './log'
@@ -106,12 +106,35 @@ export function applyStep(step: ConfigStep, v: Record<string, string>): void {
       const before = fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : ''
       const after = setYamlPlayers(
         before,
-        step.players.slice(0, upTo).map((pl) => ({ Handler: fill(pl.Handler, v), Device: fill(pl.Device, v) }))
+        step.players.slice(0, upTo).map((pl) => ({ Handler: fill(pl.Handler, v), Device: fill(pl.Device, v) })),
+        step.config ?? {}
       )
       if (after !== before) {
         fs.mkdirSync(path.dirname(p), { recursive: true })
         fs.writeFileSync(p, after)
       }
+      return
+    }
+    case 'strip-lines': {
+      // every file with this extension under the folder, without the matching lines (only files that have one change)
+      const ext = step.ext.toLowerCase()
+      const walk = (d: string): void => {
+        let entries: fs.Dirent[]
+        try {
+          entries = fs.readdirSync(d, { withFileTypes: true })
+        } catch {
+          return
+        }
+        for (const e of entries) {
+          const p = path.join(d, e.name)
+          if (e.isDirectory()) walk(p)
+          else if (e.name.toLowerCase().endsWith(ext)) {
+            const after = stripLines(fs.readFileSync(p, 'utf8'), step.match)
+            if (after !== null) fs.writeFileSync(p, after)
+          }
+        }
+      }
+      walk(fill(step.dir, v))
       return
     }
     case 'kv': {

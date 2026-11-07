@@ -23,5 +23,8 @@
   "overlay": {
     "saveState": "CTRL+C",
     "loadState": "CTRL+V"
+  },
+  "log": {
+    "file": "{emu}/user/log/azahar_log.txt"
   }
 }

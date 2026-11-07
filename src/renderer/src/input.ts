@@ -98,6 +98,9 @@ export class InputManager {
   private padListeners = new Set<(e: PadEvent) => void>()
   private anyListeners = new Set<() => void>()
   private held = new Map<string, { since: number; last: number }>()
+  /** Buttons already down when the menu got the focus back: ignored until let go. */
+  private blocked = new Set<string>()
+  private active = false
   private raf = 0
   private enabled = true
   private known = new Map<number, string>()
@@ -262,9 +265,18 @@ export class InputManager {
     }
     if (!document.hasFocus() || !this.enabled) {
       this.held.clear()
+      this.active = false
       return
     }
+    // back from a game (or another window): a button still held from there is not a new press
+    // (2026-11-07: the ✕ that chose "Save and quit" started the game again the moment the menu got the focus)
+    if (!this.active) {
+      this.active = true
+      this.blocked = new Set(pressed)
+    }
+    for (const key of [...this.blocked]) if (!pressed.has(key)) this.blocked.delete(key)
     for (const key of pressed) {
+      if (this.blocked.has(key)) continue
       const a = key.split(':')[1] as Action
       const h = this.held.get(key)
       if (!h) {

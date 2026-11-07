@@ -80,6 +80,13 @@ test('New downloads: archives are unpacked and sorted, unclear files asked about
   const st = await api<{ library: { games: { title: string }[] } }>(page, 'getState')
   expect(st.library.games.map((g) => g.title)).toEqual(expect.arrayContaining(['Gamma', 'Delta', 'Epsilon']))
 
+  // the same game downloaded again: not kept and tried again at every start, but binned with a word
+  execFileSync(TAR, ['-a', '-cf', path.join(staging, 'Gamma again.zip'), '-C', path.join(staging, 'gamma'), 'Gamma (USA)'])
+  fs.renameSync(path.join(staging, 'Gamma again.zip'), path.join(dl, 'Gamma again.zip'))
+  await expect.poll(() => fs.existsSync(path.join(dl, 'Gamma again.zip')), { timeout: 20_000 }).toBe(false)
+  expect(fs.readdirSync(path.join(files, 'config', 'test-trash')).some((t) => t.endsWith('Gamma again.zip'))).toBe(true)
+  await expect(page.getByTestId('notices')).toContainText('Already in your library')
+
   // switched off: nothing is touched
   await api(page, 'setSetting', 'sortDownloads', false)
   fs.writeFileSync(path.join(dl, 'Zeta.tst'), 'zeta')

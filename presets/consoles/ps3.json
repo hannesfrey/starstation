@@ -89,7 +89,8 @@
       "sep": ": ",
       "set": {
         "Exclusive Fullscreen Mode": "Prefer borderless fullscreen",
-        "Pause emulation on RPCS3 focus loss": "true"
+        "Pause emulation on RPCS3 focus loss": "true",
+        "Emulated Midi devices": "Keyboardßßß@@@Keyboardßßß@@@Keyboardßßß@@@"
       }
     }
   ],
@@ -138,7 +139,10 @@
           "Device": "\"{ps3device4}\""
         }
       ],
-      "upTo": "{players}"
+      "upTo": "{players}",
+      "config": {
+        "PS Button": "\"\""
+      }
     }
   ],
   "graphics": {

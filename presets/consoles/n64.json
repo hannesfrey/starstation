@@ -98,6 +98,12 @@
         "mupen64plus-43screensize = \"{n64res}\"",
         "mupen64plus-txHiresEnable = \"{n64hires}\""
       ]
+    },
+    {
+      "type": "strip-lines",
+      "dir": "{emu}/autoconfig",
+      "ext": ".cfg",
+      "match": "^\\s*input_menu_toggle_btn\\s*="
     }
   ],
   "quickResume": true,

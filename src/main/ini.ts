@@ -104,6 +104,17 @@ export function setKvValues(text: string, set: Record<string, string>, sep: stri
   return lines.join(eol) + eol
 }
 
+/** The text without the lines matching pattern, or null if no line matches (nothing to write). */
+export function stripLines(text: string, pattern: string): string | null {
+  const re = new RegExp(pattern)
+  if (!new RegExp(pattern, 'm').test(text)) return null
+  const eol = text.includes('\r\n') ? '\r\n' : '\n'
+  return text
+    .split(/\r?\n/)
+    .filter((l) => !re.test(l))
+    .join(eol)
+}
+
 function escapeRe(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
@@ -113,7 +124,7 @@ function escapeRe(s: string): string {
  * Same handler: only the device line changes (the user's button list stays).
  * Other handler: the block becomes just Handler + Device; RPCS3 fills in that pad type's default buttons.
  */
-export function setYamlPlayers(text: string, players: { Handler: string; Device: string }[]): string {
+export function setYamlPlayers(text: string, players: { Handler: string; Device: string }[], config: Record<string, string> = {}): string {
   const eol = text.includes('\r\n') ? '\r\n' : '\n'
   const lines = text.length ? text.split(/\r?\n/) : []
   if (lines.length && lines[lines.length - 1] === '') lines.pop()
@@ -121,6 +132,8 @@ export function setYamlPlayers(text: string, players: { Handler: string; Device:
     const head = `Player ${i + 1} Input:`
     const start = lines.findIndex((l) => l.trimEnd() === head)
     const block = [head, `  Handler: ${pl.Handler}`, `  Device: ${pl.Device}`]
+    const keys = Object.entries(config)
+    if (keys.length) block.push('  Config:', ...keys.map(([k, val]) => `    ${k}: ${val}`))
     if (start < 0) {
       lines.push(...block)
       return
@@ -135,7 +148,31 @@ export function setYamlPlayers(text: string, players: { Handler: string; Device:
     }
     const deviceAt = lines.slice(start + 1, end).findIndex((l) => /^ {2}Device:/.test(l))
     if (deviceAt >= 0) lines[start + 1 + deviceAt] = `  Device: ${pl.Device}`
-    else lines.splice(start + 2 + handlerAt, 0, `  Device: ${pl.Device}`)
+    else {
+      lines.splice(start + 2 + handlerAt, 0, `  Device: ${pl.Device}`)
+      end++
+    }
+    if (!keys.length) return
+    // the wanted buttons inside "  Config:" (4 spaces deep); the rest of the user's buttons stay
+    let cfg = lines.slice(start + 1, end).findIndex((l) => /^ {2}Config:\s*$/.test(l))
+    if (cfg < 0) {
+      lines.splice(end, 0, '  Config:')
+      cfg = end - start - 1
+      end++
+    }
+    const cfgAt = start + 1 + cfg
+    let cfgEnd = cfgAt + 1
+    while (cfgEnd < end && lines[cfgEnd].startsWith('    ')) cfgEnd++
+    for (const [k, val] of keys) {
+      const re = new RegExp(`^ {4}${escapeRe(k)}:`)
+      const at = lines.slice(cfgAt + 1, cfgEnd).findIndex((l) => re.test(l))
+      if (at >= 0) lines[cfgAt + 1 + at] = `    ${k}: ${val}`
+      else {
+        lines.splice(cfgEnd, 0, `    ${k}: ${val}`)
+        cfgEnd++
+        end++
+      }
+    }
   })
   return lines.join(eol) + eol
 }

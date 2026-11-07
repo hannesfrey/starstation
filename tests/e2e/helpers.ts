@@ -31,6 +31,8 @@ export function makePresets(files: string, ms = 1500, opts: { quickResume?: bool
     `const fs=require('fs'),path=require('path');const args=process.argv.slice(2);` +
       `fs.writeFileSync(${JSON.stringify(path.join(emuDir, 'launched.json'))},JSON.stringify(args));` +
       `const game=args[args.length-1];const base=path.basename(game,path.extname(game));` +
+      // its own log, like RPCS3: a game called "Crash…" ends with a fatal error line
+      `fs.writeFileSync(path.join(__dirname,'emu.log'),'·! 0:00:00.1 booting '+base+'\\n'+(base.startsWith('Crash')?'·F 0:00:01.2 {PPU[0x1000000] main_thread} VM: Access violation\\n':''));` +
       `const saves=path.join(path.dirname(game),'..','..','saves','testcon');` +
       `setTimeout(()=>{fs.mkdirSync(path.join(saves,'states'),{recursive:true});` +
       `fs.writeFileSync(path.join(saves,base+'.sav'),'played '+Date.now());` +
@@ -38,7 +40,7 @@ export function makePresets(files: string, ms = 1500, opts: { quickResume?: bool
   )
   fs.writeFileSync(
     path.join(dst, 'emulators', 'fakeemu.json'),
-    JSON.stringify({ id: 'fakeemu', name: 'Fake Emu', folder: emuDir, exe: NODE, portable: [], importNames: [] })
+    JSON.stringify({ id: 'fakeemu', name: 'Fake Emu', folder: emuDir, exe: NODE, portable: [], importNames: [], log: { file: '{emu}/emu.log', fatal: String.raw`^·F \S+ (.*)$` } })
   )
   fs.writeFileSync(
     path.join(dst, 'consoles', 'testcon.json'),
@@ -72,6 +74,8 @@ export async function launchApp(files: string, presets?: string): Promise<{ app:
       STARSTATION_FILES: files,
       STARSTATION_HEADLESS: '1',
       ...(presets ? { STARSTATION_PRESETS: presets } : {}),
+      // the fake emulator has no window to close: it is ended after this instead of 20 s
+      ...(presets ? { STARSTATION_CLOSE_TIMEOUT: process.env.STARSTATION_CLOSE_TIMEOUT ?? '2500' } : {}),
       ELECTRON_RENDERER_URL: ''
     }
   })

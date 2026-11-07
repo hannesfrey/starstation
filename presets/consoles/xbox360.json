@@ -47,6 +47,16 @@
       "type": "link",
       "path": "{screenshots}/xenia",
       "target": "{emu}/screenshots"
+    },
+    {
+      "type": "ini",
+      "file": "{emu}/xenia-canary.config.toml",
+      "set": {
+        "HID": {
+          "guide_button": "false"
+        }
+      },
+      "ifExists": true
     }
   ],
   "quickResume": false,
