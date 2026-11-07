@@ -229,6 +229,7 @@ The kept log (`rpcs3_20261107183640_…`) caught it: after 33 min of multiplayer
 - Player screen: leaving it without an answer counts as cancel (a start left waiting would block every later start behind the launch guard).
 - Storage / EmuDeck import scan / import run: failures end the screen (import: "importing" was stuck forever, blocking another try).
 - Starstation update check every 6 h while running (not during a game). Log rolls over to a new file at midnight.
+- Tests: unit 77, e2e 54 passed (14 opt-in/packaged skipped in normal runs). Released: commit d9e8b09, tag `v2.0.15`, GitHub pre-release (beta); the release's own packaged check passed on the built 2.0.15.
 
 ## How to work on it
 
