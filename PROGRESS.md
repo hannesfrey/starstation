@@ -97,6 +97,13 @@ Read SPEC.md first. This file tracks where the build stands and every small deci
 - New test `quit.spec.ts` (fails on the 2.0.0 code for both bugs, passes now). `channel.spec.ts` used fake versions just above the app's own (1.9.5 / 2.0.0) and broke with the bump to 2.0.0 → now 98.x / 99.0.0.
 - 2.0.1 published as a pre-release; Hannes's 1.9.0 gets it on its next start (2.0.0 is in skip.json after the rescue, 2.0.1 isn't).
 
+### After 2.0.1 — 2.0.2: PS3 controller after a restart (2026-11-07, Hannes: "controller connected by cable doesn't work")
+
+- **Cause:** Hannes's DualShock 3 uses the original Scarlet.Crush SCP driver (WinUSB, `oem13.inf`, 2013). Windows only sees it — as an Xbox 360 pad on the SCP virtual bus — while `ScpServer.exe` runs (his copy: `Desktop\PC Stuff\scpds\ScpServer\bin`). No ScpService is installed and nothing starts it with Windows; its log shows it closed 2026-11-05 21:09 (PC shut down) and never ran again. So the pad did nothing anywhere, not only in Starstation. Starting it by hand brought the Xbox 360 pad back at once.
+- **Fix** (`src/main/scp.ts`): if a PS3 controller was set up with SCP's WinUSB driver (`reg query HKLM\…\Enum\USB\VID_054C&PID_0268 /s /v Service`) and neither ScpServer.exe nor ScpService.exe runs (tasklist), Starstation starts the user's own ScpServer.exe minimized — at start-up and before each game. Found by a shallow search (Desktop, Downloads, Documents, Program Files, depth ≤ 5, Starstation's own Files skipped) and remembered in `config\controllers\scp.json`. Started through PowerShell Start-Process (ShellExecute) so it doesn't inherit Starstation's handles — with cmd `start` it kept Starstation's pipes open. Nothing is installed or changed; ScpServer only writes its own log/xml in its own folder, as it always did.
+- Health check: "PS3 controller: SCP Server isn't running" + Start SCP Server.
+- Tests: unit `scp.test.ts`, e2e `scp.spec.ts` (fake driver state), opt-in real test `scp-real.spec.ts` (`STARSTATION_REAL_SCP=1`, ScpServer closed first): passed on Hannes's PC — found the server, started it, Xbox 360 pad back.
+
 ## How to work on it
 
 - Open a PowerShell, `. .\env.ps1` (portable Node/gh, caches in `tools\`).

@@ -42,6 +42,7 @@ import { listScreenshots } from './screenshots'
 import { readBattery } from './battery'
 import { moveStats, reattachArtwork, setCustomArt } from './library/library'
 import { healthCheck } from './health'
+import { ensureScpServer, startScpServer } from './scp'
 import { exportReport } from './diagnostics'
 import { lastUnlockCheck, raLogin, raLogout, raStatus, recentUnlocks } from './retroach'
 import { listRooms, netplayArgs, netplayVars } from './netplay'
@@ -199,6 +200,11 @@ async function runCommand(command: string, arg?: string): Promise<void> {
     case 'rescan':
       scanAndArt()
       return
+    case 'start-scp': {
+      const r = await startScpServer()
+      notify(r.ok ? { kind: 'success', title: 'SCP Server started', detail: 'Your PS3 controller works now.' } : { kind: 'error', title: 'SCP Server not started', detail: r.error ?? '' })
+      return
+    }
     case 'install-emulator':
       if (arg) await doInstallEmulator(arg)
       return
@@ -987,6 +993,8 @@ function startBatteryPolling(): void {
 }
 
 function registerHooks(): void {
+  // SCP Server closed since Starstation started? A PS3 controller would do nothing in the game
+  onBeforeLaunch(() => (HEADLESS && !process.env.STARSTATION_TEST_SCP ? undefined : ensureScpServer()))
   onBeforeLaunch(async (id) => {
     const g = getGame(id)
     if (!g) return
@@ -1125,6 +1133,8 @@ app.whenReady().then(async () => {
   win.webContents.once('did-finish-load', () => {
     setTimeout(() => scanAndArt(true), 50)
     startBatteryPolling()
+    // PS3 controller on the SCP driver: its server doesn't start with Windows, so Starstation starts it
+    if (!HEADLESS || process.env.STARSTATION_TEST_SCP) void ensureScpServer().catch((e) => log.warn('SCP server check failed', e))
     startUpdater(notify)
     // Nexus Mods: nxm:// links open Starstation (only with an API key); a link it was started with
     registerNxm()

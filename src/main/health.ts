@@ -8,6 +8,7 @@ import { view } from './library/library'
 import { n3dsEncrypted, referencedFiles } from './formats/gameid'
 import { emulatorInfos } from './emulators'
 import { gpuDrivers, homeConflicts } from './system'
+import { scpStatus } from './scp'
 import type { HealthIssue } from '../shared/types'
 
 /** Settings → Health check: everything that would stop a game from starting, each with a fix or an instruction. */
@@ -75,6 +76,16 @@ export function healthCheck(): HealthIssue[] {
     issues.push({ severity: 'warning', title: 'Starstation is inside OneDrive', detail: 'OneDrive would upload all games and can lock saves while a game runs. Move the Starstation folder out of OneDrive.' })
 
   // the PS / Home button has to reach Starstation's menu during games
+  const scp = scpStatus()
+  if (scp.driver && !scp.running)
+    issues.push({
+      severity: 'error',
+      title: 'PS3 controller: SCP Server isn’t running',
+      detail: scp.server
+        ? 'Your PS3 controller uses the SCP driver, which only works while SCP Server runs. Starstation starts it by itself when it opens.'
+        : 'Your PS3 controller uses the SCP driver, which only works while SCP Server runs, and Starstation couldn’t find ScpServer.exe. Start it once from your SCP driver folder; Starstation remembers it.',
+      fix: { label: 'Start SCP Server', command: 'start-scp' }
+    })
   const hc = homeConflicts()
   if (hc.gameBar)
     issues.push({

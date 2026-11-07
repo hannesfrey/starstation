@@ -12,6 +12,14 @@ export interface WhatsNew {
 
 export const WHATS_NEW: WhatsNew[] = [
   {
+    version: '2.0.2',
+    summary: ['PS3 controllers on the SCP driver work right after a restart: Starstation starts SCP Server for you'],
+    details: [
+      'A PS3 controller set up with the SCP driver only works while SCP Server runs, and that doesn’t start with Windows. Starstation now finds it and starts it (minimized) when it opens and before a game starts.',
+      'Settings → Health check shows it when SCP Server isn’t running, with a button to start it.'
+    ]
+  },
+  {
     version: '2.0.0',
     summary: [
       'Press the PS button in any game: resume, save states, or save and quit without a keyboard',
