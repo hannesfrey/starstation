@@ -173,6 +173,7 @@ The kept log (`rpcs3_20261107183640_…`) caught it: after 33 min of multiplayer
 - Emulator presets' `log.config` regex: lines where the emulator refused a setting go into Starstation's log as warnings (RPCS3: `^·E \S+ CFG: (.*)$`). Only one such line in today's logs.
 - Other BO2 sessions today ended normally (no ·F).
 - Tests: unit 54, e2e 50 passed (13 opt-in skipped); `emulogs` checks a refused setting lands in Starstation’s log, not in a notice.
+- Released: commit 86efb26, tag `v2.0.11`, GitHub pre-release (beta).
 
 ## How to work on it
 
