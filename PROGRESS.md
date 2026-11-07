@@ -127,6 +127,12 @@ Read SPEC.md first. This file tracks where the build stands and every small deci
 - **Button hints** (`Glyph.tsx`): SVG instead of font characters — ✕ ○ △ □ were four different sizes/heights. Face buttons = dark disc + symbol in its colour (Xbox: letter), L1/R1 = bumper shape, Start/Select = pill.
 - **Design check page:** `#icons` (IconSheet.tsx) shows every icon at 96/48/28 px and both glyph sets; `SCREENSHOTS=1 npx playwright test icons-screens` renders it (and the menu with every console) offscreen to `tools\cache\screens\icons` — hidden windows don't repaint for captures, offscreen windows do.
 
+### 2.0.6 — game sound (2026-11-07, Hannes: "games have no volume, tested GameCube and PS2")
+
+- **Cause (my mistake):** the couch test (2026-11-05) muted each emulator's audio session (`muteProcess`, ISimpleAudioVolume.SetMute) so the visible test stayed silent. Windows **persists per-app volume/mute** (HKCU\Software\Microsoft\Internet Explorer\LowRegistry\Audio\PolicyConfig\PropertyStore, value 5 = mute): every exe under Files\emulators had mute = on (Dolphin, PCSX2, DuckStation, RPCS3, xemu, Xenia, Azahar, RetroArch); Hannes's old EmuDeck emulators were untouched. Read-only check confirmed it.
+- **Fix** (`launcher.ts`): every normal game start (not the couch test, not hidden tests) calls the helper's `mute <pid> 0` every 2 s until the emulator has an audio session (max 90 s), then stops — the same API Windows' mixer uses, so Windows stores "not muted" again. Nobody can reach the volume mixer from the couch, so a game is never left muted. The couch test still mutes; the next real game start undoes it.
+- Not tested with sound on (rules: no audible tests); to be confirmed from Hannes's next game: log line "game sound on" and PropertyStore value 5 back to 0.
+
 ## How to work on it
 
 - Open a PowerShell, `. .\env.ps1` (portable Node/gh, caches in `tools\`).

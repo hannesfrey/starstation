@@ -12,6 +12,13 @@ export interface WhatsNew {
 
 export const WHATS_NEW: WhatsNew[] = [
   {
+    version: '2.0.6',
+    summary: ['Game sound is back: games are never left muted in Windows'],
+    details: [
+      'Starstation’s own controller test had muted the emulators in the Windows volume mixer, and Windows kept that mute. Every game start now makes sure the game can be heard.'
+    ]
+  },
+  {
     version: '2.0.5',
     summary: ['PS3 games show their box covers', 'New console icons, a new controller icon and cleaner button hints'],
     details: [

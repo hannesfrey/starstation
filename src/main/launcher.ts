@@ -185,6 +185,20 @@ export async function launch(
     const pid = proc.pid
     const t = setInterval(() => void muteProcess(pid), 700)
     proc.once('exit', () => clearInterval(t))
+  } else if (proc.pid && process.env.STARSTATION_HEADLESS !== '1') {
+    // Windows remembers a mute per program, and nobody can reach the volume mixer from the couch: make sure the
+    // game is heard (2026-11-07: the couch test's mute had stayed on for every emulator). As soon as the emulator
+    // has opened its sound (it may take a while to boot), its mute is switched off once — Windows remembers that too.
+    const pid = proc.pid
+    let tries = 0
+    const t = setInterval(() => {
+      if (!running || running.proc.pid !== pid || ++tries > 45) return clearInterval(t)
+      void muteProcess(pid, false).then((ok) => {
+        if (!ok) return
+        clearInterval(t)
+        log.info(`${gameId}: game sound on (not muted in Windows)`)
+      })
+    }, 2000)
   }
   holdNotices(true)
   couchMark('launch')
