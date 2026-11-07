@@ -157,6 +157,14 @@ Found in his log: GT6 "Save and quit" didn't close RPCS3 for 12 s; the second "S
 - Released: commit b73e366, tag `v2.0.9`, GitHub pre-release (beta). Tests: unit 49, e2e 50 passed (13 opt-in skipped); new e2e `heldbutton`, `emulogs`, duplicate case in `downloads`; dry run of the new preset steps on copies of the real configs (RPCS3 PS Button "", no Guide lines left in PCSX2/DuckStation, Xenia guide_button=false, 135 RetroArch profiles to strip).
 - Still open: Hannes's choice on PS3 game updates (Sony update server); real-pad check that RPCS3/PCSX2/RetroArch/xemu no longer show their own menu.
 
+### 2.0.10 — player 2 (2026-11-07, Hannes: "Black Ops isn't recognizing the second controller", then "now it works, I had to restart the game")
+
+His log: 2 XInput pads known, but the first Black Ops II start wrote RPCS3 player 2 as "Null" (the player screen's ○ "usual order", or no screen, gave `players = 1`). The restart went through the player screen with both pads → player 2 = XInput Pad #2, but only with `Config: PS Button: ""` → RPCS3 filled in buttons but emulated Vendor/Product ID 0 (a PS3 pad is 1356/616).
+- `padVars()` without an order: as many players as known pads (max 4), so Dolphin GC ports / Wii remotes / RPCS3 / RetroArch get player 2 too.
+- `setYamlPlayers(text, players, config, fresh)`: a block whose handler changes copies the full `Config:` of another player with that handler (usually player 1), else `fresh` + `config`. PS3 preset `fresh`: Vendor ID 1356, Product ID 616.
+- Dry run on a copy of the real Default.yml: the new player 2 block equals player 1's except Buddy Device.
+- Tests: unit 52; e2e `game` controller test extended (two pads, no order → 2 players; fails on the old code).
+
 ## How to work on it
 
 - Open a PowerShell, `. .\env.ps1` (portable Node/gh, caches in `tools\`).

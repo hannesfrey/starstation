@@ -12,6 +12,14 @@ export interface WhatsNew {
 
 export const WHATS_NEW: WhatsNew[] = [
   {
+    version: '2.0.10',
+    summary: ['Player 2 works from the first start, without restarting the game'],
+    details: [
+      'Starting a game with ○ ("usual order") on the player screen used to set up player 1 only. Now every connected controller gets a player.',
+      'PS3: a new player gets the same button settings as player 1, so every game recognises the controller.'
+    ]
+  },
+  {
     version: '2.0.9',
     summary: ['The PS button only opens Starstation’s menu now', 'Save and quit waits for slow games instead of cutting them off'],
     details: [

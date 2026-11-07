@@ -66,6 +66,26 @@ describe('setYamlPlayers: buttons that are always set (the PS button stays with 
     const out = setYamlPlayers('Player 1 Input:\n  Handler: XInput\n  Device: "XInput Pad #1"\n', [{ Handler: 'XInput', Device: '"XInput Pad #2"' }], cfg)
     expect(out).toBe('Player 1 Input:\n  Handler: XInput\n  Device: "XInput Pad #2"\n  Config:\n    PS Button: ""\n')
   })
+  // 2026-11-07: Black Ops II's player 2 went from "Null" to XInput with only the PS button line,
+  // so RPCS3 gave it controller ID 0 instead of a PS3 controller's
+  it('a new player copies the full settings of a player with the same handler', () => {
+    const out = setYamlPlayers(
+      yml,
+      [{ Handler: 'XInput', Device: '"XInput Pad #1"' }, { Handler: 'XInput', Device: '"XInput Pad #2"' }],
+      cfg,
+      { 'Vendor ID': '1356' }
+    )
+    expect(out.split('\n').slice(8)).toEqual(['Player 2 Input:', '  Handler: XInput', '  Device: "XInput Pad #2"', '  Config:', '    Start: Start', '    PS Button: ""', '    Cross: A', ''])
+  })
+  it('without a player to copy, a new block gets the fresh keys', () => {
+    const out = setYamlPlayers(yml, [{ Handler: 'DualShock 4', Device: '"DS4 Pad #1"' }], cfg, { 'Vendor ID': '1356', 'Product ID': '616' })
+    expect(out.split('\n').slice(0, 8)).toEqual(['Player 1 Input:', '  Handler: DualShock 4', '  Device: "DS4 Pad #1"', '  Config:', '    Vendor ID: 1356', '    Product ID: 616', '    PS Button: ""', 'Player 2 Input:'])
+  })
+  it('the real PS3 preset gives new players a PS3 controller ID', () => {
+    const ps3 = JSON.parse(readFileSync(new URL('../../presets/consoles/ps3.json', import.meta.url), 'utf8'))
+    const step = ps3.controls.find((c: { type: string }) => c.type === 'yaml-players')
+    expect(step.fresh).toEqual({ 'Vendor ID': '1356', 'Product ID': '616' })
+  })
   it('missing button is added to the existing list', () => {
     const out = setYamlPlayers('Player 1 Input:\n  Handler: XInput\n  Device: "X"\n  Config:\n    Cross: A\n  Buddy Device: ""\n', [{ Handler: 'XInput', Device: '"X"' }], cfg)
     expect(out).toBe('Player 1 Input:\n  Handler: XInput\n  Device: "X"\n  Config:\n    Cross: A\n    PS Button: ""\n  Buddy Device: ""\n')

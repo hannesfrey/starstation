@@ -107,7 +107,8 @@ export function applyStep(step: ConfigStep, v: Record<string, string>): void {
       const after = setYamlPlayers(
         before,
         step.players.slice(0, upTo).map((pl) => ({ Handler: fill(pl.Handler, v), Device: fill(pl.Device, v) })),
-        step.config ?? {}
+        step.config ?? {},
+        step.fresh ?? {}
       )
       if (after !== before) {
         fs.mkdirSync(path.dirname(p), { recursive: true })

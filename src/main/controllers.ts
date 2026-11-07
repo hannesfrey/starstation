@@ -55,6 +55,7 @@ export function sdlName(id = ''): string {
 export function padVars(order?: PlayerPad[]): Record<string, string> {
   const k = known()
   const sdl = k.api === 'sdl'
+  const count = Math.max(1, Math.min(4, order?.length ?? k.pads.length))
   const players: PlayerPad[] = [0, 1, 2, 3].map((i) => order?.[i] ?? { api: k.api, index: i, id: sdl ? k.pads[i] : undefined })
   const v: Record<string, string> = {
     // extra screenshot buttons (only SDL can see the PlayStation touchpad / Xbox Share button)
@@ -67,11 +68,13 @@ export function padVars(order?: PlayerPad[]): Record<string, string> {
     dolB: sdl ? '`Button E`' : '`Button B`',
     dolX: sdl ? '`Button W`' : '`Button X`',
     dolY: sdl ? '`Button N`' : '`Button Y`',
-    players: String(Math.max(1, order?.length ?? 1))
+    // no chosen order (○ = usual order, or the screen was skipped): every connected controller gets a player,
+    // so player 2 can join without restarting the game
+    players: String(count)
   }
   players.forEach((p, i) => {
     const n = i === 0 ? '' : String(i + 1)
-    const has = !order || i < order.length
+    const has = i < count
     // PCSX2 / DuckStation device prefix
     v[`pad${n}`] = `${p.api === 'sdl' ? 'SDL' : 'XInput'}-${p.index}`
     // RetroArch device index
@@ -79,9 +82,9 @@ export function padVars(order?: PlayerPad[]): Record<string, string> {
     // Dolphin device
     v[`dolpad${i + 1}`] = p.api === 'sdl' ? `SDL/${p.index}/${sdlName(p.id)}` : `XInput/${p.index}/Gamepad`
     // Dolphin GameCube port: 6 = standard controller, 0 = nothing plugged in (port 1 always has one)
-    v[`gcport${i + 1}`] = i === 0 || (order && has) ? '6' : '0'
+    v[`gcport${i + 1}`] = i === 0 || has ? '6' : '0'
     // Dolphin Wii Remote: 1 = emulated remote on, 0 = off
-    v[`wiisrc${i + 1}`] = i === 0 || (order && has) ? '1' : '0'
+    v[`wiisrc${i + 1}`] = i === 0 || has ? '1' : '0'
     // RPCS3: its own DualShock 4 / DualSense handlers for PlayStation pads, XInput otherwise
     const ps5 = p.api === 'sdl' && sdlName(p.id) === 'PS5 Controller'
     v[`ps3handler${i + 1}`] = p.api === 'sdl' ? (ps5 ? 'DualSense' : 'DualShock 4') : 'XInput'

@@ -122,18 +122,47 @@ function escapeRe(s: string): string {
 /**
  * RPCS3's input config: set "Handler" and "Device" under "Player N Input:" (top-level YAML blocks).
  * Same handler: only the device line changes (the user's button list stays).
- * Other handler: the block becomes just Handler + Device; RPCS3 fills in that pad type's default buttons.
+ * Other handler: the block copies the settings of another player with that handler (usually player 1),
+ * otherwise it gets just `fresh` + `config` and RPCS3 fills in that pad type's default buttons
+ * (but not its emulated controller ID: that would be 0, which some games ignore).
  */
-export function setYamlPlayers(text: string, players: { Handler: string; Device: string }[], config: Record<string, string> = {}): string {
+export function setYamlPlayers(
+  text: string,
+  players: { Handler: string; Device: string }[],
+  config: Record<string, string> = {},
+  fresh: Record<string, string> = {}
+): string {
   const eol = text.includes('\r\n') ? '\r\n' : '\n'
   const lines = text.length ? text.split(/\r?\n/) : []
   if (lines.length && lines[lines.length - 1] === '') lines.pop()
+  /** The "Config:" lines of a player block with this handler, or null. */
+  const configOf = (handler: string): string[] | null => {
+    for (let s = 0; s < lines.length; s++) {
+      if (!/^Player \d+ Input:\s*$/.test(lines[s])) continue
+      let e = s + 1
+      while (e < lines.length && (lines[e].startsWith(' ') || lines[e] === '')) e++
+      const body = lines.slice(s + 1, e)
+      const h = body.find((l) => /^ {2}Handler:/.test(l))
+      if (!h || h.replace(/^ {2}Handler:\s*/, '').trim() !== handler) continue
+      const c = body.findIndex((l) => /^ {2}Config:\s*$/.test(l))
+      if (c < 0) continue
+      let ce = c + 1
+      while (ce < body.length && body[ce].startsWith('    ')) ce++
+      // a full button list, not just the few keys Starstation wrote itself
+      if (ce - c - 1 > Object.keys(config).length + Object.keys(fresh).length) return body.slice(c + 1, ce)
+    }
+    return null
+  }
   players.forEach((pl, i) => {
     const head = `Player ${i + 1} Input:`
     const start = lines.findIndex((l) => l.trimEnd() === head)
     const block = [head, `  Handler: ${pl.Handler}`, `  Device: ${pl.Device}`]
     const keys = Object.entries(config)
-    if (keys.length) block.push('  Config:', ...keys.map(([k, val]) => `    ${k}: ${val}`))
+    const base = configOf(pl.Handler) ?? Object.entries(fresh).map(([k, val]) => `    ${k}: ${val}`)
+    const keyOf = (l: string) => /^ {4}([^:]+):/.exec(l)?.[1]
+    const merged = base.map((l) => (keyOf(l) && keyOf(l)! in config ? `    ${keyOf(l)}: ${config[keyOf(l)!]}` : l))
+    merged.push(...keys.filter(([k]) => !base.some((l) => keyOf(l) === k)).map(([k, val]) => `    ${k}: ${val}`))
+    if (merged.length) block.push('  Config:', ...merged)
     if (start < 0) {
       lines.push(...block)
       return

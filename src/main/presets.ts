@@ -34,7 +34,7 @@ export type ConfigStep =
    * A player whose handler changes loses its old button list, so RPCS3 uses its defaults for the new pad type.
    * config: buttons always set under "Config:" (e.g. the PS button left unbound: it belongs to Starstation's menu).
    */
-  | { type: 'yaml-players'; file: string; players: { Handler: string; Device: string }[]; upTo: string; config?: Record<string, string> }
+  | { type: 'yaml-players'; file: string; players: { Handler: string; Device: string }[]; upTo: string; config?: Record<string, string>; fresh?: Record<string, string> }
   /** Remove matching lines from every file with this extension under a folder (RetroArch's controller profiles). */
   | { type: 'strip-lines'; dir: string; ext: string; match: string }
 

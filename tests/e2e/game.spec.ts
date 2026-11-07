@@ -213,7 +213,7 @@ test('per-game graphics, CRT filter and patches; controller mapping follows the 
   const presets = makePresets(files, 1500, {
     extra: {
       shaderHint: true,
-      controls: [{ type: 'ini', file: '{emu}/controls.ini', set: { Pad1: { Cross: '{pad}/A' }, Hotkeys: { Screenshot: ['Keyboard/F12', '{padshot}', '{padshare}'] } } }],
+      controls: [{ type: 'ini', file: '{emu}/controls.ini', set: { Pad1: { Cross: '{pad}/A' }, Players: { Count: '{players}' }, Hotkeys: { Screenshot: ['Keyboard/F12', '{padshot}', '{padshare}'] } } }],
       graphics: { original: level('1'), enhanced: level('3'), max: level('6') },
       crt: { on: { args: ['--crt'] }, off: {} },
       patches: [
@@ -266,6 +266,15 @@ test('per-game graphics, CRT filter and patches; controller mapping follows the 
   expect(controls).toContain('Cross = SDL-0/A')
   expect(controls).toContain('Screenshot = SDL-0/Touchpad')
   expect(controls).toContain('Screenshot = SDL-0/Misc1')
+  expect(controls).toContain('Count = 1') // the wheel isn't a player
+
+  // 2026-11-07: two pads, started without choosing an order (○ "usual order"): player 2 is set up too
+  await api(page, 'reportPads', ['Xbox 360 Controller (XInput STANDARD GAMEPAD)', 'Xbox 360 Controller (XInput STANDARD GAMEPAD)'])
+  expect((await api<{ ok: boolean }>(page, 'launch', 'testcon:alpha.tst', 'fresh')).ok).toBe(true)
+  await waitIdle(page)
+  controls = fs.readFileSync(path.join(emu, 'controls.ini'), 'utf8')
+  expect(controls).toContain('Cross = XInput-0/A')
+  expect(controls).toContain('Count = 2')
   expect(JSON.parse(fs.readFileSync(path.join(emu, 'launched.json'), 'utf8'))).not.toContain('--crt')
   await app.close()
 })

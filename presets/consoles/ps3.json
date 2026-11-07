@@ -142,6 +142,10 @@
       "upTo": "{players}",
       "config": {
         "PS Button": "\"\""
+      },
+      "fresh": {
+        "Vendor ID": "1356",
+        "Product ID": "616"
       }
     }
   ],
