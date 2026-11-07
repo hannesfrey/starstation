@@ -237,6 +237,7 @@ The kept log (`rpcs3_20261107183640_…`) caught it: after 33 min of multiplayer
 - **Netplay:** lobby rooms are public data and become RetroArch arguments: address must be a host name / IP (no leading "-": `--appendconfig=…` would pass RetroArch options), port 1–65535, session plain id; refused rooms → message. A lobby entry with missing fields was a TypeError that emptied the whole room list → skipped. `settings.spec` lobby has `{}`, a half entry and a "--appendconfig" room.
 - **Downloads in memory:** GameBanana downloaded with `arrayBuffer()` (multi-GB texture packs → main process out of memory) and hashed with readFile → streamed (`emulators.download`, exported; length-checked) + streamed MD5. Updater `fetchInstaller` (230 MB) streamed to `.part`, "MZ" checked on disk, `.part` removed on failure. PS3 update download: the half-written file is closed when the connection breaks.
 - Tests: `safe.spec` rescue with no kept installer — downloaded from a fake server (2 MB, size checked); an HTML error page → no rescue, normal start, no file left.
+- Full e2e 57 passed (14 opt-in skipped), unit 77. Released: commit 307efca, tag `v2.0.16`, GitHub pre-release (beta); its packaged check passed.
 
 ## How to work on it
 
