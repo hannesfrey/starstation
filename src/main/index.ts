@@ -42,7 +42,7 @@ import { listScreenshots } from './screenshots'
 import { readBattery } from './battery'
 import { moveStats, reattachArtwork, setCustomArt } from './library/library'
 import { healthCheck } from './health'
-import { ensureScpServer, startScpServer } from './scp'
+import { checkDs3, installDs3Driver } from './ds3'
 import { exportReport } from './diagnostics'
 import { lastUnlockCheck, raLogin, raLogout, raStatus, recentUnlocks } from './retroach'
 import { listRooms, netplayArgs, netplayVars } from './netplay'
@@ -200,9 +200,14 @@ async function runCommand(command: string, arg?: string): Promise<void> {
     case 'rescan':
       scanAndArt()
       return
-    case 'start-scp': {
-      const r = await startScpServer()
-      notify(r.ok ? { kind: 'success', title: 'SCP Server started', detail: 'Your PS3 controller works now.' } : { kind: 'error', title: 'SCP Server not started', detail: r.error ?? '' })
+    case 'install-ds3-driver': {
+      notify({ kind: 'info', title: 'Installing the PS3 controller driver', detail: 'Windows asks for permission — choose Yes.' })
+      const r = await installDs3Driver()
+      notify(
+        r.ok
+          ? { kind: 'success', title: 'PS3 controller ready', detail: 'The driver is installed. Your controller works in Starstation and every game.' }
+          : { kind: r.cancelled ? 'warning' : 'error', title: 'PS3 controller driver not installed', detail: r.error ?? '', action: { label: 'Try again', command: 'install-ds3-driver' } }
+      )
       return
     }
     case 'install-emulator':
@@ -993,8 +998,6 @@ function startBatteryPolling(): void {
 }
 
 function registerHooks(): void {
-  // SCP Server closed since Starstation started? A PS3 controller would do nothing in the game
-  onBeforeLaunch(() => (HEADLESS && !process.env.STARSTATION_TEST_SCP ? undefined : ensureScpServer()))
   onBeforeLaunch(async (id) => {
     const g = getGame(id)
     if (!g) return
@@ -1133,8 +1136,8 @@ app.whenReady().then(async () => {
   win.webContents.once('did-finish-load', () => {
     setTimeout(() => scanAndArt(true), 50)
     startBatteryPolling()
-    // PS3 controller on the SCP driver: its server doesn't start with Windows, so Starstation starts it
-    if (!HEADLESS || process.env.STARSTATION_TEST_SCP) void ensureScpServer().catch((e) => log.warn('SCP server check failed', e))
+    // a PS3 controller needs a driver (Starstation brings it): offer it when one is plugged in
+    if (!HEADLESS || process.env.STARSTATION_TEST_DS3) watchDs3()
     startUpdater(notify)
     // Nexus Mods: nxm:// links open Starstation (only with an API key); a link it was started with
     registerNxm()
@@ -1149,6 +1152,29 @@ app.whenReady().then(async () => {
     })
   })
 })
+
+/** PS3 controller plugged in without its driver: offer to install it (once per plug-in). Checked every 20 s. */
+function watchDs3(): void {
+  let offered = false
+  const check = async () => {
+    if (runningGame()) return
+    const st = await checkDs3().catch(() => null)
+    if (!st) return
+    if (st.state !== 'needs-driver') offered = false
+    else if (!offered) {
+      offered = true
+      log.info(`PS3 controller connected without its driver (${st.service ?? 'none'})`)
+      notify({
+        kind: 'controller',
+        title: 'PS3 controller found',
+        detail: 'It needs a driver to work, and Starstation brings it. Windows will ask for permission once.',
+        action: { label: 'Install driver', command: 'install-ds3-driver' }
+      })
+    }
+  }
+  void check()
+  setInterval(() => void check(), 20_000).unref()
+}
 
 function quitAll(): void {
   stopRunning()

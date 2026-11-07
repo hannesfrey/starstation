@@ -52,8 +52,36 @@ const files = [
     sha256: 'a1aa7912168c9d1b05e611906bc21b8b9be3935822aead36d12a1da363150b7d',
     local: [path.resolve(import.meta.dirname, '..', 'tools', 'cache', 'mame-dl', 'mame0289b_x64.exe')],
     unpack7z: { 'chdman.exe': 'chdman.exe', COPYING: 'chdman-MAME-COPYING.txt' }
+  },
+  {
+    // DsHidMini v3.27.0 (Nefarius, BSD-3) — PS3 controller driver; a DualShock 3 can't work on Windows without one.
+    // Installed only when a PS3 controller is plugged in and the user agrees (Hannes OK'd, 2026-11-07).
+    // https://github.com/nefarius/DsHidMini/releases (setup-v3.27.0); also signature-checked below.
+    name: 'Nefarius_DsHidMini_Drivers_x64_arm64_v3.27.0.msi',
+    url: 'https://github.com/nefarius/DsHidMini/releases/download/setup-v3.27.0/Nefarius_DsHidMini_Drivers_x64_arm64_v3.27.0.msi',
+    sha256: '8887abd79aad3ba45b22d2d2050ebeaeb6da9eab18ede11c5464149e393f6410',
+    local: [path.resolve(import.meta.dirname, '..', 'tools', 'cache', 'dshidmini', 'dl', 'Nefarius_DsHidMini_Drivers_x64_arm64_v3.27.0.msi')],
+    signer: 'Nefarius Software Solutions'
+  },
+  {
+    // .NET 10.0.14 Desktop Runtime (Microsoft) — the DsHidMini setup stops without it; installed only if missing.
+    // URL + SHA-512 from Microsoft's release metadata (builds.dotnet.microsoft.com/dotnet/release-metadata/10.0/releases.json),
+    // SHA-512 337dacab…57b10b69 matched; pinned here by its SHA-256.
+    name: 'windowsdesktop-runtime-10.0.14-win-x64.exe',
+    url: 'https://builds.dotnet.microsoft.com/dotnet/WindowsDesktop/10.0.14/windowsdesktop-runtime-10.0.14-win-x64.exe',
+    sha256: '91c2795a7b1e2480caa83fce9514dc2e2d21e277d9a297311faba6040bad7330',
+    local: [path.resolve(import.meta.dirname, '..', 'tools', 'cache', 'dshidmini', 'rt', 'windowsdesktop-runtime-10.0.14-win-x64.exe')],
+    signer: 'Microsoft Corporation',
+    timeout: 300_000
   }
 ]
+
+/** Authenticode: valid and from the expected publisher (second check on top of the pinned hash). */
+const signedBy = (file, who) => {
+  const ps = path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
+  const out = execFileSync(ps, ['-NoProfile', '-Command', `$s = Get-AuthenticodeSignature -LiteralPath '${file}'; "$($s.Status)|$($s.SignerCertificate.Subject)"`], { encoding: 'utf8' }).trim()
+  return out.startsWith('Valid|') && out.includes(who)
+}
 
 const sha = (buf) => crypto.createHash('sha256').update(buf).digest('hex')
 
@@ -70,7 +98,7 @@ for (const f of files) {
   }
   let buf = null
   try {
-    const r = await fetch(f.url, { signal: AbortSignal.timeout(f.name.startsWith("mame") ? 600_000 : 30_000) })
+    const r = await fetch(f.url, { signal: AbortSignal.timeout(f.timeout ?? (f.name.startsWith("mame") ? 600_000 : 30_000)) })
     if (!r.ok) throw new Error(`HTTP ${r.status}`)
     buf = Buffer.from(await r.arrayBuffer())
   } catch (e) {
@@ -81,6 +109,10 @@ for (const f of files) {
   if (sha(buf) !== f.sha256) throw new Error(`${f.name}: sha256 mismatch (${sha(buf)}) — the official file may have been updated; check and re-pin`)
   fs.writeFileSync(dst, buf)
   console.log(`${f.name}: ${buf.length} bytes, sha256 verified`)
+  if (f.signer && !signedBy(dst, f.signer)) {
+    fs.rmSync(dst)
+    throw new Error(`${f.name}: not signed by ${f.signer}`)
+  }
   if (f.unzip) {
     const tmp = fs.mkdtempSync(path.join(bin, '.unzip-'))
     execFileSync(path.join(process.env.SystemRoot ?? 'C:\Windows', 'System32', 'tar.exe'), ['-xf', dst, '-C', tmp])
@@ -146,6 +178,10 @@ const [vMaj, vMin, vBld] = fileVersion(vcDst).split('.').map(Number)
 // electron-builder includes installer.nsh twice (installer + uninstaller): define once
 fs.writeFileSync(vcNsh, `; written by scripts/fetch-bin.mjs: version of the bundled build/vc_redist.x64.exe\n!ifndef VCREDIST_MINOR\n!define VCREDIST_MAJOR ${vMaj}\n!define VCREDIST_MINOR ${vMin}\n!define VCREDIST_BLD ${vBld}\n!endif\n`)
 console.log(`vc_redist.x64.exe: ${vMaj}.${vMin}.${vBld}, signed by Microsoft`)
+
+// the elevated PS3-controller driver setup script (native/ds3-driver.ps1) goes next to the driver installers
+fs.copyFileSync(path.resolve(import.meta.dirname, '..', 'native', 'ds3-driver.ps1'), path.join(bin, 'ds3-driver.ps1'))
+console.log('ds3-driver.ps1: copied')
 
 // ScreenScraper developer login (SPEC-v2: built into the installer so every PC gets manuals and clips).
 // Taken from Hannes's Files\config\secrets.json at build time; never committed (resources/extra/*.json is ignored).

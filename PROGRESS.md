@@ -104,6 +104,14 @@ Read SPEC.md first. This file tracks where the build stands and every small deci
 - Health check: "PS3 controller: SCP Server isn't running" + Start SCP Server.
 - Tests: unit `scp.test.ts`, e2e `scp.spec.ts` (fake driver state), opt-in real test `scp-real.spec.ts` (`STARSTATION_REAL_SCP=1`, ScpServer closed first): passed on Hannes's PC — found the server, started it, Xbox 360 pad back.
 
+### 2.0.3 — PS3 controllers on any PC (2026-11-07)
+
+- **Hannes's rule (standing):** "this system need to work on any pc so the programs that starstation uses need to be within starstation" → 2.0.2's "start the user's own ScpServer" is removed. Audit of other outside programs: none (bundled tools, Windows built-ins; EmuDeck import and Add to Steam are optional extras).
+- **Decision (Hannes, 2026-11-07):** bundle **DsHidMini** (Nefarius, BSD-3, official GitHub release setup-v3.27.0, signed MSI, pinned SHA-256). A DualShock 3 can't work on stock Windows (SDL itself says the stock driver can't initialise it), so a driver install is unavoidable; it is the one thing outside Files\. The DsHidMini setup stops without **.NET 10 Desktop Runtime** → Microsoft's 10.0.14 installer is bundled too (URL + SHA-512 from Microsoft's release metadata, Authenticode "Microsoft Corporation"), installed only if missing. Installer grows by ~82 MB.
+- **Flow** (`src/main/ds3.ts`, `native/ds3-driver.ps1` → `resources\bin`): every 20 s (not while a game runs) `pnputil /enum-devices /connected` + `reg query …\Enum\<id> /v Service` → a PS3 controller (VID_054C&PID_0268) not on `dshidmini` → notice "PS3 controller found · Install driver" + Health check entry. Install = one elevated PowerShell (Start-Process -Verb RunAs, 1223 = user said no): closes ScpServer/ScpService, .NET runtime if missing (`/install /quiet /norestart`), `msiexec /i … /qn /norestart ADDLOCAL=DsHidMini20Drivers` (no Bluetooth part, no web page), then any connected PS3 pad still on another driver (Hannes: SCP WinUSB `oem13.inf`, Scarlet.Crush) gets that driver package removed (`pnputil /delete-driver /uninstall /force`) and devices rescanned. Logs: `config\logs\ds3-driver.log` + `ds3-driver-msi.log`; result `config\controllers\ds3-install.json`. DsHidMini's default mode is XInput (Xbox controller to every emulator), so presets don't change.
+- MSI facts (read from its tables): installs to Program Files\Nefarius Software Solutions\DsHidMini (driver, ControlApp, nefconc, an updater it registers), upgrades in place, uninstall via Apps.
+- Tests: unit `ds3.test.ts`, e2e `ds3.spec.ts` (Windows prompt faked: refused → offered again; accepted → ready). Real detection on Hannes's PC: `needs-driver (WinUSB)`. Script parse-checked and dry-run unelevated. **Real install needs Hannes to press Yes in Windows' prompt** (2.0.3 → notice → Install driver).
+
 ## How to work on it
 
 - Open a PowerShell, `. .\env.ps1` (portable Node/gh, caches in `tools\`).

@@ -12,6 +12,16 @@ export interface WhatsNew {
 
 export const WHATS_NEW: WhatsNew[] = [
   {
+    version: '2.0.3',
+    summary: ['PS3 controllers work on any PC: Starstation brings their driver and installs it when you plug one in'],
+    details: [
+      'A PS3 controller needs a driver on Windows (PS4, PS5 and Xbox controllers don’t). Starstation now brings it: DsHidMini by Nefarius.',
+      'Plug in a PS3 controller and choose Install driver. Windows asks for permission once; after that the controller works in Starstation and every game.',
+      'Controllers set up with the old SCP driver are moved over to the new one, and SCP Server isn’t needed any more.',
+      'Settings → Health check shows it when a PS3 controller still needs its driver.'
+    ]
+  },
+  {
     version: '2.0.2',
     summary: ['PS3 controllers on the SCP driver work right after a restart: Starstation starts SCP Server for you'],
     details: [
