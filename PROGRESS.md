@@ -219,6 +219,7 @@ The kept log (`rpcs3_20261107183640_…`) caught it: after 33 min of multiplayer
 - store: a damaged file is reported and copied to `.broken` once per session (secrets.json is read on every menu update); writing it resets that.
 - What's new 2.0.14 also mentions the Health check fix from 2.0.13 (people coming from 2.0.12 only see the 2.0.14 entry).
 - Tests: unit 73, e2e 54 passed (13 opt-in skipped).
+- Released: commit d266513, tag `v2.0.14`, GitHub pre-release (beta).
 
 ## How to work on it
 
