@@ -75,6 +75,8 @@ export function PlayerAssign({ title, max, onDone }: { title: string; max: numbe
     return () => {
       window.clearInterval(timer)
       window.removeEventListener('keydown', key)
+      // gone without an answer: the start is called off (a start left waiting would block every later one)
+      finish('cancel')
     }
   }, [max, onDone])
 

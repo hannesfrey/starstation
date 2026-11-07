@@ -291,7 +291,7 @@ async function installPs3Firmware(): Promise<void> {
   const ps3 = getConsole('ps3')
   const e = ps3 ? getEmulator(ps3.emulator) : undefined
   if (!ps3 || !e || !fs.existsSync(emulatorExe(e))) {
-    notify({ kind: 'error', title: 'RPCS3 is not installed', detail: 'Install it in Settings → Emulators first.' })
+    notify({ kind: 'error', title: 'RPCS3 is not installed', detail: 'Install it in Settings → Games & emulators → Emulators first.' })
     return
   }
   const choice = await dialog.showMessageBox(win!, {
@@ -1192,7 +1192,7 @@ async function start(): Promise<void> {
     startBatteryPolling()
     // a PS3 controller needs a driver (Starstation brings it): offer it when one is plugged in
     if (!HEADLESS || process.env.STARSTATION_TEST_DS3) watchDs3()
-    startUpdater(notify)
+    startUpdater(notify, () => !!runningGame())
     // Nexus Mods: nxm:// links open Starstation (only with an API key); a link it was started with
     registerNxm()
     const startNxm = nxmFromArgs(process.argv)

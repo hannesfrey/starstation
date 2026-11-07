@@ -275,10 +275,14 @@ async function seedDifferential(): Promise<void> {
   log.info(`installer ${version()} ready for smaller updates`)
 }
 
-export function startUpdater(notify: (n: Omit<Notice, 'id'>) => void): void {
+export function startUpdater(notify: (n: Omit<Notice, 'id'>) => void, busy: () => boolean = () => false): void {
   if (!app.isPackaged || HEADLESS) return
   void seedDifferential().catch((e) => log.warn('could not prepare smaller updates', e))
   setTimeout(() => void checkNow(notify), 8000)
+  // left running like a console for days: look again every 6 hours (not during a game)
+  setInterval(() => {
+    if (!busy()) void checkNow(notify)
+  }, 6 * 3600_000).unref()
   setTimeout(
     () =>
       void fetchInstaller(version())

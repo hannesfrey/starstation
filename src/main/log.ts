@@ -4,12 +4,16 @@ import { dir } from './paths'
 
 type Level = 'info' | 'warn' | 'error'
 let file: string | null = null
+let day = ''
 
+/** One log per day; a Starstation left running past midnight moves on to the new day's file. */
 function logFile(): string {
-  if (!file) {
+  const today = new Date().toISOString().slice(0, 10)
+  if (!file || today !== day) {
+    day = today
     const d = dir('config', 'logs')
     fs.mkdirSync(d, { recursive: true })
-    file = path.join(d, `starstation-${new Date().toISOString().slice(0, 10)}.log`)
+    file = path.join(d, `starstation-${today}.log`)
     pruneOldLogs(d)
   }
   return file

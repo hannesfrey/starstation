@@ -56,6 +56,9 @@ test('themes, TV mode, wallpapers, video preview, power menu', async () => {
     await expect(page.getByTestId('game-video')).toHaveCount(1, { timeout: 5000 })
     // switched off in Settings → Theme & display: no clip
     await page.getByTestId('cat-settings').dispatchEvent('click')
+    await scrollTo(page, 'item-look') // Settings → Look & feel → Theme & display
+    await page.getByTestId('item-look').dispatchEvent('click')
+    await page.keyboard.press('Enter')
     await page.getByTestId('item-display-theme').dispatchEvent('click')
     await page.keyboard.press('Enter')
     await page.getByTestId('pitem-video').dblclick()
@@ -98,6 +101,9 @@ test('accessibility: text size and moved menu buttons; system settings open with
   try {
     await expect(page.getByTestId('xmb')).toBeVisible()
     await page.getByTestId('cat-settings').dispatchEvent('click')
+    await scrollTo(page, 'item-look') // Settings → Look & feel → Accessibility
+    await page.getByTestId('item-look').dispatchEvent('click')
+    await page.keyboard.press('Enter')
     await scrollTo(page, 'item-access')
     await page.getByTestId('item-access').dispatchEvent('click')
     await page.keyboard.press('Enter')
@@ -116,6 +122,7 @@ test('accessibility: text size and moved menu buttons; system settings open with
     await expect(page.getByTestId('pitem-map-confirm')).toContainText('✕')
     await page.keyboard.press('Escape')
     // System: sound, screen, Bluetooth panels open (in hidden tests there is no helper: empty lists)
+    await page.keyboard.press('Home') // back to the top of Settings (out of Look & feel)
     await scrollTo(page, 'item-system')
     await page.getByTestId('item-system').dispatchEvent('click')
     await page.keyboard.press('Enter')

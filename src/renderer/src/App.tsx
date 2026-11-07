@@ -405,16 +405,20 @@ export function App() {
     if (id === 'bluetooth') void api.sysBluetooth(false).then((bt) => setExtra((x) => ({ ...x, sys: { ...x.sys, bt } })))
     if (id === 'storage') {
       setExtra((x) => ({ ...x, storage: undefined }))
-      void api.storage(true).then((storage) => setExtra((x) => ({ ...x, storage })))
+      void api
+        .storage(true)
+        .then((storage) => setExtra((x) => ({ ...x, storage })))
+        // never a screen that waits forever: an empty list (the log has the reason)
+        .catch(() => setExtra((x) => ({ ...x, storage: { consoles: [], backups: 0, free: 0, total: 0 } })))
     }
     if (id === 'compress' && arg) void loadDetails(arg)
     if (id === 'health') {
       setExtra((x) => ({ ...x, health: undefined }))
       void api
-      .health()
-      .then((health) => setExtra((x) => ({ ...x, health })))
-      // never a screen that waits forever
-      .catch((e: Error) => setExtra((x) => ({ ...x, health: [{ severity: 'error', title: 'The health check could not finish', detail: e.message }] })))
+        .health()
+        .then((health) => setExtra((x) => ({ ...x, health })))
+        // never a screen that waits forever
+        .catch((e: Error) => setExtra((x) => ({ ...x, health: [{ severity: 'error', title: 'The health check could not finish', detail: e.message }] })))
     }
     if (id === 'controllers') {
       const p = [...(navigator.getGamepads ? navigator.getGamepads() : [])].find((x): x is Gamepad => !!x && x.connected && isMenuPad(x))
@@ -438,7 +442,10 @@ export function App() {
     }
     if (id === 'import') {
       setExtra((x) => (x.importing ? x : { ...x, importSources: undefined, importResult: undefined, importProgress: undefined }))
-      api.importScan().then((importSources) => setExtra((x) => ({ ...x, importSources })))
+      api
+        .importScan()
+        .then((importSources) => setExtra((x) => ({ ...x, importSources })))
+        .catch(() => setExtra((x) => ({ ...x, importSources: [] })))
     }
   }, [loadDetails])
 
@@ -450,7 +457,11 @@ export function App() {
   }, [])
   const runImport = useCallback((index: number) => {
     setExtra((x) => ({ ...x, importing: true, importResult: undefined }))
-    api.importRun(index).then((importResult) => setExtra((x) => ({ ...x, importing: false, importResult })))
+    api
+      .importRun(index)
+      .then((importResult) => setExtra((x) => ({ ...x, importing: false, importResult })))
+      // a failed import must not leave the screen "importing" forever (and block another try)
+      .catch((e: Error) => setExtra((x) => ({ ...x, importing: false, importResult: { ok: false, copied: 0, moved: 0, conflicts: [], errors: [e.message] } })))
   }, [])
 
   const applyCollections = useCallback((collections: AppState['collections']) => setState((s) => (s ? { ...s, collections } : s)), [])

@@ -15,8 +15,14 @@ const api = <T>(page: Page, fn: string, ...args: unknown[]) =>
   ) as Promise<T>
 const NODE = path.join(SOURCE, 'tools', 'node', 'node.exe')
 /** Home → Settings column, then ↓ until the item is selected, then ✕. */
-async function openSetting(page: Page, key: string): Promise<void> {
-  await page.keyboard.press('Home')
+/** Settings entries that sit in a group folder (2.0.15). */
+const GROUP: Record<string, string> = {
+  'display-theme': 'look', graphics: 'look', access: 'look', display: 'look',
+  library: 'games', emulators: 'games', storage: 'games', modsources: 'games', import: 'games',
+  ra: 'online', netplay: 'online', steam: 'online', packages: 'online',
+  health: 'help', diagnostics: 'help', safe: 'help'
+}
+async function selectAndEnter(page: Page, key: string): Promise<void> {
   for (let i = 0; i < 20; i++) await page.keyboard.press('ArrowUp')
   for (let i = 0; i < 20; i++) {
     if (await page.locator(`[data-testid="item-${key}"].active`).count()) break
@@ -24,6 +30,11 @@ async function openSetting(page: Page, key: string): Promise<void> {
   }
   if (!(await page.locator(`[data-testid="item-${key}"].active`).count())) throw new Error(`setting ${key} not found`)
   await page.keyboard.press('Enter')
+}
+async function openSetting(page: Page, key: string): Promise<void> {
+  await page.keyboard.press('Home')
+  if (GROUP[key]) await selectAndEnter(page, GROUP[key])
+  await selectAndEnter(page, key)
 }
 const TAR = path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'tar.exe')
 

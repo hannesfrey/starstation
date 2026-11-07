@@ -40,7 +40,7 @@ export function parseNxm(url: string): { domain: string; mod: number; file: numb
 
 async function nexus<T>(p: string): Promise<T> {
   const key = nexusKey()
-  if (!key) throw new Error('Add your Nexus Mods API key to secrets.json first (Settings → Mods sources).')
+  if (!key) throw new Error('Add your Nexus Mods API key to secrets.json first (Settings → Games & emulators → Mod sources).')
   const r = await net.fetch(`${API()}${p}`, {
     signal: AbortSignal.timeout(30_000),
     headers: { apikey: key, 'Application-Name': 'Starstation', 'Application-Version': app.getVersion(), Accept: 'application/json' }

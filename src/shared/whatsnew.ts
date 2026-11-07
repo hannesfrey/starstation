@@ -12,6 +12,17 @@ export interface WhatsNew {
 
 export const WHATS_NEW: WhatsNew[] = [
   {
+    version: '2.0.15',
+    summary: ['Settings is shorter: ten entries, the rest grouped inside them', 'The PS button menu listens to the player who pressed PS'],
+    details: [
+      'Settings now has General, Look & feel, Consoles, Controllers, Games & emulators, Online & sharing, System, Help, About and Power. Nothing was taken away: the other settings are inside these.',
+      'When the PS button menu opens it looks for the controller still holding PS and listens only to that one, so other players can’t move it. If it can’t tell (a very quick tap), every controller works as before.',
+      'Starstation looks for its own updates every 6 hours too, not only when it starts.',
+      'A failed EmuDeck import, storage overview or package transfer shows what happened instead of waiting forever.',
+      'Before a new version is published, the finished program is now started and checked automatically.'
+    ]
+  },
+  {
     version: '2.0.14',
     summary: ['More small fixes so nothing gets stuck'],
     details: [

@@ -101,9 +101,21 @@ export function buildColumns(state: AppState, h: ModelHandlers, shots: Screensho
       ...(state.info.safeMode
         ? [{ key: 'safe-leave', label: 'Leave safe mode', sub: 'Mods, settings and game choices come back', icon: 'health' as const, kind: 'action' as const, run: () => h.openPanel('safe-mode') }]
         : []),
+      // grouped (2.0.15, Hannes: "compact and easy to use"): ten entries instead of two dozen; every setting is still here
       { key: 'general', label: 'General', sub: 'Fullscreen, sounds, empty consoles, button icons', icon: 'settings', kind: 'action', run: () => h.openPanel('general') },
-      { key: 'display-theme', label: 'Theme & display', sub: 'Colours, TV mode, video previews, wallpapers', icon: 'display', kind: 'action', run: () => h.openPanel('display') },
-      { key: 'graphics', label: 'Graphics', sub: 'Default graphics level and CRT filter', icon: 'display', kind: 'action', run: () => h.openPanel('graphics') },
+      {
+        key: 'look',
+        label: 'Look & feel',
+        sub: 'Theme, graphics, text size, fullscreen',
+        icon: 'display',
+        kind: 'folder',
+        children: () => [
+          { key: 'display-theme', label: 'Theme & display', sub: 'Colours, TV mode, video previews, wallpapers', icon: 'display', kind: 'action' as const, run: () => h.openPanel('display') },
+          { key: 'graphics', label: 'Graphics', sub: 'Default graphics level and CRT filter', icon: 'display', kind: 'action' as const, run: () => h.openPanel('graphics') },
+          { key: 'access', label: 'Accessibility', sub: 'Text size, menu buttons', icon: 'info', kind: 'action' as const, run: () => h.openPanel('accessibility') },
+          { key: 'display', label: 'Fullscreen', sub: 'Switch between window and fullscreen', icon: 'display', kind: 'action' as const, run: () => h.toggleFullscreen() }
+        ]
+      },
       {
         key: 'consoles',
         label: 'Consoles',
@@ -132,49 +144,46 @@ export function buildColumns(state: AppState, h: ModelHandlers, shots: Screensho
       },
       { key: 'controllers', label: 'Controllers', sub: 'One mapping for every emulator · test buttons', icon: 'controller', kind: 'action', run: () => h.openPanel('controllers') },
       {
-        key: 'emulators',
-        label: 'Emulators',
-        sub: 'Installed versions and updates',
+        key: 'games',
+        label: 'Games & emulators',
+        sub: `${library.games.length} games · emulators, storage, mods`,
         icon: 'emulator',
-        kind: 'action',
-        run: () => h.openPanel('emulators')
+        kind: 'folder',
+        children: () => [
+          { key: 'library', label: 'Library', sub: `${library.games.length} games`, icon: 'library', kind: 'action' as const, run: () => h.openPanel('library') },
+          { key: 'emulators', label: 'Emulators', sub: 'Installed versions and updates', icon: 'emulator', kind: 'action' as const, run: () => h.openPanel('emulators') },
+          { key: 'storage', label: 'Storage', sub: 'Disk space per console', icon: 'library', kind: 'action' as const, run: () => h.openPanel('storage') },
+          { key: 'modsources', label: 'Mod sources', sub: 'GameBanana, Nexus Mods, patch collections', icon: 'package', kind: 'action' as const, run: () => h.openPanel('mod-sources') },
+          { key: 'import', label: 'Import from EmuDeck', sub: 'Bring emulators, BIOS, saves and games over', icon: 'package', kind: 'action' as const, run: () => h.openPanel('import') }
+        ]
       },
       {
-        key: 'import',
-        label: 'Import from EmuDeck',
-        sub: 'Bring emulators, BIOS, saves and games over',
-        icon: 'package',
-        kind: 'action',
-        run: () => h.openPanel('import')
+        key: 'online',
+        label: 'Online & sharing',
+        sub: 'RetroAchievements, netplay, Steam, packages',
+        icon: 'network',
+        kind: 'folder',
+        children: () => [
+          { key: 'ra', label: 'RetroAchievements', sub: 'Log in once for all emulators', icon: 'trophy', kind: 'action' as const, run: () => h.openPanel('retroachievements') },
+          { key: 'netplay', label: 'Netplay', sub: `Play online as "${settings.netplayNickname}"`, icon: 'network', kind: 'action' as const, run: () => h.openPanel('netplay-settings') },
+          { key: 'steam', label: 'Steam', sub: 'Add Starstation to Steam for Big Picture mode', icon: 'steam', kind: 'action' as const, run: () => h.openPanel('steam') },
+          { key: 'packages', label: 'Packages', sub: 'Send or receive a whole setup', icon: 'package', kind: 'action' as const, run: () => h.openPanel('packages') }
+        ]
       },
-      {
-        key: 'library',
-        label: 'Library',
-        sub: `${library.games.length} games`,
-        icon: 'library',
-        kind: 'action',
-        run: () => h.openPanel('library')
-      },
-      { key: 'modsources', label: 'Mod sources', sub: 'GameBanana, Nexus Mods, patch collections', icon: 'package', kind: 'action', run: () => h.openPanel('mod-sources') },
       { key: 'system', label: 'System', sub: 'Sound output, screen, Bluetooth controllers', icon: 'display', kind: 'action', run: () => h.openPanel('system') },
-      { key: 'access', label: 'Accessibility', sub: 'Text size, menu buttons', icon: 'info', kind: 'action', run: () => h.openPanel('accessibility') },
-      { key: 'storage', label: 'Storage', sub: 'Disk space per console', icon: 'library', kind: 'action', run: () => h.openPanel('storage') },
-      { key: 'health', label: 'Health check', sub: 'Emulators, BIOS, broken games, disk space', icon: 'health', kind: 'action', run: () => h.openPanel('health') },
-      { key: 'ra', label: 'RetroAchievements', sub: 'Log in once for all emulators', icon: 'trophy', kind: 'action', run: () => h.openPanel('retroachievements') },
-      { key: 'netplay', label: 'Netplay', sub: `Play online as "${settings.netplayNickname}"`, icon: 'network', kind: 'action', run: () => h.openPanel('netplay-settings') },
-      { key: 'steam', label: 'Steam', sub: 'Add Starstation to Steam for Big Picture mode', icon: 'steam', kind: 'action', run: () => h.openPanel('steam') },
-      { key: 'packages', label: 'Packages', sub: 'Send or receive a whole setup', icon: 'package', kind: 'action', run: () => h.openPanel('packages') },
-      { key: 'diagnostics', label: 'Diagnostics', sub: 'Export a report with logs and settings', icon: 'info', kind: 'action', run: () => h.openPanel('diagnostics') },
-      ...(state.info.safeMode
-        ? []
-        : [{ key: 'safe', label: 'Start in safe mode', sub: 'Without mods, themes and custom settings', icon: 'health' as const, kind: 'action' as const, run: () => h.openPanel('safe-mode') }]),
       {
-        key: 'display',
-        label: 'Fullscreen',
-        sub: 'Switch between window and fullscreen',
-        icon: 'display',
-        kind: 'action',
-        run: () => h.toggleFullscreen()
+        key: 'help',
+        label: 'Help',
+        sub: 'Health check, diagnostics, safe mode',
+        icon: 'health',
+        kind: 'folder',
+        children: () => [
+          { key: 'health', label: 'Health check', sub: 'Emulators, BIOS, broken games, disk space', icon: 'health', kind: 'action' as const, run: () => h.openPanel('health') },
+          { key: 'diagnostics', label: 'Diagnostics', sub: 'Export a report with logs and settings', icon: 'info', kind: 'action' as const, run: () => h.openPanel('diagnostics') },
+          ...(state.info.safeMode
+            ? []
+            : [{ key: 'safe', label: 'Start in safe mode', sub: 'Without mods, themes and custom settings', icon: 'health' as const, kind: 'action' as const, run: () => h.openPanel('safe-mode') }])
+        ]
       },
       {
         key: 'about',

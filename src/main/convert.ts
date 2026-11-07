@@ -118,7 +118,7 @@ export async function installPkg(file: string, trash: Trash): Promise<Note> {
   if (head.toString('latin1') !== '\x7fPKG') return { kind: 'warning', title: `${name} is not a PS3 package`, detail: 'It was left where it is.' }
   const ps3 = getConsole('ps3')
   const e = ps3 ? getEmulator(ps3.emulator) : undefined
-  if (!e || !fs.existsSync(emulatorExe(e))) return { kind: 'error', title: `${name} was not installed`, detail: 'Install RPCS3 first (Settings → Emulators), then add the package again.' }
+  if (!e || !fs.existsSync(emulatorExe(e))) return { kind: 'error', title: `${name} was not installed`, detail: 'Install RPCS3 first (Settings → Games & emulators → Emulators), then add the package again.' }
   const { code, changed } = await rpcs3InstallPkg(file)
   if (!changed.length) {
     log.warn(`RPCS3 --installpkg ${name}: code ${code}, nothing installed`)

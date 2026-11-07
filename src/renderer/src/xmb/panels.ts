@@ -457,7 +457,7 @@ export function buildPanel(id: string, arg: string | undefined, state: AppState,
         id,
         title: `Play online · ${g.title}`,
         items: [
-          { key: 'name', label: `You play as "${s.netplayNickname}" (change it in Settings → Netplay).`, info: true },
+          { key: 'name', label: `You play as "${s.netplayNickname}" (change it in Settings → Online & sharing → Netplay).`, info: true },
           { key: 'host', label: 'Host a game', value: 'others join you', run: () => h.playOnline(g, { host: true }) },
           { key: 'join', label: 'Join a game…', run: () => (h.loadRooms(g), 'keep') }
         ]
@@ -591,7 +591,7 @@ export function buildPanel(id: string, arg: string | undefined, state: AppState,
       const code = p?.code ?? x.pkg.code
       if (code && p?.phase !== 'done') {
         items.push({ key: 'code', label: `Code: ${code}`, info: true })
-        items.push({ key: 'how', label: 'On the other PC: Settings → Packages → Receive package → Enter code.', info: true })
+        items.push({ key: 'how', label: 'On the other PC: Settings → Online & sharing → Packages → Receive package → Enter code.', info: true })
       }
       if (p) items.push({ key: 'phase', label: `${label[p.phase]}${p.phase === 'done' || p.phase === 'error' ? '' : ` · ${Math.round(p.pct * 100)}%`}`, info: true })
       if (p?.detail) items.push({ key: 'detail', label: p.detail, info: true })
@@ -684,7 +684,7 @@ export function buildPanel(id: string, arg: string | undefined, state: AppState,
         items: [
           { key: 'msg', label: 'Box art and screenshots for your games come from libretro (free, no account).', info: true },
           { key: 'now', label: 'Download artwork now', run: () => (h.wizardFinish(true), 'keep') },
-          { key: 'later', label: 'Later', value: 'Settings → Library', run: () => (h.wizardFinish(false), 'keep') }
+          { key: 'later', label: 'Later', value: 'Settings → Games & emulators → Library', run: () => (h.wizardFinish(false), 'keep') }
         ]
       }
     case 'licenses':

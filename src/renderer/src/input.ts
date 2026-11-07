@@ -44,6 +44,18 @@ export function isMenuPad(p: Gamepad): boolean {
   return p.mapping === 'standard' || p.buttons.length >= 10
 }
 
+/** Standard mapping: the Guide / PS / Home button. */
+export const GUIDE = 16
+
+/**
+ * The controller holding the PS / Guide button right now: the one that opened the PS button menu.
+ * Only when exactly one is holding it (never a guess); null otherwise.
+ */
+export function guideHolder(pads: readonly (Gamepad | null)[]): number | null {
+  const holding = pads.filter((p): p is Gamepad => !!p && p.connected && isMenuPad(p) && !!p.buttons[GUIDE]?.pressed)
+  return holding.length === 1 ? holding[0].index : null
+}
+
 // Standard mapping button indices
 const BTN: Record<number, Action> = {
   0: 'confirm',
@@ -105,7 +117,14 @@ export class InputManager {
   private enabled = true
   private known = new Map<number, string>()
   private text: ((ch: string) => void) | null = null
+  /** PS button menu: only this controller drives it (null = every controller). */
+  private onlyPad: number | null = null
   lastKind: PadKind | null = null
+
+  /** Only this controller's buttons count (the player who opened the PS button menu); null = all again. */
+  setOnlyPad(index: number | null): void {
+    this.onlyPad = index
+  }
 
   start(): void {
     window.addEventListener('keydown', this.onKey)
@@ -252,6 +271,7 @@ export class InputManager {
     const pressed = new Set<string>()
     for (const p of pads) {
       if (!p || !p.connected || !isMenuPad(p)) continue
+      if (this.onlyPad !== null && p.index !== this.onlyPad) continue
       p.buttons.forEach((b, i) => {
         const a = buttons[i]
         if (a && (b.pressed || b.value > 0.6)) pressed.add(`${p.index}:${a}`)

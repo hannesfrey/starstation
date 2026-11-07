@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from './api'
-import { input, isMenuPad, padName } from './input'
+import { guideHolder, input, isMenuPad, padName } from './input'
 import { sfx } from './sound'
 import type { OverlayAction, OverlayState } from '../../shared/types'
 
@@ -42,8 +42,28 @@ export function Overlay() {
   useEffect(() => {
     document.documentElement.classList.add('overlay-page')
     void api.overlayState().then(setState)
+    // only the player who pressed PS drives the menu: the controller still holding PS as it appears.
+    // Not seen (a very short tap) → every controller, as before; never a guess.
+    let watch = 0
+    const findOpener = () => {
+      window.clearInterval(watch)
+      const until = performance.now() + 800
+      watch = window.setInterval(() => {
+        const who = guideHolder(navigator.getGamepads ? navigator.getGamepads() : [])
+        if (who !== null) input.setOnlyPad(who)
+        if (who !== null || performance.now() > until) window.clearInterval(watch)
+      }, 16)
+    }
     const off = api.on('overlay', (s) => {
-      if (s.open && !stateRef.current?.open) openedAt.current = performance.now()
+      if (s.open && !stateRef.current?.open) {
+        openedAt.current = performance.now()
+        input.setOnlyPad(null)
+        findOpener()
+      }
+      if (!s.open) {
+        window.clearInterval(watch)
+        input.setOnlyPad(null)
+      }
       setState(s)
       if (s.open) {
         setRow(0)
@@ -55,6 +75,7 @@ export function Overlay() {
     input.start()
     return () => {
       off()
+      window.clearInterval(watch)
       input.stop()
     }
   }, [])

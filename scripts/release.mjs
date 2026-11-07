@@ -21,6 +21,9 @@ const notes = process.argv.slice(2).join(' ') || `Beta ${version}. On the tester
 run('node', ['scripts/fetch-bin.mjs'])
 run('npx', ['electron-vite', 'build'])
 run('npx', ['electron-builder', '--win', '--publish', 'never'])
+// the packaged program must start (hidden) before anything is uploaded: a file left out of the installer
+// would otherwise only show on the PCs that update
+run('npx', ['playwright', 'test', 'packaged'], { env: { ...process.env, STARSTATION_REQUIRE_PACKAGED: '1' } })
 
 const exeName = `Starstation-Setup-${version}.exe`
 const exe = path.join(SOURCE, 'release', exeName)

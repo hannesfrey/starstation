@@ -39,6 +39,10 @@ test('import copies and verifies everything, then moves only games', async () =>
 
   await page.getByTestId('cat-settings').dispatchEvent('click')
   // further down the Settings list: move there first (only items near the selection are drawn)
+  for (let i = 0; i < 30 && !(await page.getByTestId('item-games').count()); i++) await page.keyboard.press('ArrowDown')
+  // Settings → Games & emulators → Import from EmuDeck
+  await page.getByTestId('item-games').click()
+  await page.keyboard.press('Enter')
   for (let i = 0; i < 30 && !(await page.getByTestId('item-import').count()); i++) await page.keyboard.press('ArrowDown')
   await page.getByTestId('item-import').click()
   await page.keyboard.press('Enter')

@@ -4,11 +4,11 @@ Read SPEC.md first. This file tracks where the build stands and every small deci
 
 ## Current state
 
-- **Phase:** v2 done. Latest beta: **2.0.14** (2026-11-07: 2.0.13 trophies removed + reliability round, 2.0.14 follow-ups). v1.0.0 is still what everyone else gets; only Hannes presses "Release to everyone".
+- **Phase:** v2 done. Latest beta: **2.0.15** (2026-11-07: 2.0.13 trophies removed + reliability round, 2.0.14 follow-ups, 2.0.15 compact Settings + PS menu per player). v1.0.0 is still what everyone else gets; only Hannes presses "Release to everyone".
 - **Earlier sessions (2026-11-07):** 2.0.10 player 2 from the first start (padVars count + RPCS3 new pad copies player 1's Config, fresh = VID 1356/PID 616); 2.0.11 RPCS3 "Exclusive Fullscreen Mode": "Disable" + emulator-refused settings logged; 2.0.12 PS3 game updates from Sony (`src/main/ps3updates.ts`, `formats/ps3update.ts`, panel 'ps3-update'). Black Ops II updated for real to 01.19. Gran Turismo 6 (BCUS98296) still 01.00: 21 updates / 11.2 GB offered at its next start.
-- **Waiting on Hannes:** restart Starstation to get 2.0.14 (also brings 2.0.12 and 2.0.13); play BO2 to see if the freezes are gone (earlier crash = RPCS3 stall tripping the game's own 30 s hang watchdog, not Starstation). If it crashes again: read `Files\config\logs\emulators` (RPCS3 log is kept).
+- **Waiting on Hannes:** restart Starstation to get 2.0.15 (also brings 2.0.12–2.0.14); check the PS menu with two players (only the one who pressed PS should move it) and the new Settings groups; play BO2 to see if the freezes are gone (earlier crash = RPCS3 stall tripping the game's own 30 s hang watchdog, not Starstation). If it crashes again: read `Files\config\logs\emulators` (RPCS3 log is kept).
 - **Still open:** DsHidMini driver install on a real DS3; real-pad check of the PS button; MK7 Mii + 3DS controller check.
-- **Reliability round, part 2 (Hannes asked for this session + half the next):** still to look at — checked in 2.0.14: packages receive, compress, Steam writer, custom consoles. Still open: renderer `api.x().then` calls without `.catch` (only logged now), overlay input from other players beyond the first 400 ms (only the pad that pressed PS should drive the menu: needs the helper to map XInput slots to Gamepad API indices).
+- **Reliability round, part 2 (Hannes asked for this session + half the next):** done in 2.0.14–2.0.15: packages receive, compress, Steam writer, custom consoles, stuck screens (health, storage, import, packages, player screen), PS menu per player (ground truth only), packaged-build check before every release. Still open: the remaining renderer `api.x().then` calls without `.catch` are one-shot loads (only logged on failure); a real two-pad check of the PS menu lock.
 - **Release routine:** bump package.json + whatsnew.ts entry → tests (`npx vitest run`, `npx playwright test`) → commit → `git tag vX` → push tag → `node scripts/release.mjs "<notes>"` (beta pre-release) → note "Released: commit …" here and push.
 - **Allowed download sources** (Hannes): emudeck.com, emulators' official GitHub/sites, Sony PS3 firmware page, and (2026-11-07) Sony's PS3 game-update server.
 
@@ -220,6 +220,15 @@ The kept log (`rpcs3_20261107183640_…`) caught it: after 33 min of multiplayer
 - What's new 2.0.14 also mentions the Health check fix from 2.0.13 (people coming from 2.0.12 only see the 2.0.14 entry).
 - Tests: unit 73, e2e 54 passed (13 opt-in skipped).
 - Released: commit d266513, tag `v2.0.14`, GitHub pre-release (beta).
+
+### 2.0.15 — compact Settings, PS menu per player, release check (2026-11-07)
+
+- **Settings grouped** (Hannes: "compact and easy to use"): 24 top-level entries → 10: General · Look & feel (Theme & display, Graphics, Accessibility, Fullscreen) · Consoles · Controllers · Games & emulators (Library, Emulators, Storage, Mod sources, Import from EmuDeck) · Online & sharing (RetroAchievements, Netplay, Steam, Packages) · System · Help (Health check, Diagnostics, Start in safe mode) · About · Power. Item keys unchanged; nothing removed. `presets.spec` pins the ten; `settings.spec` `openSetting` knows the groups.
+- **PS menu, other players:** when it opens, the controller still holding PS / Guide (standard button 16; Chromium reads Guide through XInputGetStateEx) is the only one that drives it (`guideHolder`, `input.setOnlyPad`). Not seen (quick tap) or two holding → every pad, as before — never a guess from XInput slot numbers (the G29 shares the pad list). Lock released when the menu closes. Unit `guide.test.ts`; not checked with real pads yet.
+- **Release check:** `tests/e2e/packaged.spec.ts` starts `release/win-unpacked/Starstation.exe` hidden (presets, every bundled tool in resources\bin, no ERROR in its log, version = package.json). `scripts/release.mjs` runs it after electron-builder and before uploading (`STARSTATION_REQUIRE_PACKAGED=1`: missing/wrong build fails instead of skipping). Normal test runs skip it when no matching build exists.
+- Player screen: leaving it without an answer counts as cancel (a start left waiting would block every later start behind the launch guard).
+- Storage / EmuDeck import scan / import run: failures end the screen (import: "importing" was stuck forever, blocking another try).
+- Starstation update check every 6 h while running (not during a game). Log rolls over to a new file at midnight.
 
 ## How to work on it
 
