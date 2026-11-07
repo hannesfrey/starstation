@@ -3,7 +3,7 @@
   "name": "PlayStation 2",
   "short": "PS2",
   "order": 100,
-  "icon": "disc",
+  "icon": "console-ps2",
   "emulator": "pcsx2",
   "launch": {
     "args": [

@@ -3,7 +3,7 @@
   "name": "Nintendo Wii",
   "short": "Wii",
   "order": 50,
-  "icon": "remote",
+  "icon": "console-wii",
   "emulator": "dolphin",
   "launch": {
     "args": [

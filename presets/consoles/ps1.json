@@ -3,7 +3,7 @@
   "name": "PlayStation",
   "short": "PS1",
   "order": 90,
-  "icon": "disc-mini",
+  "icon": "console-ps1",
   "emulator": "duckstation",
   "launch": {
     "args": [

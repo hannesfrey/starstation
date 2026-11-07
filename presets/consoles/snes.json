@@ -3,7 +3,7 @@
   "name": "Super Nintendo",
   "short": "SNES",
   "order": 20,
-  "icon": "cartridge-wide",
+  "icon": "console-snes",
   "emulator": "retroarch",
   "core": "snes9x",
   "launch": {

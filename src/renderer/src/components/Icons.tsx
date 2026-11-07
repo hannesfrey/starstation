@@ -68,6 +68,114 @@ const shapes: Record<string, ReactElement> = {
       <path d="M44 20l6-6M14 50l6-6" opacity=".6" />
     </g>
   ),
+  // ---- consoles: each one's own silhouette, line drawings in the same style (no logos) ----
+  /** NES: flat grey box, cartridge door on top, power/reset left, two ports right. */
+  'console-nes': (
+    <g {...S}>
+      <rect x="7" y="21" width="50" height="25" rx="2" />
+      <path d="M17 21v8h30v-8M7 35h50" />
+      <path d="M13 40h6M23 40h6" />
+      <rect x="39" y="38.5" width="4" height="3.5" rx=".6" />
+      <rect x="47" y="38.5" width="4" height="3.5" rx=".6" />
+    </g>
+  ),
+  /** SNES, seen from above: rounded body, cartridge slot in the middle, power and reset left, eject right. */
+  'console-snes': (
+    <g {...S}>
+      <rect x="6" y="15" width="52" height="34" rx="11" />
+      <rect x="21" y="21" width="22" height="13" rx="2.5" />
+      <path d="M25 27.5h14" />
+      <rect x="10.5" y="22" width="7" height="4" rx="2" />
+      <rect x="10.5" y="30" width="7" height="4" rx="2" />
+      <rect x="47" y="25" width="6.5" height="5" rx="2" />
+      <path d="M21 43h6M37 43h6" />
+    </g>
+  ),
+  /** Nintendo 64, seen from above: the raised middle with its cartridge slot, switches either side, four ports in front. */
+  'console-n64': (
+    <g {...S}>
+      <path d="M13 15h38a6 6 0 0 1 6 6v18c0 4-2 6-5 8l-3 2H15l-3-2c-3-2-5-4-5-8V21a6 6 0 0 1 6-6z" />
+      <path d="M22 15v18h20V15" />
+      <path d="M27 21h10" />
+      <path d="M12.5 22.5h4M47.5 22.5h4" />
+      <path d="M15 43v.01M24 45v.01M40 45v.01M49 43v.01" strokeWidth="3.6" />
+    </g>
+  ),
+  /** GameCube: the cube, seen from above-front, round lid on top, handle at the back. */
+  'console-gc': (
+    <g {...S}>
+      <path d="M12 26h28v26H12zM12 26l11-10h28l-11 10M40 52l11-10V16" />
+      <ellipse cx="31.5" cy="21" rx="7" ry="2.8" />
+      <path d="M28 16v-5h18v5" />
+      <path d="M16 46h2.5M21.5 46h2.5M27 46h2.5M32.5 46h2.5" />
+    </g>
+  ),
+  /** Wii: slim tower standing on its foot, disc slot down the front. */
+  'console-wii': (
+    <g {...S}>
+      <path d="M25 8h11v42H25zM36 8l5 3v41l-5-2" />
+      <path d="M30.5 13v26" />
+      <path d="M21 55h24M27 50v5M38 51v4" />
+    </g>
+  ),
+  /** 3DS: opened clamshell — wide top screen, hinge, small touch screen, circle pad and buttons. */
+  '3ds': (
+    <g {...S}>
+      <rect x="11" y="6" width="42" height="24" rx="3" />
+      <rect x="17" y="10" width="30" height="16" rx="1" />
+      <rect x="11" y="33" width="42" height="25" rx="3" />
+      <rect x="23" y="36.5" width="18" height="14" rx="1" />
+      <circle cx="17" cy="41" r="2.6" />
+      <path d="M47 39v.01M47 46v.01M44 42.5v.01M50 42.5v.01" />
+    </g>
+  ),
+  /** PlayStation: seen from above — round disc lid, open button, power and reset, front ports. */
+  'console-ps1': (
+    <g {...S}>
+      <rect x="7" y="13" width="50" height="38" rx="4" />
+      <circle cx="27" cy="30" r="12" />
+      <circle cx="47" cy="22" r="3.6" />
+      <path d="M44 32h6M44 38h6M7 45h50" />
+    </g>
+  ),
+  /** PlayStation 2: the long flat box, its stepped top, the disc tray, ports bottom left, two buttons right. */
+  'console-ps2': (
+    <g {...S}>
+      <path d="M6 26h52v16H6z" />
+      <path d="M6 26l4-5h48v5" />
+      <path d="M41 26v16" />
+      <path d="M10 31.5h27" />
+      <rect x="10" y="36" width="5" height="3" rx=".6" />
+      <rect x="19" y="36" width="5" height="3" rx=".6" />
+      <circle cx="47" cy="34" r="1.8" />
+      <circle cx="53" cy="34" r="1.8" />
+    </g>
+  ),
+  /** PlayStation 3: the curved top seen from the front, slot-loading disc drive. */
+  'console-ps3': (
+    <g {...S}>
+      <path d="M6 46V37c0-10 12-17 26-17s26 7 26 17v9z" />
+      <path d="M19 33.5h26" />
+      <path d="M12 41.5h3M49 41.5h3" />
+    </g>
+  ),
+  /** Xbox: the big box with the round jewel on top, tray and ports below. */
+  'console-xbox': (
+    <g {...S}>
+      <rect x="6" y="19" width="52" height="28" rx="3" />
+      <circle cx="32" cy="26" r="5" />
+      <path d="M13 36h21" />
+      <path d="M12 41.5h4M19 41.5h4M41 41.5h4M48 41.5h4" />
+    </g>
+  ),
+  /** Xbox 360: standing tower with the inward-curved sides, ring light and disc slot. */
+  'console-xbox360': (
+    <g {...S}>
+      <path d="M21 6h22c-3 9-3 43 0 52H21c3-9 3-43 0-52z" />
+      <circle cx="32" cy="14" r="3.6" />
+      <path d="M32 23v24" />
+    </g>
+  ),
   handheld: (
     <g {...S}>
       <rect x="16" y="8" width="32" height="48" rx="4" />
@@ -129,12 +237,14 @@ const shapes: Record<string, ReactElement> = {
       <path d="M24 52h16M32 44v8" />
     </g>
   ),
+  /** A gamepad: two grips, d-pad, four face buttons and two sticks. */
   controller: (
     <g {...S}>
-      <path d="M18 22h28c6 0 10 6 11 14s-3 14-8 12-7-8-11-8H26c-4 0-6 6-11 8s-9-4-8-12 5-14 11-14z" />
-      <path d="M20 32h8M24 28v8" />
-      <circle cx="42" cy="30" r="1.5" />
-      <circle cx="46" cy="34" r="1.5" />
+      <path d="M21 18h22c6 0 10 3.5 12 9l4.6 14.5c1.5 5-1.4 9.5-5.6 9.5-3 0-5-2-7-5.5L45 42H19l-2 3.5c-2 3.5-4 5.5-7 5.5-4.2 0-7.1-4.5-5.6-9.5L9 27c2-5.5 6-9 12-9z" />
+      <path d="M17 26v8M13 30h8" />
+      <path d="M47 25.5v.01M51 29.5v.01M47 33.5v.01M43 29.5v.01" strokeWidth="3.4" />
+      <circle cx="25.5" cy="36" r="3.4" />
+      <circle cx="38.5" cy="36" r="3.4" />
     </g>
   ),
   emulator: (
@@ -252,6 +362,11 @@ const shapes: Record<string, ReactElement> = {
       <path d="M20 44L44 20" />
     </g>
   )
+}
+
+/** All icon names (design check page). */
+export function iconNames(): string[] {
+  return Object.keys(shapes)
 }
 
 export function Icon({ name, size = 64 }: { name: string; size?: number }) {

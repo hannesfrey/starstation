@@ -378,25 +378,9 @@ body,
   gap: 7px;
 }
 .glyph {
-  display: inline-grid;
-  place-items: center;
-  font-weight: 600;
-  border: 1.5px solid currentColor;
-  color: var(--text);
-  line-height: 1;
-}
-.glyph.round {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  font-size: 13px;
-}
-.glyph.pill {
-  height: 20px;
-  padding: 0 6px;
-  border-radius: 10px;
-  font-size: 10px;
-  letter-spacing: 0.05em;
+  display: block;
+  flex: none;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.5));
 }
 
 /* ---------- notices ---------- */

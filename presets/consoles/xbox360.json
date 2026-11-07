@@ -3,7 +3,7 @@
   "name": "Xbox 360",
   "short": "Xbox 360",
   "order": 130,
-  "icon": "box-360",
+  "icon": "console-xbox360",
   "emulator": "xenia",
   "launch": {
     "args": [

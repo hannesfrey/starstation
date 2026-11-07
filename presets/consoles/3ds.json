@@ -3,7 +3,7 @@
   "name": "Nintendo 3DS",
   "short": "3DS",
   "order": 60,
-  "icon": "handheld",
+  "icon": "3ds",
   "emulator": "azahar",
   "launch": {
     "args": [

@@ -10,8 +10,11 @@ import { logger } from './log'
 import type { Game } from '../shared/types'
 
 /**
- * Box art (icon) and in-game screenshot (background) for games without their own (PS3 uses ICON0/PIC1).
+ * Box art (icon) and in-game screenshot (background) for games without their own.
+ * PS3 discs bring a banner (ICON0) and a background (PIC1): the background stays, the banner is only used
+ * until a real box cover is found (Hannes, 2026-11-07: "show the game cover like PS2 and Xbox").
  * 1. Xbox 360 only: Microsoft's own Xbox image server, by the title ID read from the game file.
+ * 1. PS3 only: GameTDB (no account), front cover by game code (BLUS30443) — libretro has only ~70 PS3 covers.
  * 2. libretro thumbnails (no account): GitHub mirror first, thumbnails.libretro.com second.
  * 3. ScreenScraper, only if developer + user credentials are in config\secrets.json.
  * Saved as media\artwork\<console>\<game>\icon.png / background.png.
@@ -53,6 +56,35 @@ async function fromXbox(g: Game, name: 'boxartlg.jpg' | 'background.jpg', file: 
     if (await fetchTo(`${XBOX_IMAGES()}/66acd000-77fe-1000-9115-d802${g.serial!.toLowerCase()}/${locale}/${name}`, file)) return true
   }
   return false
+}
+
+/** GameTDB (art.gametdb.com). Tests point it at a local fake. */
+const GAMETDB = () => process.env.STARSTATION_GAMETDB_BASE ?? 'https://art.gametdb.com'
+
+/** GameTDB cover regions to try for a PS3 game code: its own region first (BLUS → US, BLES → EN …). */
+function gametdbRegions(serial: string): string[] {
+  const r = serial[2]
+  const first = r === 'U' ? ['US'] : r === 'E' ? ['EN', 'GB', 'FR', 'DE', 'ES', 'IT', 'AU'] : r === 'J' ? ['JA'] : r === 'A' || r === 'H' ? ['ZH', 'KO', 'JA'] : r === 'K' ? ['KO'] : []
+  return [...new Set([...first, 'US', 'EN', 'JA', 'other'])]
+}
+
+/** PS3: front cover by game code — the big one first (928×1080), then the smaller sizes. */
+async function fromGameTdb(g: Game, file: string): Promise<boolean> {
+  const serial = (g.serial ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '')
+  if (g.console !== 'ps3' || !/^[A-Z]{4}\d{5}$/.test(serial)) return false
+  for (const region of gametdbRegions(serial)) {
+    for (const size of ['coverHQ', 'coverM', 'cover']) {
+      for (const ext of ['jpg', 'png']) {
+        if (await fetchTo(`${GAMETDB()}/ps3/${size}/${region}/${serial}.${ext}`, file)) return true
+      }
+    }
+  }
+  return false
+}
+
+/** A PS3 game still showing its disc banner (ICON0) instead of a box cover. */
+export function wantsCover(g: Game): boolean {
+  return g.console === 'ps3' && !!g.icon && /ICON0\.PNG$/i.test(g.icon)
 }
 
 export function artDir(g: Game): string {
@@ -233,7 +265,7 @@ export async function fetchArtwork(g: Game, force = false, retry = false): Promi
   const icon = path.join(d, 'icon.png')
   const bg = path.join(d, 'background.png')
   const triedFile = path.join(d, 'tried.json')
-  const wantIcon = !g.icon || g.icon === icon
+  const wantIcon = !g.icon || g.icon === icon || wantsCover(g)
   const wantBg = !g.background || g.background === bg
   if (!wantIcon && !wantBg) return false
   if (!force) {
@@ -244,7 +276,7 @@ export async function fetchArtwork(g: Game, force = false, retry = false): Promi
   }
   let gotIcon = false
   let gotBg = false
-  if (wantIcon) gotIcon = (await fromXbox(g, 'boxartlg.jpg', icon)) || (await fromLibretro(g, 'Named_Boxarts', icon))
+  if (wantIcon) gotIcon = (await fromXbox(g, 'boxartlg.jpg', icon)) || (await fromGameTdb(g, icon)) || (await fromLibretro(g, 'Named_Boxarts', icon))
   if (wantBg) gotBg = (await fromXbox(g, 'background.jpg', bg)) || (await fromLibretro(g, 'Named_Snaps', bg))
   if ((wantIcon && !gotIcon) || (wantBg && !gotBg)) {
     const ss = await fromScreenScraper(g, { icon: wantIcon && !gotIcon, background: wantBg && !gotBg }, d)
@@ -270,7 +302,7 @@ export function queueArtwork(games: Game[], onChange: () => void, retry = false)
   const known = new Set(queue.map((q) => q.g.id))
   // missing pictures — or, with a ScreenScraper login, a missing manual / clip
   const ss = !!screenScraperLogin()
-  queue.push(...games.filter((g) => !known.has(g.id) && (!g.icon || !g.background || (ss && (!g.manual || !g.video)))).map((g) => ({ g, retry })))
+  queue.push(...games.filter((g) => !known.has(g.id) && (!g.icon || wantsCover(g) || !g.background || (ss && (!g.manual || !g.video)))).map((g) => ({ g, retry })))
   if (busy) return
   busy = true
   void (async () => {

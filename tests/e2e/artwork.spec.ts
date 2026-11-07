@@ -151,3 +151,65 @@ test('Xbox 360 covers from the title ID, missing artwork retried at start, own c
     delete process.env.STARSTATION_XBOX_ART_BASE
   }
 })
+
+/** Minimal PARAM.SFO with TITLE_ID and TITLE. */
+function sfo(entries: Record<string, string>): Buffer {
+  const keys = Object.keys(entries)
+  const keyTable = Buffer.concat(keys.map((k) => Buffer.from(k + '\0', 'utf8')))
+  const datas = keys.map((k) => Buffer.from(entries[k] + '\0', 'utf8'))
+  const head = Buffer.alloc(20 + keys.length * 16)
+  head.writeUInt32LE(0x46535000, 0)
+  head.writeUInt32LE(0x101, 4)
+  head.writeUInt32LE(head.length, 8)
+  head.writeUInt32LE(head.length + keyTable.length, 12)
+  head.writeUInt32LE(keys.length, 16)
+  let ko = 0
+  let dof = 0
+  keys.forEach((k, i) => {
+    const e = 20 + i * 16
+    head.writeUInt16LE(ko, e)
+    head.writeUInt16LE(0x0204, e + 2)
+    head.writeUInt32LE(datas[i].length, e + 4)
+    head.writeUInt32LE(datas[i].length, e + 8)
+    head.writeUInt32LE(dof, e + 12)
+    ko += k.length + 1
+    dof += datas[i].length
+  })
+  return Buffer.concat([head, keyTable, ...datas])
+}
+
+test('PS3: the box cover from GameTDB replaces the disc banner; the disc background stays', async () => {
+  test.setTimeout(60_000)
+  const files = makeFiles('artwork-ps3')
+  writeSettings(files, { bootAnimation: false })
+  const disc = path.join(files, 'games', 'ps3', 'Racing Game (USA)', 'PS3_GAME')
+  fs.mkdirSync(path.join(disc, 'USRDIR'), { recursive: true })
+  fs.writeFileSync(path.join(disc, 'PARAM.SFO'), sfo({ TITLE_ID: 'BLUS30443', TITLE: 'Racing Game', CATEGORY: 'DG' }))
+  fs.writeFileSync(path.join(disc, 'USRDIR', 'EBOOT.BIN'), 'eboot')
+  fs.writeFileSync(path.join(disc, 'ICON0.PNG'), PNG)
+  fs.writeFileSync(path.join(disc, 'PIC1.PNG'), PNG)
+  const asked: string[] = []
+  const server = http.createServer((req, res) => {
+    const u = decodeURIComponent(req.url ?? '')
+    asked.push(u)
+    // only the medium size exists for this game: the big one is tried first
+    if (u === '/gametdb/ps3/coverM/US/BLUS30443.jpg') res.writeHead(200).end(PNG)
+    else res.writeHead(404).end('not found')
+  })
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()))
+  const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
+  process.env.STARSTATION_ARTWORK_BASE = `${base}/libretro`
+  process.env.STARSTATION_GAMETDB_BASE = `${base}/gametdb`
+  const { app, page } = await launchApp(files)
+  try {
+    const find = async () => (await api<Lib>(page, 'getState')).library.games.find((g) => g.title === 'Racing Game')
+    await expect.poll(async () => (await find())?.icon ?? '', { timeout: 15_000 }).toContain(path.join('media', 'artwork', 'ps3', 'BLUS30443', 'icon.png'))
+    expect((await find())!.background).toBe(path.join(disc, 'PIC1.PNG'))
+    expect(asked.indexOf('/gametdb/ps3/coverHQ/US/BLUS30443.jpg')).toBeLessThan(asked.indexOf('/gametdb/ps3/coverM/US/BLUS30443.jpg'))
+  } finally {
+    await app.close()
+    server.close()
+    delete process.env.STARSTATION_ARTWORK_BASE
+    delete process.env.STARSTATION_GAMETDB_BASE
+  }
+})

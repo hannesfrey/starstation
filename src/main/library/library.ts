@@ -217,8 +217,10 @@ function attachLocalArtwork(g: Game): void {
     ['manual', 'manual.pdf'],
     ['video', 'video.mp4']
   ] as const) {
-    if (g[k]) continue
     const p = dir('media', 'artwork', g.console, key, f)
+    // a PS3 box cover replaces the disc's own banner (ICON0); everything else only fills gaps
+    const banner = k === 'icon' && g.console === 'ps3' && !!g.icon && /ICON0\.PNG$/i.test(g.icon)
+    if (g[k] && !banner) continue
     if (fs.existsSync(p)) g[k] = p
   }
 }

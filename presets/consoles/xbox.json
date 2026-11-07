@@ -3,7 +3,7 @@
   "name": "Original Xbox",
   "short": "Xbox",
   "order": 120,
-  "icon": "box",
+  "icon": "console-xbox",
   "emulator": "xemu",
   "launch": {
     "args": [

@@ -3,7 +3,7 @@
   "name": "Nintendo GameCube",
   "short": "GameCube",
   "order": 40,
-  "icon": "disc-mini",
+  "icon": "console-gc",
   "emulator": "dolphin",
   "launch": {
     "args": [

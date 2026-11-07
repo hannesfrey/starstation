@@ -12,6 +12,16 @@ export interface WhatsNew {
 
 export const WHATS_NEW: WhatsNew[] = [
   {
+    version: '2.0.5',
+    summary: ['PS3 games show their box covers', 'New console icons, a new controller icon and cleaner button hints'],
+    details: [
+      'PS3 games now show the front of their box like PS2 and Xbox games (from GameTDB, by the game code). The game’s own background stays; its small disc banner is only used until a cover is found.',
+      'Every console has its own icon now, drawn after the real console: NES, SNES, N64, GameCube, Wii, 3DS, PlayStation, PS2, PS3, Xbox and Xbox 360.',
+      'The controller icon is redrawn.',
+      'Button hints are drawn instead of typed: ✕ ○ △ □ (or A B X Y) are all the same size, L1/R1 look like shoulder buttons and Start/Select like small pills.'
+    ]
+  },
+  {
     version: '2.0.4',
     summary: ['Adding mods: put them into the mods folder and Starstation does the rest'],
     details: [

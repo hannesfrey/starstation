@@ -3,7 +3,7 @@
   "name": "Nintendo Entertainment System",
   "short": "NES",
   "order": 10,
-  "icon": "cartridge",
+  "icon": "console-nes",
   "emulator": "retroarch",
   "core": "mesen",
   "launch": {

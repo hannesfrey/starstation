@@ -3,7 +3,7 @@
   "name": "Nintendo 64",
   "short": "N64",
   "order": 30,
-  "icon": "cartridge-n64",
+  "icon": "console-n64",
   "emulator": "retroarch",
   "core": "mupen64plus_next",
   "launch": {
