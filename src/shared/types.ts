@@ -133,6 +133,14 @@ export interface Notice {
   action?: { label: string; command: string; arg?: string }
 }
 
+/** A PS3 game's pending updates from Sony's update server. */
+export interface Ps3UpdateInfo {
+  installed: string
+  latest: string
+  count: number
+  size: number
+}
+
 export interface LaunchResult {
   ok: boolean
   error?: string
@@ -264,6 +272,10 @@ export interface StarstationApi {
   modProfileDelete(gameId: string, profileId: string): Promise<void>
   /** Compress / decompress a game (lossless; the original goes to the Recycle Bin after a check). */
   compressGame(gameId: string): Promise<{ ok: boolean; error?: string }>
+  /** PS3: updates this game still needs (null = none / not known). */
+  ps3UpdateInfo(gameId: string): Promise<Ps3UpdateInfo | null>
+  /** PS3: download + install them (progress: 'ps3update-progress'). */
+  ps3Update(gameId: string): Promise<{ ok: boolean; error?: string; version?: string }>
   storage(fresh?: boolean): Promise<StorageInfo>
   /** A file inside Files\ (a game manual), as bytes. */
   readMedia(path: string): Promise<Uint8Array | null>
@@ -354,6 +366,7 @@ export interface StarstationApi {
   on(channel: 'add-ask', cb: (ask: AddGamesResult['ask']) => void): () => void
   on(channel: 'overlay', cb: (s: OverlayState) => void): () => void
   on(channel: 'compress-progress', cb: (p: { gameId: string; text: string }) => void): () => void
+  on(channel: 'ps3update-progress', cb: (p: { gameId: string; text: string }) => void): () => void
   on(channel: 'nexus-request', cb: (r: NexusRequest) => void): () => void
   on(channel: 'mod-inbox-ask', cb: (q: { id: string; name: string; games: string[] }) => void): () => void
   on(channel: 'mod-result', cb: (r: { gameId: string; result: ModAddResult }) => void): () => void

@@ -38,6 +38,7 @@ import { checkNow, startUpdater, updateState } from './updater'
 import { addMod, deleteMod, finishAdd, gamebananaGame, listMods, modSupport, setGamebananaGame, setModEnabled } from './mods'
 import { gbModDetails, installGbMod, listGbMods, searchGames } from './gamebanana'
 import { fetchArtwork, queueArtwork } from './artwork'
+import { checkUpdates as checkPs3Updates, runUpdate, updateInfo, updatingGame } from './ps3updates'
 import { listScreenshots } from './screenshots'
 import { readBattery } from './battery'
 import { moveStats, reattachArtwork, setCustomArt } from './library/library'
@@ -338,6 +339,7 @@ function registerIpc(): void {
   })
   ipcMain.handle('launch', (_e, id: string, mode?: 'fresh' | 'resume', np?: { host: true } | { join: NetplayRoom }, pads?: PlayerPad[]) => {
     const g = getGame(id)
+    if (updatingGame() === id) return { ok: false, error: 'This game is being updated. It can start when the update is done.' }
     const online = np && g && getConsole(g.console)?.netplay ? np : undefined
     // controller assignment: player N → that pad, in every emulator's own way (controllers.ts)
     const order = Array.isArray(pads) ? pads.filter((p) => (p.api === 'xinput' || p.api === 'sdl') && Number.isInteger(p.index)).slice(0, 4) : []
@@ -638,6 +640,19 @@ function registerIpc(): void {
     }
   })
   ipcMain.handle('compress-game', (_e, id: string) => doCompress(String(id)))
+  ipcMain.handle('ps3-update-info', async (_e, id: string) => {
+    const g = getGame(String(id))
+    return g ? updateInfo(g).catch(() => null) : null
+  })
+  ipcMain.handle('ps3-update', async (_e, id: string) => {
+    const g = getGame(String(id))
+    if (!g) return { ok: false, error: 'Game not found' }
+    if (runningGame()) return { ok: false, error: 'Close the game first.' }
+    const r = await runUpdate(g, (text) => send('ps3update-progress', { gameId: g.id, text }))
+    if (r.ok && r.version) notify({ kind: 'success', title: `${g.title} updated`, detail: `Now on version ${r.version}.` })
+    else if (!r.ok) notify({ kind: 'error', title: `${g.title} was not updated`, detail: r.error ?? '' })
+    return r
+  })
   ipcMain.handle('couch-start', () => startCouchCheck())
   ipcMain.handle('couch-status', () => couchStatus())
   ipcMain.handle('couch-pad', () => couchMark('pad'))
@@ -978,6 +993,8 @@ function scanAndArt(atStart = false): void {
   send('library', lib)
   send('consoles', consoleInfos())
   checkTrophies() // e.g. "Collector" after games were added
+  // PS3 game updates: only Sony's small update lists, once a day per game
+  void checkPs3Updates(lib.games)
   // PS3 / Xbox 360 compatibility labels, looked up slowly in the background
   void refreshCompat(lib.games, () => send('library', view()))
   queueArtwork(

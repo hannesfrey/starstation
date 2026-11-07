@@ -65,6 +65,8 @@ export interface Ps3Info {
   serial?: string
   title?: string
   category?: string
+  /** APP_VER, e.g. "01.00" (the game's own version; updates raise it). */
+  appVer?: string
   icon?: Buffer
   background?: Buffer
 }
@@ -74,7 +76,7 @@ export function ps3FromFolder(gameDir: string): Ps3Info | null {
   if (!sfoPath) return null
   try {
     const sfo = parseSfo(fs.readFileSync(sfoPath))
-    return { serial: String(sfo.TITLE_ID ?? ''), title: cleanSfoTitle(String(sfo.TITLE ?? '')), category: String(sfo.CATEGORY ?? '') }
+    return { serial: String(sfo.TITLE_ID ?? ''), title: cleanSfoTitle(String(sfo.TITLE ?? '')), category: String(sfo.CATEGORY ?? ''), appVer: String(sfo.APP_VER ?? '') }
   } catch {
     return null
   }
@@ -89,6 +91,7 @@ export function ps3FromIso(file: string): Ps3Info | null {
       serial: String(sfo.TITLE_ID ?? ''),
       title: cleanSfoTitle(String(sfo.TITLE ?? '')),
       category: String(sfo.CATEGORY ?? ''),
+      appVer: String(sfo.APP_VER ?? ''),
       icon: iso.readFile('PS3_GAME/ICON0.PNG', 4 * 1024 * 1024) ?? undefined,
       background: iso.readFile('PS3_GAME/PIC1.PNG', 16 * 1024 * 1024) ?? undefined
     }

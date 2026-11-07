@@ -75,6 +75,38 @@ export async function toXiso(file: string, trash: Trash): Promise<Note | null> {
   }
 }
 
+/**
+ * RPCS3 installs a package without a window and then exits (`--headless`; with its window it asks
+ * "Install?" and stays open afterwards). Returns the dev_hdd0\game folders that changed.
+ */
+export async function rpcs3InstallPkg(file: string): Promise<{ code: number; changed: string[] }> {
+  const ps3 = getConsole('ps3')
+  const e = ps3 ? getEmulator(ps3.emulator) : undefined
+  if (!e || !fs.existsSync(emulatorExe(e))) return { code: -1, changed: [] }
+  const games = path.join(emulatorDir(e), 'dev_hdd0', 'game')
+  const snapshot = () => {
+    try {
+      // an update overwrites files inside an existing folder: its PARAM.SFO tells, not the folder's date
+      const sfo = (n: string) => {
+        try {
+          return fs.statSync(path.join(games, n, 'PARAM.SFO')).mtimeMs
+        } catch {
+          return 0
+        }
+      }
+      return new Map(fs.readdirSync(games).map((n) => [n, `${fs.statSync(path.join(games, n)).mtimeMs}/${sfo(n)}`]))
+    } catch {
+      return new Map<string, string>()
+    }
+  }
+  const before = snapshot()
+  log.info(`installing PS3 package ${file}`)
+  const code = await run(emulatorExe(e), ['--headless', '--installpkg', file], emulatorDir(e), 60 * 60_000)
+  const changed = [...snapshot()].filter(([n, t]) => before.get(n) !== t).map(([n]) => n)
+  log.info(`RPCS3 --installpkg ${path.basename(file)}: code ${code}, changed ${changed.join(', ') || 'nothing'}`)
+  return { code, changed }
+}
+
 /** PS3 package → installed into RPCS3's virtual hard disk (shows up as an installed game). */
 export async function installPkg(file: string, trash: Trash): Promise<Note> {
   const name = path.basename(file)
@@ -86,19 +118,7 @@ export async function installPkg(file: string, trash: Trash): Promise<Note> {
   const ps3 = getConsole('ps3')
   const e = ps3 ? getEmulator(ps3.emulator) : undefined
   if (!e || !fs.existsSync(emulatorExe(e))) return { kind: 'error', title: `${name} was not installed`, detail: 'Install RPCS3 first (Settings → Emulators), then add the package again.' }
-  const games = path.join(emulatorDir(e), 'dev_hdd0', 'game')
-  const snapshot = () => {
-    try {
-      return new Map(fs.readdirSync(games).map((n) => [n, fs.statSync(path.join(games, n)).mtimeMs]))
-    } catch {
-      return new Map<string, number>()
-    }
-  }
-  const before = snapshot()
-  log.info(`installing PS3 package ${file}`)
-  const code = await run(emulatorExe(e), ['--installpkg', file], emulatorDir(e), 60 * 60_000)
-  const after = snapshot()
-  const changed = [...after].filter(([n, t]) => before.get(n) !== t).map(([n]) => n)
+  const { code, changed } = await rpcs3InstallPkg(file)
   if (!changed.length) {
     log.warn(`RPCS3 --installpkg ${name}: code ${code}, nothing installed`)
     return { kind: 'error', title: `${name} was not installed`, detail: 'RPCS3 could not install the package (it may need a license file, .rap, in RPCS3’s exdata folder). The package was kept.' }

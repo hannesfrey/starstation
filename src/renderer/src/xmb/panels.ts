@@ -2,6 +2,7 @@ import type { UpdateState, AddGamesResult, AppState, CustomConsoleForm, PackageC
 import { formatPlayTime } from './model'
 import { compareVersions } from '../../../shared/semver'
 import { whatsNewFor } from '../../../shared/whatsnew'
+import type { Ps3UpdateInfo } from '../../../shared/types'
 import type { CouchStatus, NexusRequest, ProfileInfo, ProfileMerge, StartNotes, StorageInfo, Wallpapers } from '../../../shared/types'
 import { THEMES } from '../components/Background'
 
@@ -39,6 +40,9 @@ export interface PanelExtra {
   couch?: CouchStatus
   /** Compress / decompress progress per game. */
   compressing: Record<string, string>
+  /** PS3 updates waiting per game, and the progress line while one runs. */
+  ps3Update: Record<string, Ps3UpdateInfo>
+  ps3Updating: Record<string, string>
   storage?: StorageInfo
   /** Nexus Mods link waiting for "Which game is this for?" */
   nexus?: NexusRequest
@@ -83,13 +87,13 @@ export interface Panel {
 export interface PanelHandlers {
   setSetting: <K extends keyof Settings>(k: K, v: Settings[K]) => void
   command: (cmd: string, arg?: string) => void
-  launch: (g: Game, anyway?: boolean) => void
+  launch: (g: Game, anyway?: boolean, noUpdate?: boolean) => void
   toggleFavorite: (g: Game) => void
   openPanel: (id: string, arg?: string) => void
   installEmulator: (id: string) => void
   checkUpdates: () => void
   runImport: (index: number) => void
-  launchMode: (g: Game, mode: 'fresh' | 'resume') => void
+  launchMode: (g: Game, mode: 'fresh' | 'resume', noUpdate?: boolean) => void
   openEntry: (kind: 'new-collection' | 'rename-collection', target?: string) => void
   collectionToggle: (id: string, gameId: string) => void
   collectionDelete: (id: string) => void
@@ -142,6 +146,7 @@ export interface PanelHandlers {
   guideSeen: (keys: string[]) => void
   couchSave: () => void
   compressGame: (g: Game) => void
+  ps3Update: (g: Game) => void
   openManual: (g: Game) => void
   modProfile: (g: Game, profileId: string) => void
   modProfileDelete: (g: Game, profileId: string) => void
@@ -819,6 +824,28 @@ export function buildPanel(id: string, arg: string | undefined, state: AppState,
                 { key: 'what', label: `Turns the compressed file back into ${c.format}, checked bit for bit where Starstation compressed it.`, info: true },
                 { key: 'go', label: busy || 'Decompress now', disabled: !!busy, run: () => (h.compressGame(g), 'keep') }
               ]
+      }
+    }
+    case 'ps3-update': {
+      const g = state.library.games.find((y) => y.id === arg)
+      const u = g && x.ps3Update[g.id]
+      if (!g || !u) return null
+      const busy = x.ps3Updating[g.id]
+      const size = u.size >= 1024 ** 3 ? `${(u.size / 1024 ** 3).toFixed(1)} GB` : `${Math.max(1, Math.round(u.size / 1024 ** 2))} MB`
+      return {
+        id,
+        title: `Update for ${g.title}`,
+        items: [
+          { key: 'what', label: `Version ${u.latest} is available. Yours is ${u.installed === '00.00' ? 'not updated yet' : u.installed}.`, info: true },
+          { key: 'size', label: `${u.count === 1 ? '1 update' : `${u.count} updates`} from PlayStation Network, ${size}. Updates fix bugs and crashes.`, info: true },
+          { key: 'go', label: busy || 'Update now', disabled: !!busy, run: () => (h.ps3Update(g), 'keep') },
+          ...(busy
+            ? [{ key: 'bg', label: 'You can leave this screen; the update carries on.', info: true }]
+            : [
+                { key: 'skip', label: 'Play without updating', run: () => h.launchMode(g, 'fresh', true) },
+                { key: 'no', label: 'Cancel', run: () => undefined }
+              ])
+        ]
       }
     }
     case 'compat-warn': {

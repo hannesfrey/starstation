@@ -12,6 +12,16 @@ export interface WhatsNew {
 
 export const WHATS_NEW: WhatsNew[] = [
   {
+    version: '2.0.12',
+    summary: ['PS3 game updates: Starstation offers them when you start a game, like the PS3'],
+    details: [
+      'When a PS3 game has an update on PlayStation Network, starting it asks: Update now, or Play without updating.',
+      'Update now downloads every update the game is missing from Sony’s own update server, checks each one against Sony’s checksum, installs them in order and then starts the game.',
+      'Updates fix bugs and crashes in the games themselves (Call of Duty: Black Ops II goes from 1.00 to 1.19, Gran Turismo 6 to 1.22).',
+      'Adding a PS3 package (.pkg) yourself installs it without opening RPCS3’s window.'
+    ]
+  },
+  {
     version: '2.0.11',
     summary: ['PS3 games really run in borderless fullscreen now'],
     details: [

@@ -55,6 +55,8 @@ export function App() {
     mods: {},
     gb: { page: 1, more: false, detail: {} },
     compressing: {},
+    ps3Update: {},
+    ps3Updating: {},
     // everything except saves is ticked by default (spec 12)
     pkg: { choice: { emulators: true, bios: true, games: 'all', mods: true, settings: true, saves: false, onlyNew: false, profiles: [] }, busy: false }
   })
@@ -135,6 +137,7 @@ export function App() {
       ),
       api.on('running', (running) => apply({ running })),
       api.on('compress-progress', ({ gameId, text }) => setExtra((x) => ({ ...x, compressing: { ...x.compressing, [gameId]: text } }))),
+      api.on('ps3update-progress', ({ gameId, text }) => setExtra((x) => ({ ...x, ps3Updating: { ...x.ps3Updating, [gameId]: text } }))),
       // a Nexus Mods download link: ask which game it is for
       api.on('trophies', (t) => setTrophyData(t)),
       // the new screen mode wasn't kept: it went back by itself
@@ -223,7 +226,17 @@ export function App() {
 
   const stateRef = useRef<AppState | null>(null)
   stateRef.current = state
-  const launchMode = useCallback(async (g: Game, mode: 'fresh' | 'resume') => {
+  const launchMode = useCallback(async (g: Game, mode: 'fresh' | 'resume', noUpdate = false) => {
+    // PS3: an update from PlayStation Network is waiting: "Update now / Play without updating", like the PS3
+    if (g.console === 'ps3' && !noUpdate) {
+      const info = await api.ps3UpdateInfo(g.id).catch(() => null)
+      if (info) {
+        sfx.confirm()
+        setExtra((x) => ({ ...x, ps3Update: { ...x.ps3Update, [g.id]: info } }))
+        setPanels([{ id: 'ps3-update', arg: g.id, index: 0 }])
+        return
+      }
+    }
     sfx.launch()
     setPanels([])
     const s = stateRef.current
@@ -253,7 +266,7 @@ export function App() {
 
   /** ✕ on a game: offer Resume / Start fresh when a resume state exists, otherwise just play. */
   const launch = useCallback(
-    async (g: Game, anyway = false) => {
+    async (g: Game, anyway = false, noUpdate = false) => {
       // the compatibility list says it doesn't start: say so first (the game stays in the list)
       if (g.compat?.label === "Doesn't start" && !anyway) {
         sfx.error()
@@ -269,7 +282,7 @@ export function App() {
           return
         }
       }
-      void launchMode(g, 'fresh')
+      void launchMode(g, 'fresh', noUpdate)
     },
     [state?.consoles, loadDetails, launchMode]
   )
@@ -315,6 +328,19 @@ export function App() {
   }, [])
   const guideSeen = useCallback((keys: string[]) => void api.guideSeen(keys), [])
   const couchSave = useCallback(() => void api.couchSave(), [])
+  const ps3Update = useCallback(
+    (g: Game) => {
+      void api.ps3Update(g.id).then((r) => {
+        const open = panelsRef.current.some((p) => p.id === 'ps3-update' && p.arg === g.id)
+        if (r.ok) setExtra((x) => ({ ...x, ps3Update: Object.fromEntries(Object.entries(x.ps3Update).filter(([k]) => k !== g.id)) }))
+        if (r.ok && open) {
+          setPanels((p) => p.filter((q) => q.id !== 'ps3-update'))
+          void launchMode(g, 'fresh', true)
+        }
+      })
+    },
+    [launchMode]
+  )
   const compressGame = useCallback(
     (g: Game) => {
       void api.compressGame(g.id).then(() => loadDetails(g.id))
@@ -1206,6 +1232,7 @@ export function App() {
         guideSeen,
         couchSave,
         compressGame,
+        ps3Update,
         openManual,
         modProfile,
         modProfileDelete,
@@ -1296,6 +1323,7 @@ export function App() {
     guideSeen,
     couchSave,
     compressGame,
+    ps3Update,
     openManual,
     modProfile,
     modProfileDelete,

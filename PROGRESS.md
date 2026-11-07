@@ -175,6 +175,18 @@ The kept log (`rpcs3_20261107183640_…`) caught it: after 33 min of multiplayer
 - Tests: unit 54, e2e 50 passed (13 opt-in skipped); `emulogs` checks a refused setting lands in Starstation’s log, not in a notice.
 - Released: commit 86efb26, tag `v2.0.11`, GitHub pre-release (beta).
 
+### 2.0.12 — PS3 game updates (2026-11-07, Hannes: "shure" to downloading PS3 game updates from Sony's official update server)
+
+**New allowed download source (Hannes, 2026-11-07):** Sony's PS3 game-update server — list `https://a0.ww.np.dl.playstation.net/tpl/np/<ID>/<ID>-ver.xml`, packages `http://b0.ww.np.dl.playstation.net/tppkg/np/…` (no HTTPS on b0: its cert is Akamai's and doesn't name the host).
+- `ps3updates.ts`: the list over HTTPS trusting only Sony's own root "SCEI DNAS Root 05" (pinned PEM, SHA-1 signed, valid to 2037; Windows doesn't know it; Electron's TLS accepts it as `ca`). Packages over HTTP only from `*.np.dl.playstation.net` and only installed when size + SHA-1 of all but the last 32 bytes match the list (checked on the real BO2 1.09 / 1.19 packages: that's exactly what Sony's `sha1sum` covers; the package footer repeats it).
+- Installed version = newest APP_VER of the disc / ISO and `dev_hdd0\game\<ID>\PARAM.SFO`; pending = every listed version above it, oldest first (PS3 updates aren't cumulative). After each install the APP_VER must have reached that version, else it stops (download kept for the next try). Downloads go to `config\cache\ps3-updates`, deleted once installed; a damaged download is retried once, then refused. Free space check: all updates + the largest one + 1 GB.
+- Lists are checked once a day per game after each scan (`config\ps3updates.json`); a game never checked is asked at its start (5 s timeout). Tests never reach Sony (`STARSTATION_PS3UPDATE_BASE` / `_INSTALLER`, headless only).
+- Menu: every start goes through `launchMode`; a PS3 game with pending updates opens "Update for …": version now / available, count + size, Update now (progress line; the game starts afterwards if the screen is still open), Play without updating, Cancel. The game can't be started while it's being updated.
+- `rpcs3InstallPkg` (`convert.ts`): `rpcs3 --headless --installpkg` (RPCS3 source `rpcs3.cpp`: with its window it asks "Install?" and stays open; headless installs and exits). Real run on Hannes's PC: BO2 1.09 then 1.19 installed (RPCS3 log "Successfully installed", APP_VER 01.19, 393 MB) — RPCS3 20551 then crashes in teardown (`fixed_typemap … ~manual_typemap`, exit 127), harmless, so success is judged by APP_VER / changed folders, not the exit code. Change detection also looks at each folder's PARAM.SFO (an update overwrites files in an existing folder).
+- Sony's lists today: BO2 1.09 + 1.19 (466 MB, now installed); GT6 BCUS98296 01.02 … 01.22 = 21 packages, 11.2 GB (not installed: offered at its next start). 98 GB free on C:.
+- `dev_hdd0\game\TEST12345` (empty, from 2026-11-04) is a leftover, not Hannes's; left alone.
+- Tests: unit 58 (new `ps3update`), e2e 51 passed (13 opt-in skipped); new e2e `ps3update` (asked before playing, Play without updating, two updates installed in order then the game starts, damaged package refused twice, cache emptied).
+
 ## How to work on it
 
 - Open a PowerShell, `. .\env.ps1` (portable Node/gh, caches in `tools\`).

@@ -44,6 +44,8 @@ const api = {
   overlayAction: (action: string) => ipcRenderer.invoke('overlay-action', action),
   testHome: () => ipcRenderer.invoke('test-home'),
   compressGame: (gameId: string) => ipcRenderer.invoke('compress-game', gameId),
+  ps3UpdateInfo: (gameId: string) => ipcRenderer.invoke('ps3-update-info', gameId),
+  ps3Update: (gameId: string) => ipcRenderer.invoke('ps3-update', gameId),
   modProfileSave: (gameId: string, name: string) => ipcRenderer.invoke('mod-profile-save', gameId, name),
   modProfileApply: (gameId: string, profileId: string) => ipcRenderer.invoke('mod-profile-apply', gameId, profileId),
   modProfileDelete: (gameId: string, profileId: string) => ipcRenderer.invoke('mod-profile-delete', gameId, profileId),
@@ -115,7 +117,7 @@ const api = {
   quit: () => ipcRenderer.invoke('quit'),
   mediaUrl: (absPath: string) => `starstation-media://local/${encodeURIComponent(absPath)}`,
   on: (channel: string, cb: (payload: unknown) => void) => {
-    const allowed = ['notice', 'library', 'consoles', 'collections', 'screenshots', 'battery', 'package-progress', 'running', 'navigate', 'import-progress', 'emulator-progress', 'add-ask', 'overlay', 'compress-progress', 'nexus-request', 'trophies', 'wallpapers', 'package-ask', 'display-revert', 'mod-inbox-ask', 'mod-result']
+    const allowed = ['notice', 'library', 'consoles', 'collections', 'screenshots', 'battery', 'package-progress', 'running', 'navigate', 'import-progress', 'emulator-progress', 'add-ask', 'overlay', 'compress-progress', 'ps3update-progress', 'nexus-request', 'trophies', 'wallpapers', 'package-ask', 'display-revert', 'mod-inbox-ask', 'mod-result']
     if (!allowed.includes(channel)) throw new Error(`Unknown channel ${channel}`)
     const h = (_e: unknown, payload: unknown) => cb(payload)
     ipcRenderer.on(channel, h)
