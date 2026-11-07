@@ -209,6 +209,7 @@ The kept log (`rpcs3_20261107183640_…`) caught it: after 33 min of multiplayer
 - **Logging:** every IPC handler goes through `handle()` → failures logged with the channel name.
 - Artwork queue: `busy` always released.
 - Tests: unit `store`, `fsutil` (renameRetry), `downloads` (stillWriting with a real share-locked file), `presets` (every {placeholder} in a preset is one Starstation fills — the v1 {n64res} bug class; known step types; mutation-checked); e2e `reliability.spec.ts` (double start, quit while playing → saved/counted/clean, pending switch blocks start, menu errors logged + crashed menu reloads), `modinbox` (open question asked again after a menu reload — the menu pulls `mod-inbox-open` on load). Health check: one unreadable game no longer breaks it; the screen shows an error instead of waiting forever.
+- Released: commit 0695a34, tag `v2.0.13`, GitHub pre-release (beta). Unit 72, e2e 54 passed (13 opt-in skipped).
 
 ## How to work on it
 
