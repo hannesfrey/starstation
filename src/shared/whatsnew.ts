@@ -12,6 +12,17 @@ export interface WhatsNew {
 
 export const WHATS_NEW: WhatsNew[] = [
   {
+    version: '2.0.14',
+    summary: ['More small fixes so nothing gets stuck'],
+    details: [
+      'Sending or receiving a package that fails now ends with the reason, instead of a progress screen that waits forever.',
+      'The Health check finishes even if one game file can’t be read, and shows an error instead of waiting forever.',
+      'If a compressed game is in place but the original couldn’t go to the Recycle Bin, the message now says so (both copies are there).',
+      'Add to Steam writes Steam’s shortcut file in one piece.',
+      'A settings file you edited by hand and broke is noted in the log once, not over and over.'
+    ]
+  },
+  {
     version: '2.0.13',
     summary: ['Simpler: the Trophies column is gone', 'Steadier: many small fixes so things go wrong less often, and recover by themselves when they do'],
     details: [

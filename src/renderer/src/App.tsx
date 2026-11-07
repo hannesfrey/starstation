@@ -899,13 +899,15 @@ export function App() {
         result: !r ? 'Cancelled.' : r.ok ? (r.added !== undefined ? `Done: ${r.added} file(s) added, ${r.kept ?? 0} kept.` : r.folder ? `Saved in ${r.folder}` : 'Done.') : (r.error ?? 'Stopped.')
       }
     }))
+  /** The request itself failed: the progress screen ends with the reason instead of waiting forever. */
+  const pkgFailed = (e: Error) => endPkg({ ok: false, error: e.message })
   const pkgSend = useCallback(() => {
     startPkg()
-    void api.packageSend(pkgRef.current.choice).then(endPkg)
+    void api.packageSend(pkgRef.current.choice).then(endPkg, pkgFailed)
   }, [])
   const pkgSaveFolder = useCallback(() => {
     startPkg()
-    void api.packageSaveToFolder(pkgRef.current.choice).then(endPkg)
+    void api.packageSaveToFolder(pkgRef.current.choice).then(endPkg, pkgFailed)
   }, [])
   const receiveSettingsRef = useRef(true)
   const pkgReceiveCode = useCallback((useSettings: boolean) => {
@@ -914,7 +916,7 @@ export function App() {
   }, [])
   const pkgReceiveFolder = useCallback((useSettings: boolean) => {
     startPkg()
-    void api.packageReceiveFolder(useSettings).then(endPkg)
+    void api.packageReceiveFolder(useSettings).then(endPkg, pkgFailed)
   }, [])
   const pkgCancel = useCallback(() => void api.packageCancel(), [])
   const installAll = useCallback(() => {
@@ -1023,7 +1025,7 @@ export function App() {
       if ((entry.target as string) === 'pkgcode') {
         setEntry(null)
         startPkg()
-        void api.packageReceive(value, receiveSettingsRef.current).then(endPkg)
+        void api.packageReceive(value, receiveSettingsRef.current).then(endPkg, pkgFailed)
         return
       }
       const tg = entry.target as string

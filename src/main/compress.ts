@@ -117,6 +117,7 @@ export async function compressGame(g: Game, progress: Progress, trash: Trash): P
   await fsp.mkdir(work, { recursive: true })
   const outExt = opt.format === 'RVZ' ? '.rvz' : '.chd'
   const out = path.join(work, `out${outExt}`)
+  let placed: string | null = null
   try {
     // 1. what the data looks like now
     progress('Reading the game…')
@@ -157,6 +158,7 @@ export async function compressGame(g: Game, progress: Progress, trash: Trash): P
     const meta: Meta = { kind: opt.format === 'RVZ' ? 'rvz' : isCd ? 'cd' : 'dvd', files, compressedAt: new Date().toISOString() }
     if (isCd) meta.cue = { name: path.basename(src), text: fs.readFileSync(src, 'latin1') }
     await renameRetry(out, final)
+    placed = final
     writeJson(metaFile(g, final), meta)
     for (const f of inputs) await trash(f)
     const saved = size - fs.statSync(final).size
@@ -165,6 +167,9 @@ export async function compressGame(g: Game, progress: Progress, trash: Trash): P
     return { ok: true, path: final }
   } catch (e) {
     log.warn(`${g.id}: compress failed`, e)
+    // the checked copy is already in place, only binning the original failed: say what is really there
+    if (placed)
+      return { ok: false, error: `Compressed and checked, but the original couldn't go to the Recycle Bin (${(e as Error).message}). Both are in the games folder; delete the original by hand.` }
     return { ok: false, error: `Not compressed: ${(e as Error).message}. The game stays as it was.` }
   } finally {
     await fsp.rm(work, { recursive: true, force: true })

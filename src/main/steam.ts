@@ -4,6 +4,7 @@ import zlib from 'node:zlib'
 import { execFileSync } from 'node:child_process'
 import { app } from 'electron'
 import { logger } from './log'
+import { writeFileAtomic } from './store'
 
 /**
  * Settings → Steam → "Add Starstation to Steam": a non-Steam shortcut in every Steam user's shortcuts.vdf,
@@ -166,7 +167,7 @@ export function addToSteam(): { ok: boolean; error?: string; users?: number } {
     }
     const next = existing ? entries.map((e) => (e === existing ? { ...e, ...entry } : e)) : [...entries, entry]
     root.shortcuts = Object.fromEntries(next.map((e, i) => [String(i), e]))
-    fs.writeFileSync(f, writeVdf(root))
+    writeFileAtomic(f, writeVdf(root))
     changed++
   }
   log.info(`added to Steam for ${changed} user(s)`)

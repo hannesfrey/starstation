@@ -4,11 +4,11 @@ Read SPEC.md first. This file tracks where the build stands and every small deci
 
 ## Current state
 
-- **Phase:** v2 done. Latest beta: **2.0.13** (2026-11-07: trophies removed + reliability round, see its section). v1.0.0 is still what everyone else gets; only Hannes presses "Release to everyone".
+- **Phase:** v2 done. Latest beta: **2.0.14** (2026-11-07: 2.0.13 trophies removed + reliability round, 2.0.14 follow-ups). v1.0.0 is still what everyone else gets; only Hannes presses "Release to everyone".
 - **Earlier sessions (2026-11-07):** 2.0.10 player 2 from the first start (padVars count + RPCS3 new pad copies player 1's Config, fresh = VID 1356/PID 616); 2.0.11 RPCS3 "Exclusive Fullscreen Mode": "Disable" + emulator-refused settings logged; 2.0.12 PS3 game updates from Sony (`src/main/ps3updates.ts`, `formats/ps3update.ts`, panel 'ps3-update'). Black Ops II updated for real to 01.19. Gran Turismo 6 (BCUS98296) still 01.00: 21 updates / 11.2 GB offered at its next start.
-- **Waiting on Hannes:** restart Starstation to get 2.0.13 (also brings 2.0.12); play BO2 to see if the freezes are gone (earlier crash = RPCS3 stall tripping the game's own 30 s hang watchdog, not Starstation). If it crashes again: read `Files\config\logs\emulators` (RPCS3 log is kept).
+- **Waiting on Hannes:** restart Starstation to get 2.0.14 (also brings 2.0.12 and 2.0.13); play BO2 to see if the freezes are gone (earlier crash = RPCS3 stall tripping the game's own 30 s hang watchdog, not Starstation). If it crashes again: read `Files\config\logs\emulators` (RPCS3 log is kept).
 - **Still open:** DsHidMini driver install on a real DS3; real-pad check of the PS button; MK7 Mii + 3DS controller check.
-- **Reliability round, part 2 (Hannes asked for this session + half the next):** still to look at — `packages.ts` receive (paths from another PC), `compress.ts` verify-then-delete, `steam.ts` VDF writer, `customconsole.ts`, renderer `api.x().then` calls without `.catch` (only logged now), overlay input from other players beyond the first 400 ms (only the pad that pressed PS should drive the menu: needs the helper to map XInput slots to Gamepad API indices).
+- **Reliability round, part 2 (Hannes asked for this session + half the next):** still to look at — checked in 2.0.14: packages receive, compress, Steam writer, custom consoles. Still open: renderer `api.x().then` calls without `.catch` (only logged now), overlay input from other players beyond the first 400 ms (only the pad that pressed PS should drive the menu: needs the helper to map XInput slots to Gamepad API indices).
 - **Release routine:** bump package.json + whatsnew.ts entry → tests (`npx vitest run`, `npx playwright test`) → commit → `git tag vX` → push tag → `node scripts/release.mjs "<notes>"` (beta pre-release) → note "Released: commit …" here and push.
 - **Allowed download sources** (Hannes): emudeck.com, emulators' official GitHub/sites, Sony PS3 firmware page, and (2026-11-07) Sony's PS3 game-update server.
 
@@ -210,6 +210,15 @@ The kept log (`rpcs3_20261107183640_…`) caught it: after 33 min of multiplayer
 - Artwork queue: `busy` always released.
 - Tests: unit `store`, `fsutil` (renameRetry), `downloads` (stillWriting with a real share-locked file), `presets` (every {placeholder} in a preset is one Starstation fills — the v1 {n64res} bug class; known step types; mutation-checked); e2e `reliability.spec.ts` (double start, quit while playing → saved/counted/clean, pending switch blocks start, menu errors logged + crashed menu reloads), `modinbox` (open question asked again after a menu reload — the menu pulls `mod-inbox-open` on load). Health check: one unreadable game no longer breaks it; the screen shows an error instead of waiting forever.
 - Released: commit 0695a34, tag `v2.0.13`, GitHub pre-release (beta). Unit 72, e2e 54 passed (13 opt-in skipped).
+
+### 2.0.14 — reliability follow-ups (2026-11-07)
+
+- Package send / save / receive: a failed request ends the progress screen with its reason (`pkgFailed`); `package-finish` catches receive errors like the other receive paths. Package receive itself checked: names come from real folder listings, nothing can land outside Files.
+- Compress: if the checked copy is in place but binning the original fails, the message says both are there (was: "stays as it was").
+- Steam shortcuts.vdf written atomically. Custom console ids must look like `x-name` before they become a file path.
+- store: a damaged file is reported and copied to `.broken` once per session (secrets.json is read on every menu update); writing it resets that.
+- What's new 2.0.14 also mentions the Health check fix from 2.0.13 (people coming from 2.0.12 only see the 2.0.14 entry).
+- Tests: unit 73, e2e 54 passed (13 opt-in skipped).
 
 ## How to work on it
 

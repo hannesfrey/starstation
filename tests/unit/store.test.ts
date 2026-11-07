@@ -56,6 +56,14 @@ describe('JSON store', () => {
     expect(readJson(f, { x: 'fallback' })).toEqual({ x: 'fallback' })
   })
 
+  it('a damaged file read again and again is noted (and copied) once', () => {
+    const f = path.join(tmp, 'config', 'often.json')
+    fs.writeFileSync(f, '{"github": ') // e.g. secrets.json edited by hand, read on every menu update
+    for (let i = 0; i < 20; i++) expect(readJson(f, {})).toEqual({})
+    const log = fs.readdirSync(path.join(tmp, 'config', 'logs')).map((n) => fs.readFileSync(path.join(tmp, 'config', 'logs', n), 'utf8')).join('')
+    expect(log.split(`${f} is damaged`).length - 1).toBe(1)
+  })
+
   it('reads files written with a UTF-8 BOM (Notepad, PowerShell)', () => {
     const f = path.join(tmp, 'config', 'secrets.json')
     fs.writeFileSync(f, '﻿{"ok": true}')

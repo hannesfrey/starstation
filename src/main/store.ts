@@ -3,6 +3,8 @@ import path from 'node:path'
 import { logger } from './log'
 
 const log = logger('store')
+/** Damaged files already noted this session. */
+const reported = new Set<string>()
 
 /**
  * Read a JSON file, returning `fallback` if it is missing.
@@ -18,16 +20,21 @@ export function readJson<T>(file: string, fallback: T): T {
   }
   const parsed = parse<T>(text)
   if (parsed.ok) return parsed.value
-  log.warn(`${file} is damaged; keeping it as .broken`)
-  try {
-    fs.copyFileSync(file, `${file}.broken`)
-  } catch {
-    /* best effort */
+  // some files are read very often (secrets.json on every menu update): note and keep a damaged one only once
+  const first = !reported.has(file)
+  reported.add(file)
+  if (first) {
+    log.warn(`${file} is damaged; keeping it as .broken`)
+    try {
+      fs.copyFileSync(file, `${file}.broken`)
+    } catch {
+      /* best effort */
+    }
   }
   try {
     const bak = parse<T>(fs.readFileSync(`${file}.bak`, 'utf8'))
     if (bak.ok) {
-      log.warn(`${file}: using the last good copy`)
+      if (first) log.warn(`${file}: using the last good copy`)
       return bak.value
     }
   } catch {
@@ -49,6 +56,7 @@ function parse<T>(text: string): { ok: true; value: T } | { ok: false } {
 /** Write JSON safely; the version it replaces stays as `.bak` (readJson falls back to it if the file breaks). */
 export function writeJson(file: string, data: unknown): void {
   writeFileAtomic(file, JSON.stringify(data, null, 2), { backup: true })
+  reported.delete(file)
 }
 
 let seq = 0

@@ -523,7 +523,9 @@ function registerIpc(): void {
     const f = path.resolve(String(folder))
     if (!f.toLowerCase().startsWith(dir('config', 'packages').toLowerCase()) && !(HEADLESS || pkgAskFolders.has(f.toLowerCase())))
       return { ok: false, error: 'Unknown package folder' }
-    const r = await afterReceive(await receiveFromFolder(f, { useSettings: !!useSettings, profiles: choices }, pkgProgress))
+    const r = await afterReceive(
+      await receiveFromFolder(f, { useSettings: !!useSettings, profiles: choices }, pkgProgress).catch((e) => ({ ok: false, error: (e as Error).message, added: 0, kept: 0 }))
+    )
     if (r.ok && f.toLowerCase().startsWith(dir('config', 'packages').toLowerCase())) await fs.promises.rm(f, { recursive: true, force: true })
     return r
   })

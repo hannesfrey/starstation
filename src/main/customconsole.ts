@@ -11,6 +11,8 @@ import type { CustomConsoleForm } from '../shared/types'
  */
 
 const file = (id: string) => dir('config', 'consoles', `${id}.json`)
+/** Ids Starstation makes for user consoles ("x-game-boy-2"): anything else never becomes a file path. */
+const OWN_ID = /^x-[a-z0-9-]+$/
 
 /** Split a command line like `-f "{launch}"` into arguments (quotes group, and are removed). */
 export function splitArgs(s: string): string[] {
@@ -37,6 +39,7 @@ export function customConsoleForm(id: string): CustomConsoleForm | null {
 export function saveCustomConsole(f: CustomConsoleForm): { ok: boolean; error?: string; id?: string } {
   const name = f.name.trim()
   if (!name) return { ok: false, error: 'The console needs a name.' }
+  if (f.id !== undefined && !OWN_ID.test(f.id)) return { ok: false, error: 'Only consoles added here can be edited.' }
   if (!f.exe || !fs.existsSync(f.exe)) return { ok: false, error: 'Choose the emulator program (.exe).' }
   const extensions = f.extensions
     .split(/[\s,;]+/)
@@ -85,7 +88,7 @@ export function saveCustomConsole(f: CustomConsoleForm): { ok: boolean; error?: 
 
 /** Remove the console from Starstation. Its games folder and saves stay where they are. */
 export function removeCustomConsole(id: string): void {
-  if (!id.startsWith('x-')) return
+  if (!OWN_ID.test(id)) return
   fs.rmSync(file(id), { force: true })
   loadPresets()
 }
