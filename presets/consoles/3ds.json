@@ -52,6 +52,10 @@
       "type": "link",
       "path": "{screenshots}/azahar",
       "target": "{emu}/user/screenshots"
+    },
+    {
+      "type": "mii-db",
+      "file": "{emu}/user/nand/data/00000000000000000000000000000000/extdata/00048000/F000000B/user/CFL_DB.dat"
     }
   ],
   "quickResume": false,

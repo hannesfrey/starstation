@@ -12,6 +12,11 @@ export interface WhatsNew {
 
 export const WHATS_NEW: WhatsNew[] = [
   {
+    version: '2.0.8',
+    summary: ['3DS games that need a Mii start now (Mario Kart 7)'],
+    details: ['Some 3DS games refuse to start without a Mii. Starstation now puts its own Mii, called Player, into the 3DS Mii list when it is empty. Miis that are already there are never changed.']
+  },
+  {
     version: '2.0.7',
     summary: ['3DS games work with your controller'],
     details: ['Azahar (3DS) was left on keyboard keys. Starstation now sets it up for any connected controller: right button = A, bottom = B, triggers = ZL/ZR, left stick = circle pad, right stick = C-stick.']

@@ -24,6 +24,8 @@ export type ConfigStep =
   | { type: 'kv'; file: string; sep: string; set: Record<string, string> }
   | { type: 'touch'; path: string }
   | { type: 'mkdir'; path: string }
+  /** 3DS: make sure the Mii database (CFL_DB.dat) has at least one Mii; one with Miis is never touched. */
+  | { type: 'mii-db'; file: string }
   | { type: 'write'; file: string; lines: string[]; ifMissing?: boolean }
   /** Folder link (junction) for emulators whose saves can't be redirected. */
   | { type: 'link'; path: string; target: string }

@@ -136,8 +136,12 @@ Read SPEC.md first. This file tracks where the build stands and every small deci
 ### 2.0.7 — 3DS controller (2026-11-07)
 
 - Azahar had only keyboard defaults (the preset left mapping to the user). Now the 3DS preset writes Azahar's own "all controllers" SDL bindings (api:controller, maptype:all, guid 0 — sdl_impl.cpp ignores the GUID then), positional like Azahar's auto-map. Not tested with a real pad (Hannes was using the PC).
-- **Open:** Mario Kart 7 says "There are no Mii characters… create at least one": Azahar's shared-extdata CFL_DB.dat (0xF000000B) is empty. Plan: Starstation writes CFL_DB.dat itself with one original Mii — format in mikage-emu/3dbrew content/Mii.md (CFOG header, 100×0x5C Miis at 0x8, CFHE section, CRC-16/XMODEM BE at 0xC81E, second block 0xC820–0xE4BE with own CRC, size 0xE4C0) and RedShyGuy/acnl-decomp lib/cfl cfl_Database.cpp (how games validate it). Also consider System lle_applets=false (Azahar default true; no system applets present).
+- **Done in 2.0.8 (was open):** Mario Kart 7 says "There are no Mii characters… create at least one": Azahar's shared-extdata CFL_DB.dat (0xF000000B) is empty. Plan: Starstation writes CFL_DB.dat itself with one original Mii — format in mikage-emu/3dbrew content/Mii.md (CFOG header, 100×0x5C Miis at 0x8, CFHE section, CRC-16/XMODEM BE at 0xC81E, second block 0xC820–0xE4BE with own CRC, size 0xE4C0) and RedShyGuy/acnl-decomp lib/cfl cfl_Database.cpp (how games validate it). Also consider System lle_applets=false (Azahar default true; no system applets present).
 - Lesson: a visible test opened over Hannes's live GT4 + Discord screen share; screenshots deleted. Check he isn't using the PC first; never capture the whole screen.
+
+### 2.0.8 — 3DS Mii (2026-11-07)
+
+- New step type `mii-db` (`formats/miidb.ts`): before a 3DS game, Azahar's shared-extdata `CFL_DB.dat` gets one Mii ("Player", face of Azahar's open-source Standard Mii, own ID) when it is missing, broken or empty. A database with any Miis is never touched (even with a bad checksum). Built empty database is byte-for-byte in its checksums identical to the one Mario Kart 7 wrote (0x6308 / 0x4F53). Tests: unit `miidb.test.ts`, e2e `miidb.spec.ts`. Not yet confirmed in Mario Kart 7 itself (no visible test while Hannes uses the PC) → on his checklist.
 
 ## How to work on it
 

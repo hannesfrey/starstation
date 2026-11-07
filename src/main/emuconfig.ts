@@ -5,6 +5,7 @@ import { getIniValue, setIniValues, setKvValues, setYamlPlayers } from './ini'
 import { candidateBios } from './bios'
 import { dir } from './paths'
 import { logger } from './log'
+import { withOneMii } from './formats/miidb'
 
 const log = logger('emuconfig')
 
@@ -39,6 +40,16 @@ export function applyStep(step: ConfigStep, v: Record<string, string>): void {
     case 'mkdir':
       fs.mkdirSync(fill(step.path, v), { recursive: true })
       return
+    case 'mii-db': {
+      const file = fill(step.file, v)
+      const next = withOneMii(fs.existsSync(file) ? fs.readFileSync(file) : null)
+      if (next) {
+        fs.mkdirSync(path.dirname(file), { recursive: true })
+        fs.writeFileSync(file, next)
+        log.info(`Mii database: Starstation's Mii added (${file})`)
+      }
+      return
+    }
     case 'link': {
       const p = fill(step.path, v)
       const target = fill(step.target, v)
