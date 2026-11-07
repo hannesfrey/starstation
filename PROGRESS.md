@@ -245,7 +245,7 @@ The kept log (`rpcs3_20261107183640_…`) caught it: after 33 min of multiplayer
 - Main process refuses sleep / shut down while a game runs (the panel disabled it; IPC didn't).
 - **Packages: Cancel didn't stop receiving** — it killed croc, and the receive loop took that as "not ready yet" and tried again for up to 10 minutes. Now a `cancelled` flag ends send/receive (and croc calls after it); the half-received folder is removed. The inventory step had used `cancelTransfer()` as its own timeout: it now kills only its croc (the new flag would otherwise have cancelled every receive — caught by the new test). One package transfer at a time (`handle()` marks the transfer channels exclusive); one EmuDeck import at a time. `packages.spec` — Cancel ends a waiting receive within seconds with nothing left, a second transfer meanwhile is refused.
 - Tests: `feel.spec` power — confirm opens on Cancel, ✕ does nothing, shutdown refused during a game; `reliability.spec` — profile delete asks, opens on Cancel, deletes only on the explicit choice.
-- Full e2e 59 passed (14 opt-in skipped), unit 77.
+- Full e2e 59 passed (14 opt-in skipped), unit 77. Released: commit 7b2a06a, tag `v2.0.17`, GitHub pre-release (beta); its packaged check passed.
 
 ## How to work on it
 
