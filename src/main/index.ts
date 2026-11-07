@@ -43,6 +43,7 @@ import { readBattery } from './battery'
 import { moveStats, reattachArtwork, setCustomArt } from './library/library'
 import { healthCheck } from './health'
 import { checkDs3, installDs3Driver } from './ds3'
+import { assignInbox, startModInbox } from './modinbox'
 import { exportReport } from './diagnostics'
 import { lastUnlockCheck, raLogin, raLogout, raStatus, recentUnlocks } from './retroach'
 import { listRooms, netplayArgs, netplayVars } from './netplay'
@@ -784,6 +785,7 @@ function registerIpc(): void {
   ipcMain.handle('mod-profile-save', (_e, id: string, name: string) => withGame(id, (g) => void saveModProfile(g, String(name))))
   ipcMain.handle('mod-profile-delete', (_e, id: string, pid: string) => withGame(id, (g) => deleteModProfile(g, String(pid))))
   ipcMain.handle('mod-profile-apply', (_e, id: string, pid: string) => notRunning(id) ?? withGame(id, (g) => applyModProfile(g, String(pid))))
+  ipcMain.handle('mod-inbox-assign', (_e, id: string, gameId: string) => assignInbox(String(id), String(gameId ?? '')))
   ipcMain.handle('mod-add', (_e, id: string, p: string) => withGame(id, (g) => addMod(g, p).then(modAdded(g))))
   ipcMain.handle('mod-add-dialog', async (_e, id: string, folder: boolean) => {
     const g = getGame(id)
@@ -1143,6 +1145,23 @@ app.whenReady().then(async () => {
     registerNxm()
     const startNxm = nxmFromArgs(process.argv)
     if (startNxm) void openNxm(startNxm)
+    // mods put into Files\mods (or mods\<console>) are added to their game by themselves
+    startModInbox({
+      notify,
+      trash,
+      ask: (q) => {
+        send('mod-inbox-ask', q)
+        if (win && !win.isDestroyed() && !HEADLESS) win.focus()
+      },
+      added: (gameId, r) => {
+        if (r.ok) {
+          noteFirst('mod')
+          checkTrophies()
+        }
+        send('mod-result', { gameId, result: r })
+      },
+      paused: () => !!runningGame()
+    })
     startDownloadWatcher({
       addGames: (paths) => doAddGames(paths),
       trash,

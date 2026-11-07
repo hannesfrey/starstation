@@ -59,7 +59,7 @@ const seen = new Map<string, string>()
 const done = new Set<string>()
 let busy = false
 
-function signature(p: string): Sig | null {
+export function signature(p: string): Sig | null {
   try {
     const st = fs.statSync(p)
     if (st.isFile()) return { id: `${st.size}:${st.mtimeMs}`, mtime: st.mtimeMs }

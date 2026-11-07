@@ -12,6 +12,17 @@ export interface WhatsNew {
 
 export const WHATS_NEW: WhatsNew[] = [
   {
+    version: '2.0.4',
+    summary: ['Adding mods: put them into the mods folder and Starstation does the rest'],
+    details: [
+      'Put a mod (zip, 7z, folder or patch file) into Files\\mods — or a console folder like mods\\ps2. Starstation unpacks it, finds the game, installs it, switches it on, and moves the original to the Recycle Bin.',
+      'The game is found from the mod’s name or the game codes in its readme. If it can’t tell, it asks you once which game it’s for.',
+      'A patch made for a different version of a game is refused with its own instructions quoted, instead of failing quietly.',
+      'Texture packs: optional extras next to the "replacements" folder (like alternate textures) are no longer switched on by mistake, and packs with a single sub-folder land in the right place.',
+      'Mods with nothing the emulator can load are kept with their instructions instead of being put somewhere useless.'
+    ]
+  },
+  {
     version: '2.0.3',
     summary: ['PS3 controllers work on any PC: Starstation brings their driver and installs it when you plug one in'],
     details: [

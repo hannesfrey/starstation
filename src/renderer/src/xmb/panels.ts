@@ -42,6 +42,8 @@ export interface PanelExtra {
   storage?: StorageInfo
   /** Nexus Mods link waiting for "Which game is this for?" */
   nexus?: NexusRequest
+  /** A mod put into the mods folder whose game Starstation couldn't tell. */
+  modInbox?: { id: string; name: string; games: string[] }
   nexusStatus?: { key: boolean; registered: boolean; patches: { pcsx2?: string; rpcs3?: string } }
   patchesBusy?: boolean
   wallpapers?: Wallpapers
@@ -145,6 +147,7 @@ export interface PanelHandlers {
   modProfileDelete: (g: Game, profileId: string) => void
   newModProfile: (g: Game) => void
   nexusInstall: (url: string, g: Game) => void
+  modInboxAssign: (gameId: string) => void
   updatePatches: () => void
   setWallpaper: (kind: string, remove?: boolean) => void
   power: (action: 'sleep' | 'shutdown') => void
@@ -1135,15 +1138,31 @@ export function buildPanel(id: string, arg: string | undefined, state: AppState,
           value: m.manual ? 'by hand' : m.enabled ? 'On' : 'Off',
           run: () => (h.openPanel(m.manual ? 'mod-manual' : 'mod', `${g.id}|${m.id}`), 'keep')
         })
-      if (!v.mods.length && !v.reason) items.push({ key: 'none', label: 'No mods yet. Add a file or folder, or drag one onto this window.', info: true })
+      if (!v.mods.length && !v.reason)
+        items.push({ key: 'none', label: 'No mods yet. Easiest: put the mod (zip, 7z, folder or patch) into the mods folder — Starstation adds it and switches it on by itself.', info: true })
       // patch files (.ips .bps .ppf .xdelta) work for every game
       items.push({ key: 'add-file', label: 'Add mod from file…', value: v.targets.length ? undefined : 'patch files: .ips .bps .ppf .xdelta', run: () => (h.modAddDialog(g, false), 'keep') })
       if (v.targets.length) {
         items.push({ key: 'add-folder', label: 'Add mod folder…', run: () => (h.modAddDialog(g, true), 'keep') })
         if (v.gamebanana) items.push({ key: 'gb', label: 'Browse GameBanana…', run: () => (h.gbOpen(g), 'keep') })
       }
-      items.push({ key: 'open', label: 'Open mods folder', run: () => h.command('open-folder', `mods:${g.console}`) })
+      items.push({ key: 'open', label: 'Open mods folder', value: 'drop mods here', run: () => h.command('open-folder', `mods:${g.console}`) })
       return { id, title: `Mods · ${g.title}`, items }
+    }
+    case 'mod-inbox': {
+      const q = x.modInbox
+      if (!q) return null
+      const games = q.games.map((gid) => state.library.games.find((g) => g.id === gid)).filter((g): g is Game => !!g)
+      return {
+        id,
+        title: 'New mod',
+        items: [
+          { key: 'name', label: q.name, info: true },
+          { key: 'ask', label: 'Which game is this mod for?', info: true },
+          ...games.map((g) => ({ key: `mi-${g.id}`, label: g.title, value: state.consoles.find((c) => c.id === g.console)?.short, run: () => h.modInboxAssign(g.id) })),
+          { key: 'later', label: 'Not now', value: 'asked again next time', run: () => h.modInboxAssign('') }
+        ]
+      }
     }
     case 'nexus': {
       const n = x.nexus

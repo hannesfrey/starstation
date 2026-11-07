@@ -319,6 +319,8 @@ export interface StarstationApi {
   mods(gameId: string): Promise<ModsView | null>
   modAddDialog(gameId: string, folder: boolean): Promise<ModAddResult | null>
   modAdd(gameId: string, path: string): Promise<ModAddResult>
+  /** A mod from the mods folder: the game it's for ("" = not now). */
+  modInboxAssign(id: string, gameId: string): Promise<void>
   modPlace(gameId: string, pending: string, target: string): Promise<ModAddResult>
   modToggle(gameId: string, modId: string, on: boolean, winner?: 'this' | 'other'): Promise<ModToggleResult>
   modDelete(gameId: string, modId: string): Promise<void>
@@ -353,6 +355,8 @@ export interface StarstationApi {
   on(channel: 'overlay', cb: (s: OverlayState) => void): () => void
   on(channel: 'compress-progress', cb: (p: { gameId: string; text: string }) => void): () => void
   on(channel: 'nexus-request', cb: (r: NexusRequest) => void): () => void
+  on(channel: 'mod-inbox-ask', cb: (q: { id: string; name: string; games: string[] }) => void): () => void
+  on(channel: 'mod-result', cb: (r: { gameId: string; result: ModAddResult }) => void): () => void
   on(channel: 'trophies', cb: (t: { list: Trophy[]; ra: Achievement[] }) => void): () => void
   on(channel: 'wallpapers', cb: (w: Wallpapers) => void): () => void
   on(channel: 'package-ask', cb: (a: { profiles: string[]; folder?: string }) => void): () => void

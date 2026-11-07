@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import fsp from 'node:fs/promises'
+import crypto from 'node:crypto'
 import path from 'node:path'
 import { dir } from './paths'
 import { readJson, writeJson } from './store'
@@ -103,12 +104,15 @@ function walk(root: string, rel = ''): string[] {
   return out
 }
 
-/** Zip/7z/rar archives often wrap everything in one folder: look inside it. */
-function contentRoot(d: string): string {
+/**
+ * Zip/7z/rar archives often wrap everything in one folder: look inside it — but never past a folder the
+ * emulator looks for by name (e.g. "replacements"), or "replacements/cars/…" would lose its "cars".
+ */
+function contentRoot(d: string, anchors: RegExp[] = []): string {
   let cur = d
   for (;;) {
     const ents = fs.readdirSync(cur, { withFileTypes: true }).filter((e) => !/^(__MACOSX|\.DS_Store|thumbs\.db|\.pending\.json)$/i.test(e.name))
-    if (ents.length === 1 && ents[0].isDirectory()) cur = path.join(cur, ents[0].name)
+    if (ents.length === 1 && ents[0].isDirectory() && !anchors.some((a) => a.test(ents[0].name))) cur = path.join(cur, ents[0].name)
     else return cur
   }
 }
@@ -144,7 +148,7 @@ export type AddModResult =
 export async function addMod(
   g: Game,
   src: string,
-  opts: { name?: string; target?: string; description?: string; image?: string; source?: ModEntry['source'] } = {}
+  opts: { name?: string; target?: string; description?: string; image?: string; source?: ModEntry['source']; move?: boolean } = {}
 ): Promise<AddModResult> {
   // a patch file (.ips / .bps / .ppf / .xdelta): a patched copy of the game, for every console
   if (!fs.statSync(src).isDirectory() && patchKind(src)) return addPatchMod(g, src, opts)
@@ -156,7 +160,12 @@ export async function addMod(
   const ext = path.extname(src).toLowerCase()
   const name = opts.name ?? path.basename(src, fs.statSync(src).isDirectory() ? '' : ext)
   try {
-    if (fs.statSync(src).isDirectory()) await fsp.cp(src, path.join(tmp, path.basename(src)), { recursive: true })
+    if (fs.statSync(src).isDirectory()) {
+      // move: Starstation's own unpacked copy (mods folder inbox) — no second copy of a big pack
+      const to = path.join(tmp, path.basename(src))
+      if (opts.move) await fsp.rename(src, to).catch(() => fsp.cp(src, to, { recursive: true }))
+      else await fsp.cp(src, to, { recursive: true })
+    }
     else if (['.zip', '.7z', '.rar'].includes(ext)) await extract(src, tmp, { flatten: false })
     else await fsp.copyFile(src, path.join(tmp, path.basename(src)))
   } catch (e) {
@@ -168,6 +177,12 @@ export async function addMod(
   const patches = inside.filter((f) => patchKind(path.join(tmp, f)))
   const rest = inside.filter((f) => !patches.includes(f) && !/\.(txt|md|nfo|pdf|png|jpe?g|url|htm|html)$/i.test(f))
   if (patches.length === 1 && !rest.length) {
+    // the readme names the exact game version it needs (e.g. by MD5): check before patching for minutes
+    const wrong = await wrongBase(g, inside.filter((f) => /\.(txt|md|nfo)$/i.test(f)).map((f) => fs.readFileSync(path.join(tmp, f), 'utf8')).join('\n'))
+    if (wrong) {
+      await fsp.rm(tmp, { recursive: true, force: true })
+      return { ok: false, error: wrong }
+    }
     const r = await addPatchMod(g, path.join(tmp, patches[0]), { ...opts, name: opts.name ?? name })
     await fsp.rm(tmp, { recursive: true, force: true })
     return r
@@ -187,7 +202,8 @@ export async function finishAdd(g: Game, pending: string, targetId?: string): Pr
     await fsp.rm(tmp, { recursive: true, force: true })
     return { ok: false, error: 'Cancelled.' }
   }
-  const content = contentRoot(tmp)
+  const anchors = targetsOf(getConsole(g.console)).flatMap((t) => (t.anchor ? [new RegExp(t.anchor, 'i')] : []))
+  const content = contentRoot(tmp, anchors)
   const files = walk(content).filter((f) => f !== '.pending.json' && !(meta.image && f === meta.image))
   if (!files.length) {
     await fsp.rm(tmp, { recursive: true, force: true })
@@ -199,10 +215,18 @@ export async function finishAdd(g: Game, pending: string, targetId?: string): Pr
   let t = targets.find((x) => x.id === targetId)
   if (!t) {
     const ranked = targets.map((x) => ({ x, n: score(x, files) })).sort((a, b) => b.n - a.n)
-    const sure = ranked.length === 1 || (ranked[0]?.n > 0 && ranked[0].n > (ranked[1]?.n ?? 0))
+    // none of its files is anything the emulator loads (e.g. a tool or a patch Starstation doesn't know):
+    // don't put it anywhere — keep it with its instructions
+    if (!ranked.length || ranked[0].n === 0) return keepManual(g, tmp, content, files, meta)
+    const sure = ranked.length === 1 || ranked[0].n > (ranked[1]?.n ?? 0)
     if (!sure) return { ok: false, ask: { pending, name: meta.name, targets: targets.map((x) => ({ id: x.id, label: x.label })) } }
     t = ranked[0].x
   }
+  // a pack with a folder the emulator looks for (e.g. "replacements") and extras beside it ("Alternate Textures"):
+  // only what's inside that folder goes in; the extras stay with the mod
+  const anchorRe = t.anchor ? new RegExp(t.anchor, 'i') : null
+  const anchored = anchorRe ? files.filter((f) => f.split('/').slice(0, -1).some((s) => anchorRe.test(s))) : []
+  const placed = anchored.length ? anchored : files
   const st = load(g)
   let id = meta.name.replace(/[^\w.-]+/g, '_').slice(0, 40) || 'mod'
   while (st.mods.some((m) => m.id === id) || fs.existsSync(path.join(root, id))) id += '_'
@@ -215,15 +239,15 @@ export async function finishAdd(g: Game, pending: string, targetId?: string): Pr
     description: meta.description,
     target: t.id,
     enabled: false,
-    files: files.map((f) => prefix + f),
-    placement: files.map((f) => place(t, f)),
+    files: placed.map((f) => prefix + f),
+    placement: placed.map((f) => place(t, f)),
     source: meta.source ?? { type: 'file' },
     image: meta.image,
     addedAt: Date.now()
   }
   st.mods.push(entry)
   save(g, st)
-  log.info(`${g.id}: added mod ${id} (${files.length} files → ${t.id})`)
+  log.info(`${g.id}: added mod ${id} (${placed.length} of ${files.length} files → ${t.id})`)
   return { ok: true, mod: listMods(g).find((m) => m.id === id)! }
 }
 
@@ -432,6 +456,42 @@ async function keepManual(
 }
 
 // ---------- patch-file mods (SPEC-v2 E) ----------
+
+/** The readme's own words about the version it needs: the sentence with the MD5 and the one before it (exported for tests). */
+export function neededVersion(docs: string): string {
+  const text = docs
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l && !/^[=#*\-_]{2}|[=#]{2}$/.test(l)) // headings like "==1. Verify disc image=="
+    .join(' ')
+    .replace(/\s+/g, ' ')
+  const sentences = text.split(/(?<=[.!?])\s+(?=[A-Z])/)
+  const i = sentences.findIndex((s) => /[0-9a-f]{32}/i.test(s))
+  if (i < 0) return ''
+  const out = sentences.slice(Math.max(0, i - 1), i + 1).join(' ')
+  return out.length > 400 ? `${out.slice(0, 400)}…` : out
+}
+
+/**
+ * Patch readmes often name the one game version the patch fits by its MD5 (Spec II: "verify that the MD5 hash is …").
+ * If they do and this game's file isn't one of them, say so in plain words instead of failing after minutes.
+ * (exported for tests)
+ */
+export async function wrongBase(g: Game, docs: string): Promise<string | null> {
+  const hashes = new Set([...docs.matchAll(/\b[0-9a-f]{32}\b/gi)].map((m) => m[0].toLowerCase()))
+  if (!hashes.size || !/md5/i.test(docs) || !/\.(iso|bin|img|gcm|cso)$/i.test(g.launchPath) || !fs.existsSync(g.launchPath)) return null
+  const md5 = await new Promise<string>((resolve, reject) => {
+    const h = crypto.createHash('md5')
+    fs.createReadStream(g.launchPath)
+      .on('data', (d) => h.update(d))
+      .on('end', () => resolve(h.digest('hex')))
+      .on('error', reject)
+  })
+  if (hashes.has(md5)) return null
+  const need = neededVersion(docs)
+  log.info(`${g.id}: patch needs another version (game MD5 ${md5})`)
+  return `It's made for a different version of the game than yours (${path.basename(g.launchPath)}). Its instructions say: “${need}”`
+}
 
 async function addPatchMod(g: Game, patchFile: string, opts: { name?: string; description?: string; source?: ModEntry['source'] }): Promise<AddModResult> {
   const root = modsRoot(g)

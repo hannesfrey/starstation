@@ -150,6 +150,12 @@ export function App() {
         setWalls(w)
         setExtra((x) => ({ ...x, wallpapers: w }))
       }),
+      // a mod from the mods folder: which game is it for?
+      api.on('mod-inbox-ask', (modInbox) => {
+        setExtra((x) => ({ ...x, modInbox }))
+        setPanels((p) => [...p.filter((q) => q.id !== 'mod-inbox'), { id: 'mod-inbox', index: 0 }])
+      }),
+      api.on('mod-result', ({ gameId, result }) => onModAddedRef.current(gameId, result)),
       api.on('nexus-request', (nexus) => {
         setExtra((x) => ({ ...x, nexus }))
         setPanels((p) => [...p.filter((q) => q.id !== 'nexus'), { id: 'nexus', index: 0 }])
@@ -454,6 +460,22 @@ export function App() {
     },
     [loadMods]
   )
+  const onModAddedRef = useRef(onModAdded)
+  onModAddedRef.current = onModAdded
+  // "New mod" closed with ○ without picking a game: not now (asked again at the next start)
+  useEffect(() => {
+    const q = extra.modInbox
+    if (q && !panels.some((p) => p.id === 'mod-inbox')) {
+      setExtra((x) => ({ ...x, modInbox: undefined }))
+      void api.modInboxAssign(q.id, '')
+    }
+  }, [extra.modInbox, panels])
+  const modInboxAssign = useCallback((gameId: string) => {
+    const q = extraRef.current.modInbox
+    setExtra((x) => ({ ...x, modInbox: undefined }))
+    setPanels((p) => p.filter((r) => r.id !== 'mod-inbox'))
+    if (q) void api.modInboxAssign(q.id, gameId)
+  }, [])
   const nexusInstall = useCallback(
     (url: string, g: Game) => {
       setPanels((p) => p.filter((q) => q.id !== 'nexus'))
@@ -1189,6 +1211,7 @@ export function App() {
         modProfileDelete,
         newModProfile,
         nexusInstall,
+        modInboxAssign,
         updatePatches,
         setWallpaper,
         power,
@@ -1278,6 +1301,7 @@ export function App() {
     modProfileDelete,
     newModProfile,
     nexusInstall,
+    modInboxAssign,
     updatePatches,
     setWallpaper,
     power,

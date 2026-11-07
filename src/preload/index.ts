@@ -91,6 +91,7 @@ const api = {
   mods: (gameId: string) => ipcRenderer.invoke('mods', gameId),
   modAddDialog: (gameId: string, folder: boolean) => ipcRenderer.invoke('mod-add-dialog', gameId, folder),
   modAdd: (gameId: string, p: string) => ipcRenderer.invoke('mod-add', gameId, p),
+  modInboxAssign: (id: string, gameId: string) => ipcRenderer.invoke('mod-inbox-assign', id, gameId),
   modPlace: (gameId: string, pending: string, target: string) => ipcRenderer.invoke('mod-place', gameId, pending, target),
   modToggle: (gameId: string, modId: string, on: boolean, winner?: string) => ipcRenderer.invoke('mod-toggle', gameId, modId, on, winner),
   modDelete: (gameId: string, modId: string) => ipcRenderer.invoke('mod-delete', gameId, modId),
@@ -114,7 +115,7 @@ const api = {
   quit: () => ipcRenderer.invoke('quit'),
   mediaUrl: (absPath: string) => `starstation-media://local/${encodeURIComponent(absPath)}`,
   on: (channel: string, cb: (payload: unknown) => void) => {
-    const allowed = ['notice', 'library', 'consoles', 'collections', 'screenshots', 'battery', 'package-progress', 'running', 'navigate', 'import-progress', 'emulator-progress', 'add-ask', 'overlay', 'compress-progress', 'nexus-request', 'trophies', 'wallpapers', 'package-ask', 'display-revert']
+    const allowed = ['notice', 'library', 'consoles', 'collections', 'screenshots', 'battery', 'package-progress', 'running', 'navigate', 'import-progress', 'emulator-progress', 'add-ask', 'overlay', 'compress-progress', 'nexus-request', 'trophies', 'wallpapers', 'package-ask', 'display-revert', 'mod-inbox-ask', 'mod-result']
     if (!allowed.includes(channel)) throw new Error(`Unknown channel ${channel}`)
     const h = (_e: unknown, payload: unknown) => cb(payload)
     ipcRenderer.on(channel, h)
