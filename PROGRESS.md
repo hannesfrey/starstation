@@ -300,7 +300,7 @@ The kept log (`rpcs3_20261107183640_…`) caught it: after 33 min of multiplayer
 - Found: with quick resume, ✕ first loads the game's details (`loadDetails` → `game-details`). Anything in there throwing (a broken backup folder → listBackups ENOTDIR; a state file vanishing between listing and stat) rejected the request and ✕ did **nothing**. Now: `game-details` builds each part on its own (`safe()`, logged), `loadDetails` falls back to null (the game starts without the extras), `resumeStatePath` skips vanished files.
 - Renderer `api.ts`: one-shot loads fall back to an empty answer on failure (emulators, RetroAchievements status, Steam status, sound outputs, screen modes, licenses) — no screen stays on "Loading…"; the failure is still logged by main.
 - Test: e2e `reliability` "✕ still starts a game when part of its details can not be read" (a file where the backup folder belongs) — fails on the old code.
-- PS menu: a failed action no longer leaves it "busy" (deaf to every button for the rest of the game). Full e2e 68 passed (14 opt-in skipped), unit 88.
+- PS menu: a failed action no longer leaves it "busy" (deaf to every button for the rest of the game). Full e2e 68 passed (14 opt-in skipped), unit 88. Released: tag `v2.0.24`, GitHub pre-release (beta); its packaged check passed.
 
 ## How to work on it
 
