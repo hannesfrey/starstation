@@ -292,7 +292,7 @@ The kept log (`rpcs3_20261107183640_…`) caught it: after 33 min of multiplayer
 
 - `restoreBackup` empties the save folder and copies the backup in (after a "before-restore" backup); `restorePreviousResume` copies through a swap file. Two at once, or a game start meanwhile, could mix or read half-restored saves. `savesBusy` (index.ts) per game around backup-now / backup-restore / resume-restore-previous; a second one is refused ("being restored"), and launch waits ("being backed up or restored").
 - Test: e2e `reliability` "restoring a save backup twice at the same moment" → one runs, the other is refused, the save is the backup's.
-- Full e2e 67 passed (14 opt-in skipped), unit 88.
+- Full e2e 67 passed (14 opt-in skipped), unit 88. Released: tag `v2.0.23`, GitHub pre-release (beta); its packaged check passed.
 
 ## How to work on it
 
