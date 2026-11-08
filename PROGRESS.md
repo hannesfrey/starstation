@@ -252,7 +252,7 @@ The kept log (`rpcs3_20261107183640_…`) caught it: after 33 min of multiplayer
 - New unit `fuzz.test.ts`: every format reader (disc serial, PS3 ISO, GC/Wii, 3DS, N64, Xbox/360, PARAM.SFO, IPS/BPS, Mii DB, PS3 update XML, mod guessing) gets ~280–300 random and half-valid files (right signature + garbage, sizes 0 B–100 KB, fixed seed): each must return or throw an Error within 1.5 s. Callers of the throwing ones (parseSfo, patches) all catch.
 - Found: `.m3u` playlists pointing at each other (a → b → a) recursed forever in `partsOf` (used by delete game, add games, New downloads) and `discImage` → stack overflow. Now a visited set / depth limit. Mutation-checked: the old `partsOf` fails the test.
 - ISO reader: a folder entry claiming > 16 MB is refused (a damaged image could make it allocate gigabytes). GC/Wii, 3DS, N64 header readers close the file also when reading throws (`head()`).
-- Full e2e 59 passed (14 opt-in skipped), unit 80.
+- Full e2e 59 passed (14 opt-in skipped), unit 80. Released: commit 131be5d, tag `v2.0.18`, GitHub pre-release (beta); its packaged check passed.
 
 ## How to work on it
 
