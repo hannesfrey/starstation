@@ -12,6 +12,13 @@ export interface WhatsNew {
 
 export const WHATS_NEW: WhatsNew[] = [
   {
+    version: '2.0.26',
+    summary: ['Crashes are reported after long sessions too'],
+    details: [
+      'After a game, Starstation looks in the emulator’s log for a fatal error and tells you about it. Logs of long sessions (over 64 MB, e.g. hours of RPCS3) were skipped, so exactly those crashes went unreported. Now the start and the end of a big log are read.'
+    ]
+  },
+  {
     version: '2.0.25',
     summary: ['Adding, deleting or compressing a game only ever touches files in that game’s own folder'],
     details: [

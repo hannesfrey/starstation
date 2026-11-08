@@ -110,7 +110,9 @@ function backupRoot(g: Game): string {
   return dir('backups', g.console, artKey(g))
 }
 
-function walkFiles(p: string, out: { rel: string; size: number; mtime: number }[], rel = ''): void {
+function walkFiles(p: string, out: { rel: string; size: number; mtime: number }[], rel = '', depth = 0): void {
+  // links are followed (save folders can be junctions): one pointing back up its own tree must not go on for ever
+  if (depth > 24) return
   let st: fs.Stats
   try {
     st = fs.statSync(p) // follows links (saves folders can be junctions)
@@ -122,7 +124,7 @@ function walkFiles(p: string, out: { rel: string; size: number; mtime: number }[
     return
   }
   if (!st.isDirectory()) return
-  for (const n of fs.readdirSync(p)) walkFiles(path.join(p, n), out, rel ? `${rel}/${n}` : n)
+  for (const n of fs.readdirSync(p)) walkFiles(path.join(p, n), out, rel ? `${rel}/${n}` : n, depth + 1)
 }
 
 function fingerprint(entries: SaveEntry[]): { hash: string; bytes: number; files: number } {

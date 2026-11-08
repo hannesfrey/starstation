@@ -474,3 +474,29 @@ test('a .cue naming a file outside its folder: adding and deleting the game neve
     await app.close()
   }
 })
+
+test('a save folder with a link pointing back into itself: the game still starts (backup must not go round for ever)', async () => {
+  test.setTimeout(60_000)
+  const files = makeFiles('save-loop')
+  const presets = makePresets(files, 300, { extra: { backup: [{ path: '{saves}/{basename}' }] } })
+  writeSettings(files, { bootAnimation: false })
+  fs.mkdirSync(path.join(files, 'games', 'testcon'), { recursive: true })
+  fs.writeFileSync(path.join(files, 'games', 'testcon', 'Alpha.tst'), 'a')
+  // the game's save folder, with a junction inside it that points back at the folder itself
+  const saveDir = path.join(files, 'saves', 'testcon', 'Alpha')
+  fs.mkdirSync(saveDir, { recursive: true })
+  fs.writeFileSync(path.join(saveDir, 'slot1.sav'), 'progress')
+  fs.symlinkSync(saveDir, path.join(saveDir, 'loop'), 'junction')
+  const { app, page } = await launchApp(files, presets)
+  try {
+    await expect(page.getByTestId('game-info')).toContainText('Alpha')
+    const t0 = Date.now()
+    const r = await api<{ ok: boolean; error?: string }>(page, 'launch', 'testcon:alpha.tst')
+    expect(r.ok, r.error).toBe(true)
+    expect(Date.now() - t0).toBeLessThan(20_000)
+    await expect(page.getByTestId('running')).toHaveCount(0, { timeout: 15_000 })
+    expect(fs.readFileSync(path.join(saveDir, 'slot1.sav'), 'utf8')).toBe('progress')
+  } finally {
+    await app.close()
+  }
+})

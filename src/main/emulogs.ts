@@ -23,6 +23,23 @@ const MAX_FATAL_SCAN = 64 * 1024 * 1024
 
 export const keptLogsDir = (): string => dir('config', 'logs', 'emulators')
 
+/** The whole log if it is small, else its first and last MAX_FATAL_SCAN / 2 bytes. */
+export async function readEnds(file: string, size: number): Promise<string> {
+  if (size <= MAX_FATAL_SCAN) return fsp.readFile(file, 'utf8')
+  const half = MAX_FATAL_SCAN / 2
+  const fh = await fsp.open(file, 'r')
+  try {
+    const head = Buffer.alloc(half)
+    const tail = Buffer.alloc(half)
+    await fh.read(head, 0, half, 0)
+    await fh.read(tail, 0, half, size - half)
+    // the cut lines at the seams are dropped by the line-based search anyway
+    return `${head.toString('utf8')}\n${tail.toString('utf8')}`
+  } finally {
+    await fh.close()
+  }
+}
+
 
 export async function keepEmulatorLog(gameId: string, startedAt: number): Promise<string | null> {
   const g = getGame(gameId)
@@ -46,7 +63,9 @@ export async function keepEmulatorLog(gameId: string, startedAt: number): Promis
   const mine = (await fsp.readdir(keptLogsDir())).filter((f) => f.startsWith(`${e.id}_`) && f.endsWith('.log.gz')).sort()
   for (const old of mine.slice(0, Math.max(0, mine.length - KEEP))) await fsp.rm(path.join(keptLogsDir(), old), { force: true })
 
-  const text = st.size <= MAX_FATAL_SCAN && (e.log.fatal || e.log.config) ? await fsp.readFile(src, 'utf8') : ''
+  // a long session's log can be gigabytes: then only its start (refused settings are written while it starts)
+  // and its end (where a fatal error stops it) are read — before, a big log was not looked at all
+  const text = e.log.fatal || e.log.config ? await readEnds(src, st.size) : ''
   // a setting the emulator refused (2026-11-07: RPCS3 ignored "Prefer borderless fullscreen", its GUI label):
   // only for Starstation's log, the player can't do anything about it
   if (e.log.config && text) for (const bad of new Set(fatalLines(text, e.log.config))) log.warn(`${e.name} refused a setting: ${bad}`)
