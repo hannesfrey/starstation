@@ -519,3 +519,42 @@ test('hidden test runs are sealed off: no Explorer / browser windows, no real St
     await app.close()
   }
 })
+
+test('a library of 3,000 games: scanned quickly (and from the cache next time), the menu scrolls without stalling', async () => {
+  test.setTimeout(120_000)
+  const files = makeFiles('big-library')
+  const presets = makePresets(files, 300)
+  writeSettings(files, { bootAnimation: false })
+  const gdir = path.join(files, 'games', 'testcon')
+  fs.mkdirSync(gdir, { recursive: true })
+  for (let i = 0; i < 3000; i++) fs.writeFileSync(path.join(gdir, `Game ${String(i).padStart(4, '0')} (USA).tst`), `${i}`)
+  const { app, page } = await launchApp(files, presets)
+  let closed = false
+  try {
+    await expect.poll(async () => (await api<{ library: { games: unknown[] } }>(page, 'getState')).library.games.length, { timeout: 30_000 }).toBe(3000)
+    const scan = /scan: 3000 games \(3000 new\) in (\d+) ms/.exec(logText(files))
+    expect(Number(scan?.[1])).toBeLessThan(10_000)
+    await page.getByTestId('cat-testcon').dispatchEvent('click')
+    // 200 quick presses down, then the menu still answers at once
+    const t0 = Date.now()
+    for (let i = 0; i < 200; i++) await page.keyboard.press('ArrowDown')
+    expect(Date.now() - t0).toBeLessThan(20_000)
+    await expect(page.getByTestId('game-info')).toContainText('Game')
+    const t1 = Date.now()
+    const state = await api<{ library: { games: unknown[] } }>(page, 'getState')
+    expect(state.library.games).toHaveLength(3000)
+    expect(Date.now() - t1).toBeLessThan(3000)
+    // a second start reads the cache instead of identifying every game again
+    await app.close()
+    closed = true
+    const again = await launchApp(files, presets)
+    try {
+      await expect.poll(async () => (await api<{ library: { games: unknown[] } }>(again.page, 'getState')).library.games.length, { timeout: 30_000 }).toBe(3000)
+      await expect.poll(() => logText(files)).toMatch(/scan: 3000 games \(0 new\)/)
+    } finally {
+      await again.app.close()
+    }
+  } finally {
+    if (!closed) await app.close()
+  }
+})

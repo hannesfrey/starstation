@@ -328,6 +328,7 @@ The kept log (`rpcs3_20261107183640_…`) caught it: after 33 min of multiplayer
 - Test: e2e `reliability` "hidden test runs are sealed off".
 - Full e2e 74 passed (14 opt-in skipped), unit 90. Released: tag `v2.0.28`, GitHub pre-release (beta); its packaged check passed.
 - After 2.0.28 (tests only): `monkey.spec` also covers the PS button menu during games (12 sessions: 95 menu opens, 73 resumes, 10 screenshots, 12 save-and-quits, double PS presses; play count = sessions, no ERROR) and the first-start wizard (3 seeds × 150 presses, offline; no error screen / ERROR).
+- Scale test (`reliability`): 3,000 games — first scan 279 ms, cached start 78 ms, 200 quick presses down and the menu answers; state with 3,000 games in < 3 s.
 
 ## How to work on it
 
