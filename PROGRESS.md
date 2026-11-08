@@ -319,7 +319,7 @@ The kept log (`rpcs3_20261107183640_…`) caught it: after 33 min of multiplayer
 
 - Found: `toXiso` binned the original, then renamed the XISO from the temporary folder into its place; if that rename failed, the catch said "stays as it is" and `finally` deleted the temporary folder — with the XISO in it. Game gone from the library (original only in the Recycle Bin). Now: XISO → `<file>.xiso-new` next to the original, then bin the original (if that fails, the .xiso-new is removed and nothing changed), then rename; if only the last rename fails, the message says where the XISO is. `convert.spec` (real tiny Xbox disc) passes, no leftover file.
 - PS3 package install checked: the package is binned only after RPCS3 changed a game folder.
-- Decompress: already placed the restored files before binning the compressed one (safe); its message now says "both are there" if only the binning fails. Full e2e 70 passed (14 opt-in skipped), unit 90.
+- Decompress: already placed the restored files before binning the compressed one (safe); its message now says "both are there" if only the binning fails. Full e2e 70 passed (14 opt-in skipped), unit 90. Released: tag `v2.0.27`, GitHub pre-release (beta); its packaged check passed.
 
 ## How to work on it
 
