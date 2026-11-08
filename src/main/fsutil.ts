@@ -6,8 +6,12 @@ import { referencedFiles } from './formats/gameid'
 
 // File helpers shared by the importer, save backups and "Add games".
 
-/** Files that belong to a game file: .cue tracks, .m3u discs (and their tracks). */
-export function partsOf(file: string, seen = new Set<string>()): string[] {
+/**
+ * Files that belong to a game file: .cue tracks, .m3u discs (and their tracks) — only those in the game's own
+ * folder (or below it). These are moved with the game and binned with it, so a sheet naming a file elsewhere
+ * ("..\..\Documents\x", "C:\…" in a downloaded .cue) must never pull that file along.
+ */
+export function partsOf(file: string, seen = new Set<string>(), root = path.dirname(path.resolve(file))): string[] {
   const ext = path.extname(file).toLowerCase()
   if (ext !== '.cue' && ext !== '.m3u') return []
   // playlists that point at each other (a.m3u → b.m3u → a.m3u) must not go round forever
@@ -16,8 +20,10 @@ export function partsOf(file: string, seen = new Set<string>()): string[] {
   for (const r of referencedFiles(file)) {
     const real = realCase(r)
     if (!real || seen.has(real.toLowerCase())) continue
+    const rel = path.relative(root, real)
+    if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) continue
     out.add(real)
-    for (const p of partsOf(real, seen)) out.add(p)
+    for (const p of partsOf(real, seen, root)) out.add(p)
   }
   return [...out]
 }

@@ -3,7 +3,28 @@ import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { renameRetry } from '../../src/main/fsutil'
+import { partsOf, renameRetry } from '../../src/main/fsutil'
+
+describe('partsOf: the files of a game', () => {
+  it('only files in the game folder (or below), never ones a sheet names elsewhere', () => {
+    const d = fs.mkdtempSync(path.join(process.env.TEMP ?? os.tmpdir(), 'parts-'))
+    const game = path.join(d, 'games', 'ps1')
+    fs.mkdirSync(path.join(game, 'Tracks'), { recursive: true })
+    fs.mkdirSync(path.join(d, 'Documents'), { recursive: true })
+    const mine = path.join(d, 'Documents', 'taxes.pdf')
+    fs.writeFileSync(mine, 'private')
+    fs.writeFileSync(path.join(game, 'Game (Track 1).bin'), 't1')
+    fs.writeFileSync(path.join(game, 'Tracks', 'Game (Track 2).bin'), 't2')
+    const cue = path.join(game, 'Game.cue')
+    fs.writeFileSync(
+      cue,
+      ['FILE "Game (Track 1).bin" BINARY', 'FILE "Tracks\\Game (Track 2).bin" BINARY', 'FILE "..\\..\\Documents\\taxes.pdf" BINARY', `FILE "${mine}" BINARY`].join('\r\n')
+    )
+    // (folder names may come back in another case: Windows doesn't mind)
+    expect(partsOf(cue).map((p) => path.relative(game, p).toLowerCase()).sort()).toEqual(['game (track 1).bin', path.join('tracks', 'game (track 2).bin')])
+    fs.rmSync(d, { recursive: true, force: true })
+  })
+})
 
 const busy = (code: string) => Object.assign(new Error(`${code}: operation not permitted`), { code })
 

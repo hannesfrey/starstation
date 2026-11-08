@@ -12,6 +12,14 @@ export interface WhatsNew {
 
 export const WHATS_NEW: WhatsNew[] = [
   {
+    version: '2.0.25',
+    summary: ['Adding, deleting or compressing a game only ever touches files in that game’s own folder'],
+    details: [
+      'A disc sheet (.cue / .m3u) lists the game’s track files. One naming a file somewhere else on the PC (e.g. in a downloaded archive) used to make Starstation move that file into the games folder, and later put it in the Recycle Bin together with the game. Now only files in the game’s own folder go along; compressing such a game is refused instead.',
+      'Nexus Mods downloads are noted in the log without the download link’s key and your Nexus account number (logs go into diagnostics reports).'
+    ]
+  },
+  {
     version: '2.0.24',
     summary: ['A game always starts with ✕, even if some of its details can’t be read'],
     details: [

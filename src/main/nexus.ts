@@ -89,7 +89,8 @@ export async function downloadNxm(url: string, onProgress?: (pct: number) => voi
     if (total) onProgress?.(Math.round((done / total) * 100))
   }
   await new Promise<void>((res, rej) => out.end((err?: Error | null) => (err ? rej(err) : res())))
-  log.info(`downloaded ${url} → ${to}`)
+  // not the link itself: it carries the download key and the user's Nexus id (logs go into diagnostics reports)
+  log.info(`downloaded Nexus Mods ${l.domain} mod ${l.mod} file ${l.file} → ${to}`)
   return to
 }
 

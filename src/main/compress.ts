@@ -110,6 +110,13 @@ export async function compressGame(g: Game, progress: Progress, trash: Trash): P
   const isCd = ext === '.cue'
   const inputs = isCd ? [src, ...cueTracks(src)] : [src]
   for (const f of inputs) if (!fs.existsSync(f)) return { ok: false, error: `${path.basename(f)} is missing.` }
+  // the originals go to the Recycle Bin afterwards: only ever files in the game's own folder
+  const home = path.dirname(path.resolve(src))
+  const outside = inputs.find((f) => {
+    const rel = path.relative(home, path.resolve(f))
+    return !rel || rel.startsWith('..') || path.isAbsolute(rel) ? f !== src : false
+  })
+  if (outside) return { ok: false, error: `${path.basename(outside)} is not in the game's folder, so Starstation leaves this game as it is.` }
   const size = inputs.reduce((n, f) => n + fs.statSync(f).size, 0)
   // the compressed file + (CD) every track once more for the check
   if (freeBytes(path.dirname(src)) < size * (isCd ? 2 : 1) + 1024 ** 3) return { ok: false, error: 'Not enough free disk space to compress and check this game.' }

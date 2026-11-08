@@ -66,6 +66,11 @@ test('Nexus Mods: link → which game? → downloaded with the API key and insta
     // asked with the user's own key, and the link's key/expires were passed on
     expect(seen.find((s) => s.url.includes('download_link'))).toEqual({ url: '/v1/games/okami/mods/12/files/34/download_link.json?key=abc&expires=999', key: 'nexus-key' })
     expect(fs.readdirSync(path.join(files, 'config', 'downloads')).filter((n) => n.endsWith('.zip'))).toEqual([]) // download cleaned up
+    // the log (which goes into diagnostics reports) never holds the link's key, the user id or the API key
+    const logs = path.join(files, 'config', 'logs')
+    const log = fs.readdirSync(logs).filter((n) => n.endsWith('.log')).map((n) => fs.readFileSync(path.join(logs, n), 'utf8')).join('')
+    expect(log).toContain('downloaded Nexus Mods okami mod 12 file 34')
+    expect(log).not.toMatch(/key=abc|user_id=1|nexus-key/)
     void emu
   } finally {
     await app.close()

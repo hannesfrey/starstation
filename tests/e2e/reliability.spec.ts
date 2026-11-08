@@ -441,3 +441,36 @@ test('✕ still starts a game when part of its details can not be read (a broken
     await app.close()
   }
 })
+
+test('a .cue naming a file outside its folder: adding and deleting the game never move or bin that file', async () => {
+  const files = makeFiles('cue-outside')
+  writeSettings(files, { bootAnimation: false })
+  // a download unpacked somewhere, and a private file elsewhere on the PC
+  const drop = path.join(files, '_drop', 'Game')
+  fs.mkdirSync(drop, { recursive: true })
+  const privateFile = path.join(files, '_documents', 'taxes.pdf')
+  fs.mkdirSync(path.dirname(privateFile), { recursive: true })
+  fs.writeFileSync(privateFile, 'private')
+  fs.writeFileSync(path.join(drop, 'Game (Track 1).bin'), Buffer.alloc(4096))
+  fs.writeFileSync(
+    path.join(drop, 'Game.cue'),
+    ['FILE "Game (Track 1).bin" BINARY', '  TRACK 01 MODE2/2352', '    INDEX 01 00:00:00', 'FILE "..\\..\\_documents\\taxes.pdf" BINARY', `FILE "${privateFile}" BINARY`].join('\r\n')
+  )
+  const { app, page } = await launchApp(files)
+  try {
+    await expect(page.getByTestId('xmb')).toBeVisible()
+    const r = await api<{ added: { path: string }[]; errors: string[] }>(page, 'addGames', [path.join(drop, 'Game.cue')], 'ps1')
+    expect(r.added).toHaveLength(1)
+    expect(fs.existsSync(path.join(files, 'games', 'ps1', 'Game (Track 1).bin'))).toBe(true) // its own track came along
+    expect(fs.readFileSync(privateFile, 'utf8')).toBe('private') // the other file stayed where it was
+    expect(fs.existsSync(path.join(files, 'games', 'ps1', 'taxes.pdf'))).toBe(false)
+
+    await expect.poll(async () => (await api<{ library: { games: { id: string }[] } }>(page, 'getState')).library.games.length).toBe(1)
+    const id = (await api<{ library: { games: { id: string }[] } }>(page, 'getState')).library.games[0].id
+    expect((await api<{ ok: boolean }>(page, 'deleteGame', id, true)).ok).toBe(true)
+    expect(fs.readFileSync(privateFile, 'utf8')).toBe('private') // not binned with the game
+    expect(fs.existsSync(path.join(files, 'games', 'ps1', 'Game.cue'))).toBe(false)
+  } finally {
+    await app.close()
+  }
+})
