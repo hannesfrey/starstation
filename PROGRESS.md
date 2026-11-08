@@ -269,7 +269,7 @@ The kept log (`rpcs3_20261107183640_…`) caught it: after 33 min of multiplayer
 - Menu: the first `getState` is asked again every 2 s (up to a minute) instead of an empty menu forever.
 - Test: e2e `reliability` "wrong shape" — ten config files of the wrong shape at once (incl. secrets.json = null) → menu, game details, game start, saving a collection, profiles; no ERROR. Mutation-checked against the old code.
 - Tests: e2e `reliability` "wrong kinds of values" (every setting the wrong type → defaults, game starts, settings save) and "unknown choices".
-- Full e2e 63 passed (14 opt-in skipped), unit 87.
+- Full e2e 63 passed (14 opt-in skipped), unit 87. Released: commit cf99b34, tag `v2.0.20`, GitHub pre-release (beta); its packaged check passed.
 
 ## How to work on it
 
