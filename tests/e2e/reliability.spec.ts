@@ -182,3 +182,22 @@ test('deleting a profile asks first, and the question opens on Cancel', async ()
     await app.close()
   }
 })
+
+test('a garbled play time in stats.json is counted on from 0, not kept broken', async () => {
+  const { files, presets } = setup('stats-garbled', 300)
+  fs.mkdirSync(path.join(files, 'config', 'library'), { recursive: true })
+  fs.writeFileSync(path.join(files, 'config', 'library', 'stats.json'), JSON.stringify({ 'testcon:alpha.tst': { playTime: 'lots', playCount: null, favorite: true } }))
+  const { app, page } = await launchApp(files, presets)
+  try {
+    await expect(page.getByTestId('game-info')).toContainText('Alpha')
+    expect((await api<{ ok: boolean }>(page, 'launch', 'testcon:alpha.tst')).ok).toBe(true)
+    await expect(page.getByTestId('running')).toHaveCount(0, { timeout: 15_000 })
+    const s = stats(files)['testcon:alpha.tst']
+    expect(Number.isFinite(s.playTime)).toBe(true)
+    expect(s.playCount).toBe(1)
+    expect(s.favorite).toBe(true) // the rest of the entry stays
+    await expect(page.getByTestId('game-info')).not.toContainText('NaN')
+  } finally {
+    await app.close()
+  }
+})

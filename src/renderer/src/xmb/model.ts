@@ -43,7 +43,9 @@ export interface ModelHandlers {
 }
 
 export function formatPlayTime(sec: number): string {
-  if (sec < 60) return sec > 0 ? 'Played less than a minute' : 'Not played yet'
+  // a damaged stats file could hold anything: never show "NaNh"
+  if (!Number.isFinite(sec) || sec <= 0) return 'Not played yet'
+  if (sec < 60) return 'Played less than a minute'
   const h = Math.floor(sec / 3600)
   const m = Math.floor((sec % 3600) / 60)
   return `Played ${h ? `${h}h ` : ''}${m}m`

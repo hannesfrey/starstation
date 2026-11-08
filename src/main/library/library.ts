@@ -30,7 +30,8 @@ const statsFile = () => profileFile(dir('config', 'library', 'stats.json'), 'sta
 export function loadLibrary(): void {
   const c = readJson<CacheFile>(cacheFile(), { version: 0, games: [] })
   games = c.version === CACHE_VERSION ? c.games : []
-  stats = readJson<Record<string, GameStats>>(statsFile(), {})
+  const raw = readJson<Record<string, Partial<GameStats>> | null>(statsFile(), {})
+  stats = Object.fromEntries(Object.entries(raw && typeof raw === 'object' ? raw : {}).map(([id, s]) => [id, cleanStats(s)]))
 }
 
 export function view(): LibraryView {
@@ -266,8 +267,14 @@ export function setCustomArt(g: Game, kind: 'icon' | 'background', png: Buffer |
 
 // ---------- stats ----------
 
+/** A hand-edited or old file may miss or garble a number: count on from 0 instead of staying NaN forever. */
+function cleanStats(s: Partial<GameStats> | null | undefined): GameStats {
+  const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : 0)
+  return { ...(s ?? {}), playTime: n(s?.playTime), playCount: n(s?.playCount), lastPlayed: n(s?.lastPlayed) || undefined }
+}
+
 export function getStats(id: string): GameStats {
-  return stats[id] ?? { playTime: 0, playCount: 0 }
+  return cleanStats(stats[id])
 }
 
 export function updateStats(id: string, fn: (s: GameStats) => GameStats): GameStats {

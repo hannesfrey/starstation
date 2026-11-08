@@ -4,9 +4,9 @@ Read SPEC.md first. This file tracks where the build stands and every small deci
 
 ## Current state
 
-- **Phase:** v2 done. Latest beta: **2.0.18** (2026-11-07: 2.0.13 trophies removed + reliability round, 2.0.14 follow-ups, 2.0.15 compact Settings + PS menu per player, 2.0.16 netplay + downloads, 2.0.17 safe default answers, 2.0.18 damaged-file robustness). v1.0.0 is still what everyone else gets; only Hannes presses "Release to everyone".
+- **Phase:** v2 done. Latest beta: **2.0.19** (2026-11-07: 2.0.13 trophies removed + reliability round, 2.0.14 follow-ups, 2.0.15 compact Settings + PS menu per player, 2.0.16 netplay + downloads, 2.0.17 safe default answers, 2.0.18 damaged-file robustness, 2.0.19 stats vs odd data). v1.0.0 is still what everyone else gets; only Hannes presses "Release to everyone".
 - **Earlier sessions (2026-11-07):** 2.0.10 player 2 from the first start (padVars count + RPCS3 new pad copies player 1's Config, fresh = VID 1356/PID 616); 2.0.11 RPCS3 "Exclusive Fullscreen Mode": "Disable" + emulator-refused settings logged; 2.0.12 PS3 game updates from Sony (`src/main/ps3updates.ts`, `formats/ps3update.ts`, panel 'ps3-update'). Black Ops II updated for real to 01.19. Gran Turismo 6 (BCUS98296) still 01.00: 21 updates / 11.2 GB offered at its next start.
-- **Waiting on Hannes:** restart Starstation to get 2.0.18 (also brings 2.0.12–2.0.17); check the PS menu with two players (only the one who pressed PS should move it) and the new Settings groups; play BO2 to see if the freezes are gone (earlier crash = RPCS3 stall tripping the game's own 30 s hang watchdog, not Starstation). If it crashes again: read `Files\config\logs\emulators` (RPCS3 log is kept).
+- **Waiting on Hannes:** restart Starstation to get 2.0.19 (also brings 2.0.12–2.0.18); check the PS menu with two players (only the one who pressed PS should move it) and the new Settings groups; play BO2 to see if the freezes are gone (earlier crash = RPCS3 stall tripping the game's own 30 s hang watchdog, not Starstation). If it crashes again: read `Files\config\logs\emulators` (RPCS3 log is kept).
 - **Still open:** DsHidMini driver install on a real DS3; real-pad check of the PS button; MK7 Mii + 3DS controller check.
 - **Reliability round, part 2 (Hannes asked for this session + half the next):** done in 2.0.14–2.0.15: packages receive, compress, Steam writer, custom consoles, stuck screens (health, storage, import, packages, player screen), PS menu per player (ground truth only), packaged-build check before every release. Still open: the remaining renderer `api.x().then` calls without `.catch` are one-shot loads (only logged on failure); a real two-pad check of the PS menu lock.
 - **Release routine:** bump package.json + whatsnew.ts entry → tests (`npx vitest run`, `npx playwright test`) → commit → `git tag vX` → push tag → `node scripts/release.mjs "<notes>"` (beta pre-release) → note "Released: commit …" here and push.
@@ -254,6 +254,12 @@ The kept log (`rpcs3_20261107183640_…`) caught it: after 33 min of multiplayer
 - ISO reader: a folder entry claiming > 16 MB is refused (a damaged image could make it allocate gigabytes). GC/Wii, 3DS, N64 header readers close the file also when reading throws (`head()`).
 - Full e2e 59 passed (14 opt-in skipped), unit 80. Released: commit 131be5d, tag `v2.0.18`, GitHub pre-release (beta); its packaged check passed.
 - After 2.0.18 (tests only): unit `configwriters.test.ts` — 1,200 generated emulator config files (messy INI with comments / duplicates / keys before sections, CRLF and LF; key=value; RPCS3 player blocks): writing the same settings twice changes nothing, values read back, lines Starstation doesn't own survive, no mixed line endings; stripLines removes only matches. Mutation-checked (forcing LF endings makes it fail). The writers passed as they are.
+
+### 2.0.19 — stats and menu vs odd data (2026-11-08)
+
+- New unit `menumodel.test.ts`: `buildColumns` on 200 generated libraries (missing fields, empty / huge / RTL / format-string titles, NaN / Infinity / negative numbers, stats and collections pointing at games that are gone, a console that's gone, safe mode / tester) — every column and folder builds, keys unique per list; 3,000 games build in < 1.5 s. Passed as it was.
+- Found: a non-number play time showed "Played NaNh NaNm" and stayed NaN forever (each session adds to it). `formatPlayTime` treats non-finite / ≤ 0 as "Not played yet"; `loadLibrary` cleans every stats entry once (`cleanStats`: playTime / playCount → finite ≥ 0 else 0, lastPlayed finite or dropped; other fields kept). e2e `reliability` "garbled play time" (playTime "lots", playCount null → counted from 0, favorite kept, no NaN on screen).
+- Full e2e 60 passed (14 opt-in skipped), unit 87.
 
 ## How to work on it
 

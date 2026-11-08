@@ -12,6 +12,14 @@ export interface WhatsNew {
 
 export const WHATS_NEW: WhatsNew[] = [
   {
+    version: '2.0.19',
+    summary: ['Play times stay readable even if their file was damaged'],
+    details: [
+      'A play time or play count that isn’t a proper number (an edited or damaged file) is counted on from 0 instead of showing “NaN” or staying broken; the rest of the game’s entry (favorite, last played) stays.',
+      'The menu was checked with generated libraries (missing details, strange titles, 3,000 games) and Starstation’s emulator-settings writers with 1,200 generated settings files.'
+    ]
+  },
+  {
     version: '2.0.18',
     summary: ['Damaged or odd game files can no longer trip Starstation up'],
     details: [
