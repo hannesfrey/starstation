@@ -307,7 +307,7 @@ The kept log (`rpcs3_20261107183640_…`) caught it: after 33 min of multiplayer
 - Found: `partsOf` followed every file a .cue / .m3u names, wherever it is (`..\..\Documents\x`, `C:\…`). Those parts are **moved** with the game (Add games, New downloads — automatic for archives) and **binned** with it (Delete game). A crafted or odd sheet in a download could pull any file on the PC into games\ and later into the Recycle Bin. Now only parts inside the game file's own folder (or below) count. Compress (which bins its inputs) refuses a CD whose tracks are outside the cue's folder.
 - Diagnostics: the report has logs; `nexus.ts` logged the whole nxm:// link (download key + Nexus user id) → now "Nexus Mods <game> mod <n> file <n>". Hannes's real logs checked: no credential-like text.
 - Tests: unit `fsutil` partsOf boundary (old code included `..\..\Documents\taxes.pdf`); e2e `reliability` "a .cue naming a file outside its folder" (added + deleted, the outside file never moves; fails on the old code); `modsources` Nexus test asserts no key / user id / API key in the log.
-- Full e2e 69 passed (14 opt-in skipped), unit 89.
+- Full e2e 69 passed (14 opt-in skipped), unit 89. Released: tag `v2.0.25`, GitHub pre-release (beta); its packaged check passed.
 
 ## How to work on it
 
