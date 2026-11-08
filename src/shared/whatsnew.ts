@@ -12,6 +12,14 @@ export interface WhatsNew {
 
 export const WHATS_NEW: WhatsNew[] = [
   {
+    version: '2.0.33',
+    summary: ['"Install driver" for PS3 controllers works now', 'Dolphin 2609b'],
+    details: [
+      'PS3 controller: after Windows asked for permission, the driver setup never actually started, and Starstation waited for it forever. It now runs, and if it can’t start, Starstation says so instead of waiting.',
+      'Dolphin (GameCube / Wii) is updated to 2609b, a small bug-fix release. Emulators with a fixed version (Dolphin, RetroArch) now show "Update to …" in Settings → Emulators when a newer one comes with Starstation.'
+    ]
+  },
+  {
     version: '2.0.32',
     summary: ['3DS games no longer freeze after switching to another window', 'Updates are much smaller from now on'],
     details: [

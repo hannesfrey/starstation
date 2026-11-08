@@ -30,7 +30,7 @@ for (const [id, exe] of EMULATORS) {
     const info = before.find((e) => e.id === id)!
     expect(info.installed).toBe(false)
     // GitHub emulators report their newest release; RetroArch/Dolphin use a fixed official URL
-    const fixed: Record<string, string> = { retroarch: '1.22.2', dolphin: '2609a' }
+    const fixed: Record<string, string> = { retroarch: '1.22.2', dolphin: '2609b' }
     if (!fixed[id]) expect(info.latest).toBeTruthy()
     const r = await page.evaluate((i) => window.starstation.installEmulator(i), id)
     expect(r.ok, r.error).toBe(true)

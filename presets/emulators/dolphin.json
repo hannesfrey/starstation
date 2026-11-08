@@ -5,8 +5,8 @@
   "exe": "Dolphin.exe",
   "download": {
     "type": "url",
-    "url": "https://dl.dolphin-emu.org/releases/2609a/dolphin-2609a-x64.7z",
-    "version": "2609a",
+    "url": "https://dl.dolphin-emu.org/releases/2609b/dolphin-2609b-x64.7z",
+    "version": "2609b",
     "page": "https://dolphin-emu.org/download/"
   },
   "portable": [

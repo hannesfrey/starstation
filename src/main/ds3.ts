@@ -63,6 +63,31 @@ export function ds3Status(): Ds3Status {
 let installing = false
 
 /**
+ * The PowerShell command that starts ds3-driver.ps1 elevated and exits with its exit code; 1223 = Windows
+ * permission refused (exported for tests, which run it with runAs = false).
+ * The Start-Process call must stay on ONE line: a line break ends a PowerShell command, so in 2.0.3–2.0.32 its
+ * -ArgumentList on the next line was never part of it — Windows asked for permission, then started an empty
+ * hidden PowerShell without the script, which waited for input forever (Hannes, 2026-11-08: nothing happened).
+ */
+export function setupCommand(script: string, bin: string, out: string, logFile: string, runAs = true): string {
+  const q = (s: string) => `'${s.replace(/'/g, "''")}'`
+  const args = ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', `"${script}"`, '-Bin', `"${bin}"`, '-Out', `"${out}"`, '-Log', `"${logFile}"`]
+  const ps = "(Join-Path $env:SystemRoot 'System32\\WindowsPowerShell\\v1.0\\powershell.exe')"
+  const start = `$p = Start-Process -FilePath ${ps}${runAs ? ' -Verb RunAs' : ''} -Wait -PassThru -WindowStyle Hidden -ArgumentList @(${args.map(q).join(',')})`
+  return [
+    'try {',
+    `  ${start}`,
+    '  exit $p.ExitCode',
+    '} catch {',
+    // the permission prompt answered "No" is error 1223 somewhere in the exception chain; anything else is reported
+    '  $e = $_.Exception; while ($e) { if ($e -is [System.ComponentModel.Win32Exception] -and $e.NativeErrorCode -eq 1223) { exit 1223 }; $e = $e.InnerException }',
+    '  if ($_.Exception.Message -match "cancel") { exit 1223 }',
+    '  Write-Output ("setup could not start: " + $_.Exception.Message); exit 2',
+    '}'
+  ].join('\n')
+}
+
+/**
  * Install DsHidMini (and .NET 10 Desktop Runtime if missing) with one Windows permission prompt.
  * The elevated part is the bundled ds3-driver.ps1; it logs to Files\config\logs\ds3-driver.log.
  */
@@ -86,19 +111,27 @@ export async function installDs3Driver(): Promise<{ ok: boolean; error?: string;
     } else {
       const script = path.join(binDir(), 'ds3-driver.ps1')
       if (!fs.existsSync(script)) return { ok: false, error: 'The driver setup is missing from Starstation.' }
-      const q = (s: string) => `'${s.replace(/'/g, "''")}'`
       // the inner PowerShell runs elevated (Windows shows its permission prompt); 1223 = the user said no
-      const cmd = [
-        'try {',
-        `  $p = Start-Process -FilePath (Join-Path $env:SystemRoot 'System32\\WindowsPowerShell\\v1.0\\powershell.exe') -Verb RunAs -Wait -PassThru -WindowStyle Hidden`,
-        `    -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File', ${q(`"${script}"`)}, '-Bin', ${q(`"${binDir()}"`)}, '-Out', ${q(`"${out}"`)}, '-Log', ${q(`"${logFile}"`)})`,
-        '  exit $p.ExitCode',
-        '} catch { exit 1223 }'
-      ].join('\n')
+      const cmd = setupCommand(script, binDir(), out, logFile)
       code = await new Promise<number | null>((resolve) => {
-        const p = spawn(path.join(sys32, 'WindowsPowerShell', 'v1.0', 'powershell.exe'), ['-NoProfile', '-NonInteractive', '-Command', cmd], { stdio: 'ignore', windowsHide: true })
-        p.once('exit', (c) => resolve(c))
-        p.once('error', () => resolve(1))
+        const p = spawn(path.join(sys32, 'WindowsPowerShell', 'v1.0', 'powershell.exe'), ['-NoProfile', '-NonInteractive', '-Command', cmd], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true })
+        let said = ''
+        p.stdout?.on('data', (d) => (said += String(d)))
+        p.stderr?.on('data', (d) => (said += String(d)))
+        // .NET + driver setup take a few minutes at most: never wait forever
+        const limit = setTimeout(() => {
+          log.warn('driver setup: no answer after 15 minutes')
+          resolve(null)
+        }, 15 * 60_000)
+        p.once('exit', (c) => {
+          clearTimeout(limit)
+          if (said.trim()) log.info(`driver setup: ${said.trim().slice(0, 500)}`)
+          resolve(c)
+        })
+        p.once('error', () => {
+          clearTimeout(limit)
+          resolve(1)
+        })
       })
     }
     const res = readJson<{ ok?: boolean; error?: string; steps?: string[] }>(path.join(out, 'ds3-install.json'), {})

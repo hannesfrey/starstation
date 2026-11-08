@@ -72,10 +72,15 @@ export function emulatorInfos(): EmulatorInfo[] {
     const m = marker(e)
     const installed = fs.existsSync(emulatorExe(e))
     const l = latestCache.get(e.id)
-    const latest = l?.tag ?? null
+    // a fixed download (Dolphin, RetroArch): the version in the preset, offered when the installed one is older
+    // (never a step back, and an unknown imported version isn't nagged about)
+    const fixed = e.download?.type === 'url' ? e.download.version : null
+    const latest = l?.tag ?? fixed ?? null
     const version = installed ? (m.version ?? 'unknown') : null
     const tested = testedTag(e)
-    const current = !!(version && latest && isCurrent(version, latest, m.asset, l?.name))
+    const current = fixed
+      ? !version || version === 'unknown' || version.localeCompare(fixed, undefined, { numeric: true, sensitivity: 'base' }) >= 0
+      : !!(version && latest && isCurrent(version, latest, m.asset, l?.name))
     return {
       id: e.id,
       name: e.name,

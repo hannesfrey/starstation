@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import http from 'node:http'
 import type { AddressInfo } from 'node:net'
-import { launchApp, makeFiles, writeSettings } from './helpers'
+import { SOURCE, launchApp, makeFiles, writeSettings } from './helpers'
 
 /** SPEC-v2 B: beta channel, "Release to everyone", emulator versions offered only once tested. */
 
@@ -140,5 +140,45 @@ test('tester PC: betas first, Release to everyone, Mark as tested', async () => 
     delete process.env.STARSTATION_GITHUB_API
     delete process.env.STARSTATION_GITHUB_RAW
     delete process.env.STARSTATION_TEST_VERSION
+  }
+})
+
+test('fixed-version emulators (Dolphin, RetroArch): an older installed version is offered the preset one, never a step back', async () => {
+  const gh = await fakeGithub()
+  const files = makeFiles('channel-fixed')
+  writeSettings(files, { bootAnimation: false })
+  const fake = (folder: string, exe: string, version?: string) => {
+    const d = path.join(files, 'emulators', folder)
+    fs.mkdirSync(d, { recursive: true })
+    fs.writeFileSync(path.join(d, exe), 'MZ')
+    fs.writeFileSync(path.join(d, '.starstation.json'), JSON.stringify(version ? { version } : {}))
+  }
+  const presets = JSON.parse(fs.readFileSync(path.join(SOURCE, 'presets', 'emulators', 'dolphin.json'), 'utf8')) as { download: { version: string } }
+  const ra = JSON.parse(fs.readFileSync(path.join(SOURCE, 'presets', 'emulators', 'retroarch.json'), 'utf8')) as { download: { version: string } }
+  fake('dolphin', 'Dolphin.exe', '2506a') // older than the preset
+  fake('retroarch', 'retroarch.exe', '9.99.0') // newer than the preset: no step back
+  process.env.STARSTATION_GITHUB_API = `${gh.base}/api`
+  process.env.STARSTATION_GITHUB_RAW = `${gh.base}/raw`
+  const { app, page } = await launchApp(files)
+  try {
+    const list = await api<Emu[]>(page, 'checkEmulatorUpdates')
+    expect(list.find((e) => e.id === 'dolphin')).toMatchObject({ latest: presets.download.version, updateAvailable: true })
+    expect(list.find((e) => e.id === 'retroarch')).toMatchObject({ latest: ra.download.version, updateAvailable: false })
+  } finally {
+    await app.close()
+  }
+  // the preset's own version, and an imported one of unknown version: nothing offered
+  fake('dolphin', 'Dolphin.exe', presets.download.version)
+  fake('retroarch', 'retroarch.exe')
+  const again = await launchApp(files)
+  try {
+    const list = await api<Emu[]>(again.page, 'checkEmulatorUpdates')
+    expect(list.find((e) => e.id === 'dolphin')?.updateAvailable).toBe(false)
+    expect(list.find((e) => e.id === 'retroarch')?.updateAvailable).toBe(false)
+  } finally {
+    await again.app.close()
+    gh.server.close()
+    delete process.env.STARSTATION_GITHUB_API
+    delete process.env.STARSTATION_GITHUB_RAW
   }
 })
