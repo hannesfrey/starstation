@@ -56,8 +56,8 @@ import { readJson } from './store'
 import { consoleInfos } from './consoles'
 import { CLOSE_TIMEOUT, closeRunning, launch, setLauncherWindow, runningGame, runningPid, stopRunning, onBeforeLaunch, onAfterExit } from './launcher'
 import { keepEmulatorLog } from './emulogs'
-import { hideOverlay, overlayAction, overlayOpen, overlayState, setupOverlay, toggleOverlay } from './overlay'
-import { audioOutputs, bluetoothDevices, bluetoothPair, bluetoothRemove, displayModes, foregroundPid, onHome, setAudioOutput, setDisplayMode, startPadHelper, stopPadHelper, xinputSnapshot } from './padhelper'
+import { hideOverlay, overlayAction, overlayOpen, overlayState, sendOverlay, setupOverlay, toggleOverlay } from './overlay'
+import { audioOutputs, bluetoothDevices, bluetoothPair, bluetoothRemove, displayModes, foregroundPid, onHome, setAudioOutput, setDisplayMode, startPadHelper, stopPadHelper, xinputSnapshot, onXPads, xpadFeed } from './padhelper'
 import { loadGpuDrivers, markGuideSeen, newHomeConflicts } from './system'
 import { couchMark, couchStatus, saveCouchCheck, startCouchCheck } from './couchcheck'
 import type { OverlayAction } from '../shared/types'
@@ -605,6 +605,7 @@ function registerIpc(): void {
   // ---- PS button menu (SPEC-v2 A) ----
   handle('overlay-state', () => overlayState())
   handle('pad-snapshot', () => xinputSnapshot())
+  handle('xpads-now', () => (HEADLESS && !REAL_PADS ? null : xpadFeed()))
   // ---- library & storage (SPEC-v2 D) ----
   handle('storage', (_e, fresh?: boolean) => storageInfo(!!fresh))
   // ---- system settings from the menu (SPEC-v2 G; Hannes allowed changing them when picked here) ----
@@ -1185,6 +1186,9 @@ function registerHooks(): void {
 /** Players each game was started with (the game only looks for controllers when it boots). */
 const sessionPlayers = new Map<string, number>()
 
+/** A hidden run that still reads the real controllers through the pad helper (to measure the menu's input cost). */
+const REAL_PADS = process.env.STARSTATION_REAL_PADS === '1'
+
 function registerMediaProtocol(): void {
   // starstation-media://local/<encoded absolute path> → file, only inside Files\ or game folders
   protocol.handle('starstation-media', (req) => {
@@ -1282,6 +1286,12 @@ async function start(): Promise<void> {
   loadGpuDrivers()
   // one press = one toggle: presses closer than this are a bounce or mashing (2026-11-07 log: the menu opened
   // again 90 ms after it closed, over and over)
+  // the menus read Xbox-style controllers from the pad helper (renderer pads.ts)
+  if (!HEADLESS || REAL_PADS)
+    onXPads((f) => {
+      send('xpads', f)
+      sendOverlay('xpads', f)
+    })
   let lastHome = 0
   onHome((pad) => {
     const now = Date.now()

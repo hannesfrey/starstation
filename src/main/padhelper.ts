@@ -17,6 +17,19 @@ let proc: ChildProcess | null = null
 let homeListeners: ((pad: string) => void)[] = []
 let padsListeners: ((pads: string[]) => void)[] = []
 let lastPads: string[] = []
+/** Xbox-style pads as the helper last read them, and the PlayStation pads it sees on HID (the menu reads these). */
+export interface XPadFeed {
+  slots: XSlot[]
+  hid: number
+  off?: boolean
+}
+let xfeed: XPadFeed = { slots: [], hid: 0, off: true }
+let xpadListeners: ((f: XPadFeed) => void)[] = []
+const hidCount = (pads: string[]) => Number(pads.find((p) => p.startsWith('hid:'))?.slice(4) ?? 0) || 0
+function pushFeed(f: XPadFeed): void {
+  xfeed = f
+  for (const l of xpadListeners) l(f)
+}
 /** Waiting commands; an answer goes to the oldest one with its command name (a late answer can't land on another). */
 const waiting: { cmd: string; done: (line: string) => void }[] = []
 
@@ -42,6 +55,7 @@ export function startPadHelper(): void {
   }
   const p = spawn(exe, [], { stdio: ['pipe', 'pipe', 'ignore'], windowsHide: true })
   proc = p
+  pushFeed({ slots: [], hid: 0 }) // running: the menu waits for its pads instead of falling back to Chromium
   // writing to a helper that just died must not throw
   p.stdin?.on('error', () => undefined)
   p.once('exit', (code) => gone(p, `code ${code}`))
@@ -57,6 +71,9 @@ export function startPadHelper(): void {
     } else if (line.startsWith('pads ')) {
       lastPads = line.slice(5).split(',').filter(Boolean)
       for (const l of padsListeners) l(lastPads)
+      if (hidCount(lastPads) !== xfeed.hid) pushFeed({ ...xfeed, hid: hidCount(lastPads) })
+    } else if (line.startsWith('xpads')) {
+      pushFeed({ slots: parseXState(line.slice(5)), hid: hidCount(lastPads) })
     } else if (line === 'ready') log.info('helper ready')
     else {
       const cmd = answerTo(line)
@@ -74,6 +91,8 @@ function gone(p: ChildProcess, why: string): void {
   if (proc !== p) return
   proc = null
   for (const w of waiting.splice(0)) w.done('err gone')
+  // the menu reads controllers through Chromium again until the helper is back
+  pushFeed({ slots: [], hid: 0, off: true })
   if (stopping) {
     log.info(`helper stopped (${why})`)
     return
@@ -102,6 +121,16 @@ export function onHome(fn: (pad: string) => void): () => void {
   return () => (homeListeners = homeListeners.filter((l) => l !== fn))
 }
 
+/** Every change of the Xbox-style pads (sticks, buttons, plugged in / out), for the menu. */
+export function onXPads(fn: (f: XPadFeed) => void): () => void {
+  xpadListeners.push(fn)
+  return () => (xpadListeners = xpadListeners.filter((l) => l !== fn))
+}
+
+export function xpadFeed(): XPadFeed {
+  return xfeed
+}
+
 export function onPads(fn: (pads: string[]) => void): () => void {
   padsListeners.push(fn)
   return () => (padsListeners = padsListeners.filter((l) => l !== fn))
@@ -116,6 +145,7 @@ export function helperPads(): string[] {
 export async function xinputSnapshot(): Promise<XSlot[]> {
   // hidden tests: fake pads (no real controllers there)
   if (process.env.STARSTATION_HEADLESS === '1') return parseXState(process.env.STARSTATION_TEST_XSTATE ?? '')
+  if (!xfeed.off) return xfeed.slots
   const line = await ask('xstate', 1000)
   return line.startsWith('xstate') ? parseXState(line.slice(6)) : []
 }

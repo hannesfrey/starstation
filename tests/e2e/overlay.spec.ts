@@ -133,7 +133,9 @@ test('controller assignment: with 2 controllers, ✕ decides who is player 1 and
     await press(0, 1, true)
     await expect(page.getByTestId('assign')).toHaveCount(0)
     await expect.poll(() => fs.existsSync(path.join(files, '_fakeemu', 'players.txt')), { timeout: 5000 }).toBe(true)
-    expect(fs.readFileSync(path.join(files, '_fakeemu', 'players.txt'), 'utf8').trim().split(/\r?\n/)[2]).toBe('1')
+    // usual order: every connected controller still gets a player (2.0.10), so both fake pads count. Before 2.0.35
+    // Chromium never announced these fake pads, so the menu didn't know the second one and the game got 1 player.
+    expect(fs.readFileSync(path.join(files, '_fakeemu', 'players.txt'), 'utf8').trim().split(/\r?\n/)[2]).toBe('2')
   } finally {
     await app.close()
   }

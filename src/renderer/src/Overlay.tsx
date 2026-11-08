@@ -4,6 +4,7 @@ import { guideHolder, input, isMenuPad, padName } from './input'
 import { matchXInputPad } from '../../shared/padmatch'
 import { sfx } from './sound'
 import type { OverlayAction, OverlayState } from '../../shared/types'
+import { getPads, padHelperFeeds } from './pads'
 
 /**
  * PS button menu (SPEC-v2 A), shown in its own see-through window over the running game.
@@ -54,11 +55,16 @@ export function Overlay() {
       window.clearInterval(watch)
       const mine = ++opening
       const slot = /^xinput:(\d)$/.exec(openedBy ?? '')
+      // the pad helper feeds the menu: its pads are numbered by XInput slot, so the presser is known for sure
+      if (slot && padHelperFeeds()) {
+        input.setOnlyPad(Number(slot[1]))
+        return
+      }
       if (slot) {
         void api
           .padSnapshot()
           .then((slots) => {
-            const pads = (navigator.getGamepads ? navigator.getGamepads() : []).filter(
+            const pads = getPads().filter(
               (p): p is Gamepad => !!p && p.connected && isMenuPad(p) && /xinput|xbox/i.test(p.id)
             )
             const who = matchXInputPad(Number(slot[1]), slots, pads)
@@ -69,7 +75,7 @@ export function Overlay() {
       }
       const until = performance.now() + 800
       watch = window.setInterval(() => {
-        const who = guideHolder(navigator.getGamepads ? navigator.getGamepads() : [])
+        const who = guideHolder(getPads())
         if (who !== null) input.setOnlyPad(who)
         if (who !== null || performance.now() > until) window.clearInterval(watch)
       }, 16)
@@ -158,7 +164,7 @@ export function Overlay() {
       </div>
     )
   const list = items(state)
-  const pads = [...(navigator.getGamepads ? navigator.getGamepads() : [])].filter((p): p is Gamepad => !!p && p.connected && isMenuPad(p))
+  const pads = getPads().filter((p): p is Gamepad => !!p && p.connected && isMenuPad(p))
   return (
     <div className="overlay-root open" data-testid="overlay">
       <div className="overlay-panel">

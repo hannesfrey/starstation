@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { isMenuPad, padName } from '../input'
 import { sfx } from '../sound'
 import type { PlayerPad } from '../../../shared/types'
+import { getPads, type MenuPad } from '../pads'
 
 /**
  * Controller assignment (SPEC-v2 A): with 2+ controllers and a game for 2+ players,
@@ -11,11 +12,14 @@ import type { PlayerPad } from '../../../shared/types'
 const XINPUT = /xinput|xbox/i
 
 export function menuPads(): Gamepad[] {
-  return [...(navigator.getGamepads ? navigator.getGamepads() : [])].filter((p): p is Gamepad => !!p && p.connected && isMenuPad(p))
+  return getPads().filter((p): p is Gamepad => !!p && p.connected && isMenuPad(p))
 }
 
 /** Gamepad API pad → the device number its API (XInput / SDL) gives it. */
 function toPlayerPad(p: Gamepad, all: Gamepad[]): PlayerPad {
+  // from the pad helper: its real XInput slot (Chromium's own numbering isn't the XInput order on every PC)
+  const slot = (p as MenuPad).xinputSlot
+  if (slot !== undefined) return { api: 'xinput', index: slot, id: p.id }
   const xin = XINPUT.test(p.id)
   const same = all.filter((q) => XINPUT.test(q.id) === xin).sort((a, b) => a.index - b.index)
   return { api: xin ? 'xinput' : 'sdl', index: Math.max(0, same.findIndex((q) => q.index === p.index)), id: p.id }

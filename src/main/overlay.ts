@@ -90,6 +90,11 @@ function push(): void {
   if (win && !win.isDestroyed()) win.webContents.send('overlay', overlayState())
 }
 
+/** An event for the PS menu page (e.g. the controllers' state). */
+export function sendOverlay(channel: string, payload: unknown): void {
+  if (win && !win.isDestroyed()) win.webContents.send(channel, payload)
+}
+
 export function overlayOpen(): boolean {
   return open
 }

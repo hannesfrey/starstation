@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { isMenuPad } from '../input'
+import { getPads } from '../pads'
 
 /** Settings → Controllers → Test buttons: every button and stick of the first controller, live. */
 const NAMES = ['✕ / A', '○ / B', '□ / X', '△ / Y', 'L1', 'R1', 'L2', 'R2', 'Select', 'Start', 'L3', 'R3', '↑', '↓', '←', '→', 'Home']
@@ -9,7 +10,7 @@ export function PadTest() {
   useEffect(() => {
     let raf = 0
     const loop = () => {
-      const p = [...(navigator.getGamepads ? navigator.getGamepads() : [])].find((x): x is Gamepad => !!x && x.connected && isMenuPad(x))
+      const p = getPads().find((x): x is Gamepad => !!x && x.connected && isMenuPad(x))
       setPad(p ? { id: p.id, buttons: p.buttons.map((b) => b.value), axes: [...p.axes] } : null)
       raf = requestAnimationFrame(loop)
     }

@@ -12,6 +12,14 @@ export interface WhatsNew {
 
 export const WHATS_NEW: WhatsNew[] = [
   {
+    version: '2.0.35',
+    summary: ['The menu reacts instantly again'],
+    details: [
+      'The menu felt slow, as if with lag. On some PCs Windows takes long to answer questions about empty controller slots, and the menu asked about them about 60 times a second. Starstation now reads Xbox-style controllers (and PS3 controllers with their driver) itself, and only checks for newly plugged-in ones every 2 seconds, off to the side. Starstation also uses much less of the computer while it waits in the menu.',
+      'The player screen ("Press ✕ for Player 1") now always gives each controller its right number.'
+    ]
+  },
+  {
     version: '2.0.34',
     summary: ['The PS menu follows the controller that opened it', 'PS3 games pause behind the PS menu', 'Fixes for Wii, Xbox and Xbox 360 from your test round'],
     details: [

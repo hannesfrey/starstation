@@ -18,6 +18,7 @@ import { PanelView } from './xmb/PanelView'
 import { buildColumns, type XItem } from './xmb/model'
 import { buildPanel, type Panel, type PanelExtra } from './xmb/panels'
 import type { AddGamesResult, AppState, BatteryInfo, CustomConsoleForm, NetplayRoom, Game, LaunchResult, ModAddResult, Notice, PlayerPad, Screenshot, Settings, Wallpapers, ProfileInfo, ProfileMerge } from '../../shared/types'
+import { getPads } from './pads'
 
 const byTitle = (a: Game, b: Game) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base', numeric: true })
 
@@ -187,7 +188,7 @@ export function App() {
     })
     input.start()
     const sendPads = () => {
-      const ids = [...(navigator.getGamepads ? navigator.getGamepads() : [])].filter((p): p is Gamepad => !!p && p.connected).map((p) => p.id)
+      const ids = getPads().filter((p): p is Gamepad => !!p && p.connected).map((p) => p.id)
       void api.reportPads(ids)
     }
     const offPad = input.onPad((e) => {
@@ -430,7 +431,7 @@ export function App() {
         .catch((e: Error) => setExtra((x) => ({ ...x, health: [{ severity: 'error', title: 'The health check could not finish', detail: e.message }] })))
     }
     if (id === 'controllers') {
-      const p = [...(navigator.getGamepads ? navigator.getGamepads() : [])].find((x): x is Gamepad => !!x && x.connected && isMenuPad(x))
+      const p = getPads().find((x): x is Gamepad => !!x && x.connected && isMenuPad(x))
       setExtra((x) => ({ ...x, pad: p ? { name: padName(p.id), api: /xinput/i.test(p.id) ? 'XInput' : 'SDL' } : null }))
     }
     if (id === 'retroachievements') void api.raStatus().then((ra) => setExtra((x) => ({ ...x, ra })))
@@ -954,7 +955,7 @@ export function App() {
       const step = to ?? (w ? w.step + 1 : 0)
       if (WIZ_STEPS[step] === 'wiz-emulators') void api.emulators().then((emulators) => setExtra((x) => ({ ...x, emulators })))
       if (WIZ_STEPS[step] === 'wiz-controller') {
-        const p = [...(navigator.getGamepads ? navigator.getGamepads() : [])].find((x): x is Gamepad => !!x && x.connected && isMenuPad(x))
+        const p = getPads().find((x): x is Gamepad => !!x && x.connected && isMenuPad(x))
         setExtra((x) => ({ ...x, pad: p ? { name: padName(p.id), api: /xinput/i.test(p.id) ? 'XInput' : 'SDL' } : null }))
       }
       return { step, index: 0 }

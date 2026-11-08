@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Logo } from './Icons'
 import { sfx } from '../sound'
 import { input } from '../input'
+import { getPads } from '../pads'
 
 /** ~3 s boot animation; any key, click or button skips it. ○ (or Esc) starts safe mode instead. */
 export function Boot({ onDone, onSafeMode }: { onDone: () => void; onSafeMode?: () => void }) {
@@ -27,7 +28,7 @@ export function Boot({ onDone, onSafeMode }: { onDone: () => void; onSafeMode?: 
       if (a === 'back') safe()
     })
     const held = setInterval(() => {
-      const pads = navigator.getGamepads ? [...navigator.getGamepads()] : []
+      const pads = getPads()
       if (pads.some((p) => p?.connected && p.buttons[1]?.pressed)) safe()
     }, 100)
     // any other key or button skips the animation (after the ○ check has had its turn)

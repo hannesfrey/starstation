@@ -42,6 +42,7 @@ const api = {
   guideSeen: (keys: string[]) => ipcRenderer.invoke('guide-seen', keys),
   overlayState: () => ipcRenderer.invoke('overlay-state'),
   padSnapshot: () => ipcRenderer.invoke('pad-snapshot'),
+  xpadsNow: () => ipcRenderer.invoke('xpads-now'),
   overlayAction: (action: string) => ipcRenderer.invoke('overlay-action', action),
   testHome: (pad?: string) => ipcRenderer.invoke('test-home', pad),
   compressGame: (gameId: string) => ipcRenderer.invoke('compress-game', gameId),
@@ -119,7 +120,7 @@ const api = {
   modInboxOpen: () => ipcRenderer.invoke('mod-inbox-open'),
   mediaUrl: (absPath: string) => `starstation-media://local/${encodeURIComponent(absPath)}`,
   on: (channel: string, cb: (payload: unknown) => void) => {
-    const allowed = ['notice', 'library', 'consoles', 'collections', 'screenshots', 'battery', 'package-progress', 'running', 'navigate', 'import-progress', 'emulator-progress', 'add-ask', 'overlay', 'compress-progress', 'ps3update-progress', 'nexus-request', 'wallpapers', 'package-ask', 'display-revert', 'mod-inbox-ask', 'mod-result']
+    const allowed = ['notice', 'library', 'consoles', 'collections', 'screenshots', 'battery', 'package-progress', 'running', 'navigate', 'import-progress', 'emulator-progress', 'add-ask', 'overlay', 'compress-progress', 'ps3update-progress', 'nexus-request', 'wallpapers', 'package-ask', 'display-revert', 'mod-inbox-ask', 'mod-result', 'xpads']
     if (!allowed.includes(channel)) throw new Error(`Unknown channel ${channel}`)
     const h = (_e: unknown, payload: unknown) => cb(payload)
     ipcRenderer.on(channel, h)

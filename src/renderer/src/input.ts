@@ -1,3 +1,4 @@
+import { getPads } from './pads'
 /**
  * Unified input: keyboard, gamepads (Gamepad API) and mouse wheel → menu actions.
  * Racing wheels, pedals and flight sticks are ignored so they never move the menu.
@@ -134,8 +135,6 @@ export class InputManager {
   start(): void {
     window.addEventListener('keydown', this.onKey)
     window.addEventListener('wheel', this.onWheel, { passive: false })
-    window.addEventListener('gamepadconnected', this.onPadConnect)
-    window.addEventListener('gamepaddisconnected', this.onPadDisconnect)
     const loop = () => {
       this.poll()
       this.raf = requestAnimationFrame(loop)
@@ -146,8 +145,6 @@ export class InputManager {
   stop(): void {
     window.removeEventListener('keydown', this.onKey)
     window.removeEventListener('wheel', this.onWheel)
-    window.removeEventListener('gamepadconnected', this.onPadConnect)
-    window.removeEventListener('gamepaddisconnected', this.onPadDisconnect)
     cancelAnimationFrame(this.raf)
   }
 
@@ -257,21 +254,27 @@ export class InputManager {
     this.emit(horizontal ? (dir ? 'right' : 'left') : dir ? 'down' : 'up', 'mouse')
   }
 
-  private onPadConnect = (e: GamepadEvent) => {
-    if (!isMenuPad(e.gamepad)) return
-    this.known.set(e.gamepad.index, e.gamepad.id)
-    this.lastKind = padKind(e.gamepad.id)
-    for (const l of this.padListeners) l({ type: 'connected', kind: this.lastKind, name: padName(e.gamepad.id) })
-  }
-
-  private onPadDisconnect = (e: GamepadEvent) => {
-    if (!this.known.has(e.gamepad.index)) return
-    this.known.delete(e.gamepad.index)
-    for (const l of this.padListeners) l({ type: 'disconnected', kind: padKind(e.gamepad.id), name: padName(e.gamepad.id) })
+  /** Controllers plugged in / out, found by comparing each round (no Chromium gamepad events: listening to them
+   *  makes Chromium poll its own controller reading, which is what made the menu slow — see pads.ts). */
+  private noticePads(pads: readonly (Gamepad | null)[]): void {
+    const now = new Map<number, string>()
+    for (const p of pads) if (p && p.connected && isMenuPad(p)) now.set(p.index, p.id)
+    for (const [index, id] of now) {
+      if (this.known.get(index) === id) continue
+      this.known.set(index, id)
+      this.lastKind = padKind(id)
+      for (const l of this.padListeners) l({ type: 'connected', kind: this.lastKind, name: padName(id) })
+    }
+    for (const [index, id] of [...this.known]) {
+      if (now.has(index)) continue
+      this.known.delete(index)
+      for (const l of this.padListeners) l({ type: 'disconnected', kind: padKind(id), name: padName(id) })
+    }
   }
 
   private poll(): void {
-    const pads = navigator.getGamepads ? navigator.getGamepads() : []
+    const pads = getPads()
+    this.noticePads(pads)
     const now = performance.now()
     const pressed = new Set<string>()
     for (const p of pads) {

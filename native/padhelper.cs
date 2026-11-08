@@ -598,53 +598,71 @@ static class PadHelper
         return "not found";
     }
 
-    /** Every connected XInput pad now: "slot:lx,ly,rx,ry,lt,rt,buttons;…" — lets the PS button menu find, among the
-     *  controllers the menu sees, the one that pressed PS (Chromium gives every Guide press to its first pad). */
-    static string XStateLine()
-    {
-        var parts = new List<string>();
-        for (uint i = 0; i < 4; i++)
-        {
-            var s = new XState();
-            uint r;
-            try { r = XInputGetStateEx(i, ref s); }
-            catch (Exception) { r = 1; }
-            if (r != 0) continue;
-            var g = s.Gamepad;
-            parts.Add(i + ":" + g.sThumbLX + "," + g.sThumbLY + "," + g.sThumbRX + "," + g.sThumbRY + "," + g.bLeftTrigger + "," + g.bRightTrigger + "," + g.wButtons);
-        }
-        return string.Join(";", parts.ToArray());
-    }
+    /** Every connected XInput pad as last read: "slot:lx,ly,rx,ry,lt,rt,buttons;…" (the poll keeps it current; asking
+     *  Windows again here would include the slow empty slots). */
+    static volatile string lastXState = "";
 
     // ---------------- main ----------------
     static void Main(string[] args)
     {
         Console.OutputEncoding = Encoding.UTF8;
-        var poll = new Thread(() =>
+        // XInput: asking about an EMPTY slot can be very slow (Hannes's PC with two DsHidMini pads: ~70 ms per call,
+        // it makes Windows look at every XInput device). So only connected slots are read every 16 ms; empty slots
+        // and new PlayStation pads are looked for every 2 s on their own thread, which never holds up the fast one.
+        var connected = new bool[4];
+        var probe = new Thread(() =>
         {
-            var was = new bool[4];
-            string lastPads = null;
-            int tick = 0;
             while (true)
             {
-                var pads = new List<string>();
                 for (uint i = 0; i < 4; i++)
                 {
+                    if (Volatile.Read(ref connected[i])) continue;
                     var s = new XState();
                     uint r;
                     try { r = XInputGetStateEx(i, ref s); }
                     catch (Exception) { r = 1; }
-                    bool connected = r == 0;
-                    bool down = connected && (s.Gamepad.wButtons & GUIDE) != 0;
-                    if (connected) pads.Add("xinput:" + i);
+                    if (r == 0) Volatile.Write(ref connected[i], true);
+                }
+                try { ScanHid(); } catch (Exception) { }
+                Thread.Sleep(2000);
+            }
+        });
+        probe.IsBackground = true;
+        probe.Start();
+
+        var poll = new Thread(() =>
+        {
+            var was = new bool[4];
+            var packets = new uint[4];
+            string lastPads = null, lastState = null;
+            while (true)
+            {
+                var pads = new List<string>();
+                var state = new List<string>();
+                for (uint i = 0; i < 4; i++)
+                {
+                    if (!Volatile.Read(ref connected[i])) { was[i] = false; continue; }
+                    var s = new XState();
+                    uint r;
+                    try { r = XInputGetStateEx(i, ref s); }
+                    catch (Exception) { r = 1; }
+                    if (r != 0) { Volatile.Write(ref connected[i], false); was[i] = false; continue; }
+                    bool down = (s.Gamepad.wButtons & GUIDE) != 0;
+                    pads.Add("xinput:" + i);
                     if (down && !was[i]) Say("home xinput:" + i);
                     was[i] = down;
+                    var g = s.Gamepad;
+                    state.Add(i + ":" + g.sThumbLX + "," + g.sThumbLY + "," + g.sThumbRX + "," + g.sThumbRY + "," + g.bLeftTrigger + "," + g.bRightTrigger + "," + g.wButtons);
+                    packets[i] = s.dwPacketNumber;
                 }
-                if (tick % 180 == 0) ScanHid(); // every 3 s: newly connected PlayStation pads
                 lock (hidLock) { pads.Add("hid:" + hidReaders.Count); }
                 string now = string.Join(",", pads.ToArray());
                 if (now != lastPads) { Say("pads " + now); lastPads = now; }
-                tick++;
+                // the menu reads Xbox-style pads from here (Chromium's own reading asks about empty slots ~60 times a
+                // second): every change, as one line with all connected pads
+                string st = string.Join(";", state.ToArray());
+                lastXState = st;
+                if (st != lastState) { Say("xpads " + st); lastState = st; }
                 Thread.Sleep(16);
             }
         });
@@ -664,7 +682,7 @@ static class PadHelper
                 switch (a[0])
                 {
                     case "quit": return;
-                    case "xstate": Say("xstate " + XStateLine()); break;
+                    case "xstate": Say("xstate " + lastXState); break;
                     case "fg":
                         {
                             uint p;
