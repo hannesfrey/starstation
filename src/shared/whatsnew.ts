@@ -12,6 +12,13 @@ export interface WhatsNew {
 
 export const WHATS_NEW: WhatsNew[] = [
   {
+    version: '2.0.23',
+    summary: ['Restoring saves can’t overlap with itself or with starting the game'],
+    details: [
+      'While a game’s saves are being backed up or restored, a second restore is refused and the game waits to start, so it never reads half-restored saves.'
+    ]
+  },
+  {
     version: '2.0.22',
     summary: ['Mods: two changes at once can no longer lose track of a mod’s files'],
     details: [

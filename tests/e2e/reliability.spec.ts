@@ -386,3 +386,36 @@ test('a double press on a profile switches once; save folders are moved by one s
     await app.close()
   }
 })
+
+test('restoring a save backup twice at the same moment: one restore runs, the saves end up whole', async () => {
+  const files = makeFiles('restore-double')
+  const presets = makePresets(files, 300, { quickResume: true })
+  writeSettings(files, { bootAnimation: false })
+  fs.mkdirSync(path.join(files, 'games', 'testcon'), { recursive: true })
+  fs.writeFileSync(path.join(files, 'games', 'testcon', 'Alpha.tst'), 'a')
+  const saves = path.join(files, 'saves', 'testcon')
+  fs.mkdirSync(saves, { recursive: true })
+  fs.writeFileSync(path.join(saves, 'Alpha.sav'), 'old save')
+  const { app, page } = await launchApp(files, presets)
+  try {
+    await expect(page.getByTestId('game-info')).toContainText('Alpha')
+    const gid = 'testcon:alpha.tst'
+    // a game session backs the save up first, then the fake emulator writes a new one
+    expect((await api<{ ok: boolean }>(page, 'launch', gid)).ok).toBe(true)
+    await expect(page.getByTestId('running')).toHaveCount(0, { timeout: 15_000 })
+    const d = await api<{ backups: { id: string }[] }>(page, 'gameDetails', gid)
+    const id = d.backups[d.backups.length - 1].id
+    const [a, b] = await page.evaluate(
+      ([g, bid]) => {
+        const s = (window as unknown as { starstation: { restoreBackup: (g: string, b: string) => Promise<{ ok: boolean; error?: string }> } }).starstation
+        return Promise.all([s.restoreBackup(g, bid), s.restoreBackup(g, bid)])
+      },
+      [gid, id] as const
+    )
+    expect([a, b].filter((r) => r.ok)).toHaveLength(1)
+    expect([a, b].find((r) => !r.ok)?.error).toContain('being restored')
+    expect(fs.readFileSync(path.join(saves, 'Alpha.sav'), 'utf8')).toBe('old save')
+  } finally {
+    await app.close()
+  }
+})

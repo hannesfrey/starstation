@@ -4,9 +4,9 @@ Read SPEC.md first. This file tracks where the build stands and every small deci
 
 ## Current state
 
-- **Phase:** v2 done. Latest beta: **2.0.22** (2026-11-07: 2.0.13 trophies removed + reliability round, 2.0.14 follow-ups, 2.0.15 compact Settings + PS menu per player, 2.0.16 netplay + downloads, 2.0.17 safe default answers, 2.0.18 damaged-file robustness, 2.0.19 stats vs odd data, 2.0.20 hand-edited config files, 2.0.21 damaged user consoles, 2.0.22 mod changes one at a time). v1.0.0 is still what everyone else gets; only Hannes presses "Release to everyone".
+- **Phase:** v2 done. Latest beta: **2.0.23** (2026-11-07: 2.0.13 trophies removed + reliability round, 2.0.14 follow-ups, 2.0.15 compact Settings + PS menu per player, 2.0.16 netplay + downloads, 2.0.17 safe default answers, 2.0.18 damaged-file robustness, 2.0.19 stats vs odd data, 2.0.20 hand-edited config files, 2.0.21 damaged user consoles, 2.0.22 mod changes one at a time, 2.0.23 save restores one at a time). v1.0.0 is still what everyone else gets; only Hannes presses "Release to everyone".
 - **Earlier sessions (2026-11-07):** 2.0.10 player 2 from the first start (padVars count + RPCS3 new pad copies player 1's Config, fresh = VID 1356/PID 616); 2.0.11 RPCS3 "Exclusive Fullscreen Mode": "Disable" + emulator-refused settings logged; 2.0.12 PS3 game updates from Sony (`src/main/ps3updates.ts`, `formats/ps3update.ts`, panel 'ps3-update'). Black Ops II updated for real to 01.19. Gran Turismo 6 (BCUS98296) still 01.00: 21 updates / 11.2 GB offered at its next start.
-- **Waiting on Hannes:** restart Starstation to get 2.0.22 (also brings 2.0.12–2.0.21); check the PS menu with two players (only the one who pressed PS should move it) and the new Settings groups; play BO2 to see if the freezes are gone (earlier crash = RPCS3 stall tripping the game's own 30 s hang watchdog, not Starstation). If it crashes again: read `Files\config\logs\emulators` (RPCS3 log is kept).
+- **Waiting on Hannes:** restart Starstation to get 2.0.23 (also brings 2.0.12–2.0.22); check the PS menu with two players (only the one who pressed PS should move it) and the new Settings groups; play BO2 to see if the freezes are gone (earlier crash = RPCS3 stall tripping the game's own 30 s hang watchdog, not Starstation). If it crashes again: read `Files\config\logs\emulators` (RPCS3 log is kept).
 - **Still open:** DsHidMini driver install on a real DS3; real-pad check of the PS button; MK7 Mii + 3DS controller check.
 - **Reliability round, part 2 (Hannes asked for this session + half the next):** done in 2.0.14–2.0.15: packages receive, compress, Steam writer, custom consoles, stuck screens (health, storage, import, packages, player screen), PS menu per player (ground truth only), packaged-build check before every release. Still open: the remaining renderer `api.x().then` calls without `.catch` are one-shot loads (only logged on failure); a real two-pad check of the PS menu lock.
 - **Release routine:** bump package.json + whatsnew.ts entry → tests (`npx vitest run`, `npx playwright test`) → commit → `git tag vX` → push tag → `node scripts/release.mjs "<notes>"` (beta pre-release) → note "Released: commit …" here and push.
@@ -287,6 +287,12 @@ The kept log (`rpcs3_20261107183640_…`) caught it: after 33 min of multiplayer
 - Test: e2e `reliability` "two mods switched on at the same moment" (both first-time, saves present → backups) → both tracked, both off leaves no file. Fails on the old mods.ts (one mod not marked on), passes now.
 - Profiles: two `switchProfile` calls at once (double press) both saw the old profile active and ran the save-folder journal in parallel. Now one at a time (`switching`); the second answers `busy` and the menu stays quiet. e2e "double press on a profile" (with the Xbox hard disk to move: one switch, p1's disk put away once and intact, one log line) fails on the old profiles.ts.
 - Delete game: a second press while the first is binning the files does nothing (`deleting`). Full e2e 66 passed (14 opt-in skipped), unit 88. Released: commit d0a7145, tag `v2.0.22`, GitHub pre-release (beta); its packaged check passed.
+
+### 2.0.23 — save backups and restores one at a time (2026-11-08)
+
+- `restoreBackup` empties the save folder and copies the backup in (after a "before-restore" backup); `restorePreviousResume` copies through a swap file. Two at once, or a game start meanwhile, could mix or read half-restored saves. `savesBusy` (index.ts) per game around backup-now / backup-restore / resume-restore-previous; a second one is refused ("being restored"), and launch waits ("being backed up or restored").
+- Test: e2e `reliability` "restoring a save backup twice at the same moment" → one runs, the other is refused, the save is the backup's.
+- Full e2e 67 passed (14 opt-in skipped), unit 88.
 
 ## How to work on it
 

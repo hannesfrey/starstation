@@ -390,6 +390,7 @@ function registerIpc(): void {
     const g = getGame(id)
     if (updatingGame() === id) return { ok: false, error: 'This game is being updated. It can start when the update is done.' }
     if (compressing === id) return { ok: false, error: 'This game is being compressed. It can start when that is done.' }
+    if (savesBusy.has(id)) return { ok: false, error: 'Its saves are being backed up or restored. It can start in a moment.' }
     const emu = g ? getConsole(g.console)?.emulator : undefined
     if (emu && installing.has(emu)) return { ok: false, error: 'Its emulator is being installed or updated. The game can start when that is done.' }
     if (switchPending()) return { ok: false, error: 'Switching profiles didn’t finish. Close Starstation and start it again, then play.' }
@@ -768,8 +769,9 @@ function registerIpc(): void {
   })
   handle('backup-now', async (_e, id: string) => {
     const g = getGame(id)
-    if (!g) return null
-    const b = await backupGame(g, 'manual')
+    if (!g || savesBusy.has(id)) return null
+    savesBusy.add(id)
+    const b = await backupGame(g, 'manual').finally(() => savesBusy.delete(id))
     if (b) await pruneBackups(g)
     notify(b ? { kind: 'save', title: 'Saves backed up', detail: g.title } : { kind: 'info', title: saveEntries(g).length ? 'Saves unchanged since the last backup' : 'No saves found yet', detail: g.title })
     return b
@@ -778,6 +780,8 @@ function registerIpc(): void {
     const g = getGame(id)
     if (!g) return { ok: false, error: 'Game not found' }
     if (runningGame()) return { ok: false, error: 'Close the game first.' }
+    if (savesBusy.has(id)) return { ok: false, error: 'Its saves are being restored right now.' }
+    savesBusy.add(id)
     try {
       await restoreBackup(g, backupId)
       notify({ kind: 'save', title: 'Saves restored', detail: g.title })
@@ -785,18 +789,24 @@ function registerIpc(): void {
     } catch (e) {
       notify({ kind: 'error', title: 'Restore failed', detail: (e as Error).message })
       return { ok: false, error: (e as Error).message }
+    } finally {
+      savesBusy.delete(id)
     }
   })
   handle('resume-restore-previous', async (_e, id: string) => {
     const g = getGame(id)
     if (!g) return { ok: false, error: 'Game not found' }
     if (runningGame()) return { ok: false, error: 'Close the game first.' }
+    if (savesBusy.has(id)) return { ok: false, error: 'Its saves are being restored right now.' }
+    savesBusy.add(id)
     try {
       await restorePreviousResume(g)
       notify({ kind: 'save', title: 'Earlier resume point is back', detail: g.title })
       return { ok: true }
     } catch (e) {
       return { ok: false, error: (e as Error).message }
+    } finally {
+      savesBusy.delete(id)
     }
   })
   handle('game-option-set', (_e, id: string, key: 'graphics' | 'crt' | 'patch', value: string | boolean, patchId?: string) => {
@@ -995,6 +1005,9 @@ async function doAddGames(paths: string[], consoleId?: string): Promise<AddGames
 }
 
 /** Move the game (and, if asked, its own saves) to the Recycle Bin, then forget it. */
+/** Games whose saves are being backed up or restored right now: no second restore, no start meanwhile. */
+const savesBusy = new Set<string>()
+
 /** Games being deleted right now (a second press while the first is binning the files does nothing). */
 const deleting = new Set<string>()
 
