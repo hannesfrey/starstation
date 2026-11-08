@@ -253,6 +253,7 @@ The kept log (`rpcs3_20261107183640_…`) caught it: after 33 min of multiplayer
 - Found: `.m3u` playlists pointing at each other (a → b → a) recursed forever in `partsOf` (used by delete game, add games, New downloads) and `discImage` → stack overflow. Now a visited set / depth limit. Mutation-checked: the old `partsOf` fails the test.
 - ISO reader: a folder entry claiming > 16 MB is refused (a damaged image could make it allocate gigabytes). GC/Wii, 3DS, N64 header readers close the file also when reading throws (`head()`).
 - Full e2e 59 passed (14 opt-in skipped), unit 80. Released: commit 131be5d, tag `v2.0.18`, GitHub pre-release (beta); its packaged check passed.
+- After 2.0.18 (tests only): unit `configwriters.test.ts` — 1,200 generated emulator config files (messy INI with comments / duplicates / keys before sections, CRLF and LF; key=value; RPCS3 player blocks): writing the same settings twice changes nothing, values read back, lines Starstation doesn't own survive, no mixed line endings; stripLines removes only matches. Mutation-checked (forcing LF endings makes it fail). The writers passed as they are.
 
 ## How to work on it
 
