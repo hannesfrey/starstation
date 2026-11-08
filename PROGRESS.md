@@ -340,7 +340,7 @@ The kept log (`rpcs3_20261107183640_…`) caught it: after 33 min of multiplayer
 - exFAT / FAT32 (USB sticks) have no hard links and no junctions. Package builder and mod manager already fell back to copies; `toXiso` didn't (its hard link failed → never converted) → copies when there is room (2 × size + 512 MB). Junctions (preset `link` steps that send emulator saves to Files\saves) can't exist there: saves stay inside the emulator, out of reach of backups / profiles — that was silent → Health check "This drive can't link folders" (`canLinkFolders()`, one junction tried in Files\config).
 - Test: `convert.spec` "a drive without hard links" — hard links and junctions made to fail inside the main process (`process.getBuiltinModule('node:fs')`): Xbox conversion, a package saved to a folder, the Health check entry. Fails on the old convert.ts.
 - Checked: chdman and 7zr handle non-Latin paths (no change).
-- Full e2e 80 passed (14 opt-in skipped), unit 93.
+- Full e2e 80 passed (14 opt-in skipped), unit 93. Released: tag `v2.0.30`, GitHub pre-release (beta); its packaged check passed.
 - After 2.0.28 (tests only): `monkey.spec` also covers the PS button menu during games (12 sessions: 95 menu opens, 73 resumes, 10 screenshots, 12 save-and-quits, double PS presses; play count = sessions, no ERROR) and the first-start wizard (3 seeds × 150 presses, offline; no error screen / ERROR).
 - Scale test (`reliability`): 3,000 games — first scan 279 ms, cached start 78 ms, 200 quick presses down and the menu answers; state with 3,000 games in < 3 s.
 
