@@ -7,7 +7,7 @@ import { emulatorDir, emulatorExe, getConsole, getEmulator } from './presets'
 import { xboxImageKind } from './formats/xdvdfs'
 import { n3dsEncrypted } from './formats/gameid'
 import { logger } from './log'
-import { renameRetry } from './fsutil'
+import { plainFolder, renameRetry } from './fsutil'
 import type { Notice } from '../shared/types'
 
 /**
@@ -60,7 +60,9 @@ export async function toXiso(file: string, trash: Trash): Promise<Note | null> {
     // game itself is never touched until the new image checks out (same drive: no extra space)
     const link = path.join(tmp, 'disc.iso')
     await fsp.link(file, link)
-    const code = await run(path.join(binDir(), 'extract-xiso.exe'), ['-r', '-d', outDir, link], tmp, 60 * 60_000)
+    // extract-xiso works with paths in the PC's old code page: a Files path with e.g. Japanese or Cyrillic letters
+    // fails, even as relative names. It runs in the short (plain ASCII) form of tmp, with relative names.
+    const code = await run(path.join(binDir(), 'extract-xiso.exe'), ['-r', '-d', path.relative(tmp, outDir), path.basename(link)], await plainFolder(tmp), 60 * 60_000)
     const out = path.join(outDir, 'disc.iso')
     if (code !== 0 || !fs.existsSync(out) || xboxImageKind(out) !== 'xiso') throw new Error(`extract-xiso failed (code ${code})`)
     // checked: the XISO goes next to the original first (it must never be left in the temporary folder, which is

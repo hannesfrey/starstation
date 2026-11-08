@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import crypto from 'node:crypto'
+import { execFile } from 'node:child_process'
 import { referencedFiles } from './formats/gameid'
 
 // File helpers shared by the importer, save backups and "Add games".
@@ -111,6 +112,24 @@ export async function verifyTree(from: string, to: string): Promise<string[]> {
   }
   await walk(from, to)
   return bad
+}
+
+/**
+ * A folder path an old-style command-line tool can be started in. Tools that read paths in the PC's old code page
+ * (extract-xiso) can't work inside a folder with e.g. Japanese or Cyrillic letters; Windows' short 8.3 form of the
+ * folder ("C:\Users\A98B~1") is plain ASCII. Returns the path itself when it is already plain, or when Windows has
+ * no short name for it (then the tool may fail — callers keep the original safe).
+ */
+export async function plainFolder(p: string): Promise<string> {
+  if (/^[\x20-\x7e]*$/.test(p)) return p
+  const ps = '[Console]::OutputEncoding=[Text.Encoding]::UTF8; (New-Object -ComObject Scripting.FileSystemObject).GetFolder($env:SS_DIR).ShortPath'
+  const exe = path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
+  return new Promise((resolve) => {
+    execFile(exe, ['-NoProfile', '-NonInteractive', '-Command', ps], { env: { ...process.env, SS_DIR: p }, windowsHide: true, timeout: 20_000 }, (err, out) => {
+      const short = String(out ?? '').trim()
+      resolve(!err && short && /^[\x20-\x7e]+$/.test(short) ? short : p)
+    })
+  })
 }
 
 /**

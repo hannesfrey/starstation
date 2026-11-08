@@ -88,3 +88,27 @@ test('conversion on import: Xbox disc → XISO, discs → playlist, PS3 package 
     await app.close()
   }
 })
+
+test('Xbox conversion also works when the Starstation folder has Japanese / Cyrillic letters in its path', async () => {
+  test.setTimeout(120_000)
+  // the disc is made in a plain folder (the test tool has the same old-code-page limit), then moved in
+  const plain = makeFiles('convert-src')
+  const disc = path.join(plain, 'Big Game (USA).iso')
+  fullXboxDisc(path.join(plain, '_work'), disc)
+  const files = path.join(SOURCE, 'tools', 'cache', 'e2e', `日本 Жуков ${Date.now()}`, 'Files')
+  fs.mkdirSync(path.join(files, 'config'), { recursive: true })
+  fs.writeFileSync(path.join(files, 'config', 'setup.json'), JSON.stringify({ done: true }))
+  writeSettings(files, { bootAnimation: false })
+  const inbox = path.join(files, '_inbox')
+  fs.mkdirSync(inbox, { recursive: true })
+  fs.renameSync(disc, path.join(inbox, 'Big Game (USA).iso'))
+  const { app, page } = await launchApp(files)
+  try {
+    const x = await api<{ added: { path: string }[] }>(page, 'addGames', [path.join(inbox, 'Big Game (USA).iso')], 'xbox')
+    expect(x.added).toHaveLength(1)
+    await expect(page.getByTestId('notices')).toContainText('Xbox game converted', { timeout: 30_000 })
+    expect(fs.statSync(path.join(files, 'games', 'xbox', 'Big Game (USA).iso')).size).toBeLessThan(10 * 1024 * 1024)
+  } finally {
+    await app.close()
+  }
+})

@@ -8,7 +8,7 @@ import { dir, filesDir } from './paths'
 import { getSettings } from './settings'
 import { allConsoles } from './presets'
 import { consoleInfos } from './consoles'
-import { emulatorInfos } from './emulators'
+import { emulatorInfos, tarExe } from './emulators'
 import { healthCheck } from './health'
 import { view } from './library/library'
 
@@ -46,13 +46,22 @@ export async function exportReport(to: string): Promise<string> {
     await fsp.writeFile(path.join(stage, 'summary.json'), JSON.stringify(summary, null, 2))
     await fsp.mkdir(path.dirname(to), { recursive: true })
     await fsp.rm(to, { force: true })
-    // Windows' own tar writes .zip files (-a picks the format from the name)
-    const tar = path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'tar.exe')
+    // Windows' own tar writes .zip files (-a picks the format from the name). It reads its command line in the
+    // PC's old code page, so it gets plain relative names only (run next to the staging folder); the zip is then
+    // moved where it belongs — a Files path with e.g. Japanese or Cyrillic letters made it fail before.
+    const zip = `${stage}.zip`
     await new Promise<void>((resolve, reject) => {
-      const p = spawn(tar, ['-a', '-cf', to, '-C', stage, '.'], { windowsHide: true, stdio: 'ignore' })
+      const p = spawn(tarExe(), ['-a', '-cf', path.basename(zip), '-C', path.basename(stage), '.'], { cwd: path.dirname(stage), windowsHide: true, stdio: 'ignore' })
       p.once('error', reject)
       p.once('exit', (code) => (code === 0 ? resolve() : reject(new Error(`zip failed (${code})`))))
     })
+    try {
+      await fsp.rename(zip, to)
+    } catch {
+      // another drive (a USB stick picked in the dialog)
+      await fsp.copyFile(zip, to)
+      await fsp.rm(zip, { force: true })
+    }
     return to
   } finally {
     await fsp.rm(stage, { recursive: true, force: true })

@@ -10,6 +10,28 @@ import { withOneMii } from './formats/miidb'
 
 const log = logger('emuconfig')
 
+/**
+ * A quoted value (xemu's TOML): a literal string '…' — which can't hold an apostrophe, so a path like
+ * C:\Users\O'Brien\… becomes a basic string "…" with its backslashes escaped instead (else xemu can't read its settings).
+ */
+export function quoteValue(s: string): string {
+  return s.includes("'") ? JSON.stringify(s) : `'${s}'`
+}
+
+/** The text of a value written either way (or unquoted). */
+export function unquoteValue(s?: string): string | undefined {
+  if (s === undefined) return s
+  const t = s.trim()
+  if (t.length >= 2 && t.startsWith('"') && t.endsWith('"')) {
+    try {
+      return JSON.parse(t) as string
+    } catch {
+      return t.slice(1, -1)
+    }
+  }
+  return t.replace(/^'|'$/g, '')
+}
+
 function str(v: string | number | boolean): string {
   return typeof v === 'string' ? v : String(v)
 }
@@ -86,7 +108,7 @@ export function applyStep(step: ConfigStep, v: Record<string, string>): void {
       const set: Record<string, Record<string, string | string[]>> = {}
       const one = (val: string | number | boolean) => {
         const filled = typeof val === 'string' ? fill(val, v) : str(val)
-        return step.quote && typeof val === 'string' ? `'${filled}'` : filled
+        return step.quote && typeof val === 'string' ? quoteValue(filled) : filled
       }
       for (const [sec, entries] of Object.entries(step.set)) {
         set[sec] = {}
@@ -182,8 +204,7 @@ function selectBios(c: ConsolePreset, v: Record<string, string>): void {
   for (const sel of list) {
     const file = fill(sel.file, v)
     const text = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : ''
-    const unquote = (s?: string) => s?.replace(/^['"]|['"]$/g, '')
-    const current = unquote(getIniValue(text, sel.section, sel.key))
+    const current = unquoteValue(getIniValue(text, sel.section, sel.key))
     const candidates = candidateBios(c, sel.rule)
     if (!candidates.length) continue
     const asValue = (name: string) => (sel.fullPath ? path.join(v.bios, name) : name)
@@ -191,7 +212,7 @@ function selectBios(c: ConsolePreset, v: Record<string, string>): void {
     const prefer = sel.prefer ? new RegExp(sel.prefer, 'i') : null
     const pick = asValue((prefer && candidates.find((n) => prefer.test(n))) || [...candidates].sort()[0])
     fs.mkdirSync(path.dirname(file), { recursive: true })
-    writeFileAtomic(file, setIniValues(text, { [sel.section]: { [sel.key]: sel.quote ? `'${pick}'` : pick } }))
+    writeFileAtomic(file, setIniValues(text, { [sel.section]: { [sel.key]: sel.quote ? quoteValue(pick) : pick } }))
     log.info(`${c.id}: ${sel.key} set to ${pick}`)
   }
 }

@@ -10,6 +10,7 @@ import { readJson, writeJson } from './store'
 import { logger } from './log'
 import { getSecrets, isTester } from './settings'
 import { versionFromAsset } from './formats/version'
+import { renameRetry } from './fsutil'
 
 import type { EmulatorInfo } from '../shared/types'
 
@@ -170,12 +171,33 @@ export async function unpack(archive: string, to: string): Promise<void> {
   await fsp.mkdir(to, { recursive: true })
   const lower = archive.toLowerCase()
   // Windows' tar (libarchive) reads zip and rar (4 and 5); 7z needs the bundled 7-Zip
-  const code = lower.endsWith('.zip') || lower.endsWith('.rar')
-    ? await run(path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'tar.exe'), ['-xf', archive, '-C', to])
-    : await run(sevenZip(), ['x', '-y', `-o${to}`, archive])
+  const code = lower.endsWith('.zip') || lower.endsWith('.rar') ? await tarUnpack(archive, to) : await run(sevenZip(), ['x', '-y', `-o${to}`, archive])
   if (code !== 0) {
     await fsp.rm(to, { recursive: true, force: true })
     throw new Error(`Extracting ${path.basename(archive)} failed (code ${code})`)
+  }
+}
+
+export const tarExe = (): string => path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'tar.exe')
+
+/**
+ * Windows' tar reads its command line in the PC's old code page: a path with characters outside it (a Japanese,
+ * Greek or Cyrillic user name) can't reach it, and every .zip / .rar failed to unpack on such a PC. So tar runs
+ * inside a work folder with plain names only — the archive as archive.<ext> (a hard link, or a copy on another
+ * drive), unpacked into "x" — and what it unpacked is moved into place.
+ */
+async function tarUnpack(archive: string, to: string): Promise<number> {
+  const work = `${to}.tar-${Date.now()}`
+  const name = `archive${path.extname(archive).toLowerCase()}`
+  await fsp.mkdir(path.join(work, 'x'), { recursive: true })
+  try {
+    await fsp.link(archive, path.join(work, name)).catch(() => fsp.copyFile(archive, path.join(work, name)))
+    const code = await run(tarExe(), ['-xf', name, '-C', 'x'], work)
+    if (code !== 0) return code
+    for (const n of await fsp.readdir(path.join(work, 'x'))) await renameRetry(path.join(work, 'x', n), path.join(to, n))
+    return 0
+  } finally {
+    await fsp.rm(work, { recursive: true, force: true })
   }
 }
 

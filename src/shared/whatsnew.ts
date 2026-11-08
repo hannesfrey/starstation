@@ -12,6 +12,14 @@ export interface WhatsNew {
 
 export const WHATS_NEW: WhatsNew[] = [
   {
+    version: '2.0.29',
+    summary: ['Works on PCs whose user name isn’t written in Latin letters'],
+    details: [
+      'On a PC where the Windows user name (and so the Starstation folder) has e.g. Japanese, Chinese, Greek or Cyrillic letters, every .zip and .rar failed to unpack (New downloads, mods), Xbox discs weren’t converted, and the diagnostics report couldn’t be saved. All of that works now.',
+      'Xbox: on a PC whose user name has an apostrophe (O’Brien), xemu couldn’t read the settings Starstation wrote for it. Fixed.'
+    ]
+  },
+  {
     version: '2.0.28',
     summary: ['Tested with thousands of random button presses'],
     details: [

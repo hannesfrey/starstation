@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test'
 import fs from 'node:fs'
 import path from 'node:path'
+import { execFileSync } from 'node:child_process'
 import { launchApp, makeFiles, makePresets, writeSettings, SOURCE } from './helpers'
 
 const VERSION = (JSON.parse(fs.readFileSync(path.join(SOURCE, 'package.json'), 'utf8')) as { version: string }).version
@@ -556,5 +557,88 @@ test('a library of 3,000 games: scanned quickly (and from the cache next time), 
     }
   } finally {
     if (!closed) await app.close()
+  }
+})
+
+test("Starstation in a folder with accents, spaces, & and an apostrophe (another PC's user name) works end to end", async () => {
+  test.setTimeout(120_000)
+  // like C:\Users\José O'Brien\Desktop\Star Station & Co\Files
+  const files = path.join(SOURCE, 'tools', 'cache', 'e2e', `José O'Brien – Star Station & Co (1) 日本 ${Date.now()}`, 'Files')
+  fs.mkdirSync(path.join(files, 'config'), { recursive: true })
+  fs.writeFileSync(path.join(files, 'config', 'setup.json'), JSON.stringify({ done: true }))
+  const presets = makePresets(files, 300, {
+    quickResume: true,
+    extra: { mods: { targets: [{ id: 'patches', label: 'Patch (.pnach)', dir: '{emu}/patches', match: '\\.pnach$', flatten: true }] } }
+  })
+  writeSettings(files, { bootAnimation: false })
+  const gdir = path.join(files, 'games', 'testcon')
+  fs.mkdirSync(gdir, { recursive: true })
+  fs.writeFileSync(path.join(gdir, "Zoë's Ünïcode Game (Europe).tst"), 'z')
+  fs.mkdirSync(path.join(files, 'saves', 'testcon'), { recursive: true })
+  fs.writeFileSync(path.join(files, 'saves', 'testcon', "Zoë's Ünïcode Game (Europe).sav"), 'first save')
+  const drop = path.join(files, '..', 'Downloads & Stuff')
+  fs.mkdirSync(drop, { recursive: true })
+  fs.writeFileSync(path.join(drop, 'Ärger (USA).tst'), 'a')
+  fs.writeFileSync(path.join(drop, "Mod 'Fast' & Smooth.pnach"), 'patch=1')
+  const { app, page } = await launchApp(files, presets)
+  try {
+    await expect(page.getByTestId('game-info')).toContainText('Zoë')
+    const gid = (await api<{ library: { games: { id: string }[] } }>(page, 'getState')).library.games[0].id
+    // two sessions: the second resumes from the state the first one wrote
+    for (const mode of ['fresh', 'resume']) {
+      expect((await api<{ ok: boolean; error?: string }>(page, 'launch', gid, mode)).ok).toBe(true)
+      await expect(page.getByTestId('running')).toHaveCount(0, { timeout: 15_000 })
+    }
+    const launched = JSON.parse(fs.readFileSync(path.join(files, '_fakeemu', 'launched.json'), 'utf8')) as string[]
+    expect(launched.some((a) => a.includes("Zoë's Ünïcode Game (Europe).tst"))).toBe(true)
+    expect(launched).toContain('--resume')
+    const d = await api<{ backups: unknown[] }>(page, 'gameDetails', gid)
+    expect(d.backups.length).toBeGreaterThan(0)
+    // a mod with the same kind of name
+    const m = await api<{ ok: boolean; mod: { id: string } }>(page, 'modAdd', gid, path.join(drop, "Mod 'Fast' & Smooth.pnach"))
+    expect(m.ok).toBe(true)
+    expect((await api<{ ok: boolean }>(page, 'modToggle', gid, m.mod.id, true)).ok).toBe(true)
+    expect(fs.readdirSync(path.join(files, '_fakeemu', 'patches'))).toEqual(["Mod 'Fast' & Smooth.pnach"])
+    // a .zip mod (unpacked with Windows' tar) in this folder, named and filled with letters outside the old code page
+    const zipWork = path.join(SOURCE, 'tools', 'cache', 'e2e', `zipsrc-${Date.now()}`)
+    fs.mkdirSync(path.join(zipWork, 'src'), { recursive: true })
+    fs.writeFileSync(path.join(zipWork, 'src', '60fps 日本.pnach'), 'patch=2')
+    // made like a real zip tool does (names stored as UTF-8): .NET's ZipFile, with plain names on its command line
+    // (Windows' tar would store the name as "??")
+    execFileSync(
+      'powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-Command', "Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::CreateFromDirectory('src', 'mod-src.zip')"],
+      { cwd: zipWork, windowsHide: true }
+    )
+    const zip = path.join(drop, '60fps パッチ.zip')
+    fs.renameSync(path.join(zipWork, 'mod-src.zip'), zip)
+    const z = await api<{ ok: boolean; error?: string; mod: { id: string } }>(page, 'modAdd', gid, zip)
+    expect(z.ok, z.error).toBe(true)
+    expect((await api<{ ok: boolean }>(page, 'modToggle', gid, z.mod.id, true)).ok).toBe(true)
+    expect(fs.readdirSync(path.join(files, '_fakeemu', 'patches')).sort()).toEqual(['60fps 日本.pnach', "Mod 'Fast' & Smooth.pnach"])
+    // an xdelta patch mod for that game (xdelta3 reads its command line in the old code page too)
+    fs.writeFileSync(path.join(zipWork, 'old.bin'), 'z')
+    fs.writeFileSync(path.join(zipWork, 'new.bin'), 'z, patched')
+    execFileSync(path.join(SOURCE, 'resources', 'bin', 'xdelta3.exe'), ['-e', '-f', '-s', 'old.bin', 'new.bin', 'p.xdelta'], { cwd: zipWork, windowsHide: true })
+    fs.renameSync(path.join(zipWork, 'p.xdelta'), path.join(drop, 'Übersetzung 日本語.xdelta'))
+    const px = await api<{ ok: boolean; error?: string; mod: { id: string } }>(page, 'modAdd', gid, path.join(drop, 'Übersetzung 日本語.xdelta'))
+    expect(px.ok, px.error).toBe(true)
+    expect((await api<{ ok: boolean }>(page, 'modToggle', gid, px.mod.id, true)).ok).toBe(true)
+    expect((await api<{ ok: boolean }>(page, 'launch', gid, 'fresh')).ok).toBe(true)
+    await expect(page.getByTestId('running')).toHaveCount(0, { timeout: 15_000 })
+    const started = (JSON.parse(fs.readFileSync(path.join(files, '_fakeemu', 'launched.json'), 'utf8')) as string[]).find((a) => a.endsWith('.tst'))!
+    expect(fs.readFileSync(started, 'utf8')).toBe('z, patched') // the patched copy is what started
+    expect((await api<{ ok: boolean }>(page, 'modToggle', gid, px.mod.id, false)).ok).toBe(true)
+    // add a game from a folder with such a name, then delete it again
+    const add = await api<{ added: { path: string }[]; errors: string[] }>(page, 'addGames', [path.join(drop, 'Ärger (USA).tst')], 'testcon')
+    expect(add.errors).toEqual([])
+    await expect.poll(async () => (await api<{ library: { games: unknown[] } }>(page, 'getState')).library.games.length).toBe(2)
+    expect((await api<{ ok: boolean }>(page, 'deleteGame', 'testcon:ärger (usa).tst', false)).ok).toBe(true)
+    // the diagnostics report (Windows' tar zips it) with this path
+    const report = await api<string | null>(page, 'exportReport')
+    expect(report && fs.statSync(report).size).toBeGreaterThan(100)
+    expect(logText(files).split('\n').filter((l) => / ERROR /.test(l))).toEqual([])
+  } finally {
+    await app.close()
   }
 })
