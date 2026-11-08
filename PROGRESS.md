@@ -277,7 +277,7 @@ The kept log (`rpcs3_20261107183640_…`) caught it: after 33 min of multiplayer
 - Test: e2e `reliability` "damaged user-made console" — four broken files → none listed, game starts, Health check works, no ERROR (failed on the old code: Starstation didn't start). `settings.spec` (real Add / Edit / Remove a console) still passes.
 - `readJson` itself now checks the shape: valid JSON of another kind than the fallback (null / list / text where an object belongs, or the reverse) gives the fallback, noted once in the log, file left alone; a null fallback accepts anything (callers check). Covers every reader at once (≈30 calls: setup, skip list, update state, guides, safe mode, wallpapers, emulator markers, …). `session.ts` (read first at start) also validates its fields.
 - A full e2e run hung 30 min on game.spec (passed alone right after; one-off). Hardening anyway: closing Starstation while a game runs waits at most CLOSE_TIMEOUT + 10 s, then closes regardless (`gaveUpWaiting`), so quitting can never hang if the emulator's exit isn't noticed; `playwright.config` `globalTimeout` 20 min so a hung run fails instead of blocking.
-- Full e2e 64 passed (14 opt-in skipped), unit 88.
+- Full e2e 64 passed (14 opt-in skipped), unit 88. Released: commit 941e1e8, tag `v2.0.21`, GitHub pre-release (beta); its packaged check passed.
 
 ## How to work on it
 
