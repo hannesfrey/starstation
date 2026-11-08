@@ -201,3 +201,84 @@ test('a garbled play time in stats.json is counted on from 0, not kept broken', 
     await app.close()
   }
 })
+
+test('settings.json with wrong kinds of values (edited by hand): Starstation starts with the defaults for those', async () => {
+  const { files, presets } = setup('settings-garbled', 300)
+  // every setting the wrong type, plus unknown ones
+  writeSettings(files, {
+    bootAnimation: 'no', sounds: 'yes', music: 1, screensaverMinutes: '5', showEmptyConsoles: null, buttonIcons: 7, graphicsDefault: ['max'],
+    crtDefault: 'true', netplayNickname: { name: 'x' }, netplayRelay: 3, artworkAuto: 'false', sortDownloads: 0, tvMode: 'on', theme: false,
+    videoPreviews: 'off', textSize: 42, buttonMap: { confirm: 1 }, startFullscreen: 'yes', startWithWindows: 'yes', someOldKey: true
+  })
+  const { app, page } = await launchApp(files, presets)
+  try {
+    await expect(page.getByTestId('xmb')).toBeVisible({ timeout: 15_000 })
+    const s = (await api<{ settings: Record<string, unknown> }>(page, 'getState')).settings
+    expect(s.sounds).toBe(true)
+    expect(s.screensaverMinutes).toBe(5)
+    expect(s.theme).toBe('monthly')
+    expect(s.netplayNickname).toBe('Player')
+    expect(s.buttonMap).toBe('')
+    expect(s.someOldKey).toBeUndefined()
+    // the menu works: a game starts and a setting can be saved
+    expect((await api<{ ok: boolean }>(page, 'launch', 'testcon:alpha.tst')).ok).toBe(true)
+    await expect(page.getByTestId('running')).toHaveCount(0, { timeout: 15_000 })
+    expect((await api<{ sounds: boolean }>(page, 'setSetting', 'sounds', false)).sounds).toBe(false)
+    expect(logText(files)).not.toMatch(/ ERROR /)
+  } finally {
+    await app.close()
+  }
+})
+
+test('settings.json with unknown choices (theme, text size, graphics…) still gives a working menu and game start', async () => {
+  const { files, presets } = setup('settings-choices', 300)
+  writeSettings(files, { bootAnimation: false, theme: 'bogus', textSize: 'huge', graphicsDefault: 'ultra', buttonIcons: 'nintendo', netplayRelay: 'mars', buttonMap: '{not json' })
+  const { app, page } = await launchApp(files, presets)
+  try {
+    await expect(page.getByTestId('xmb')).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByTestId('game-info')).toContainText('Alpha')
+    await page.keyboard.press('ArrowDown')
+    await page.keyboard.press('Enter')
+    await expect(page.getByTestId('running')).toBeVisible()
+    await expect(page.getByTestId('running')).toHaveCount(0, { timeout: 15_000 })
+    await expect(page.getByTestId('error-screen')).toHaveCount(0)
+    expect(logText(files)).not.toMatch(/ ERROR /)
+  } finally {
+    await app.close()
+  }
+})
+
+test('config files holding valid JSON of the wrong shape (edited by hand) never break the menu or a game start', async () => {
+  const { files, presets } = setup('shapes', 300)
+  const w = (rel: string, data: unknown) => {
+    fs.mkdirSync(path.dirname(path.join(files, rel)), { recursive: true })
+    fs.writeFileSync(path.join(files, rel), JSON.stringify(data))
+  }
+  w('config/library/collections.json', { not: 'a list' })
+  w('config/library/library.json', { version: 4, games: 'nope' })
+  w('config/library/game-options.json', null)
+  w('config/library/compat.json', [1, 2, 3])
+  w('config/controllers.json', { api: 'xinput', pads: 'one' })
+  w('config/profiles.json', { list: 'abc', main: 1, active: 2 })
+  w('config/ps3updates.json', 'x')
+  w('config/mods-inbox.json', 5)
+  w('config/secrets.json', null) // filled in by hand
+  w('mods/testcon/Alpha/mods.json', { mods: { a: 1 }, owners: [] })
+  const { app, page } = await launchApp(files, presets)
+  try {
+    await expect(page.getByTestId('xmb')).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByTestId('game-info')).toContainText('Alpha')
+    // the game's options (mods, per-game choices) open, and it starts
+    const d = await api<{ mods: { total: number } } | null>(page, 'gameDetails', 'testcon:alpha.tst')
+    expect(d?.mods.total).toBe(0)
+    expect((await api<{ ok: boolean; error?: string }>(page, 'launch', 'testcon:alpha.tst')).ok).toBe(true)
+    await expect(page.getByTestId('running')).toHaveCount(0, { timeout: 15_000 })
+    // and things can be saved again
+    expect(Array.isArray(await api(page, 'collectionCreate', 'Couch'))).toBe(true)
+    expect((await api<{ name: string }[]>(page, 'profiles')).length).toBeGreaterThan(0)
+    await expect(page.getByTestId('error-screen')).toHaveCount(0)
+    expect(logText(files)).not.toMatch(/ ERROR /)
+  } finally {
+    await app.close()
+  }
+})

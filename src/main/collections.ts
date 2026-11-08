@@ -6,7 +6,12 @@ import type { Collection } from '../shared/types'
 const file = () => dir('config', 'library', 'collections.json')
 
 export function listCollections(): Collection[] {
-  return readJson<Collection[]>(file(), [])
+  // the file may have been edited by hand: only well-formed collections reach the menu
+  const raw = readJson<unknown>(file(), [])
+  if (!Array.isArray(raw)) return []
+  return raw
+    .filter((c): c is Collection => !!c && typeof c === 'object' && typeof c.id === 'string' && typeof c.name === 'string')
+    .map((c) => ({ ...c, games: Array.isArray(c.games) ? c.games.filter((g) => typeof g === 'string') : [], createdAt: Number(c.createdAt) || 0 }))
 }
 
 function save(list: Collection[]): Collection[] {

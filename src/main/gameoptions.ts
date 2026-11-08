@@ -1,5 +1,5 @@
 import { dir } from './paths'
-import { readJson, writeJson } from './store'
+import { readObject, writeJson } from './store'
 import { getConsole, fill, type ConsolePreset, type GameOption } from './presets'
 import { applyStep } from './emuconfig'
 import { gameVars } from './gamedata'
@@ -15,7 +15,7 @@ const file = () => dir('config', 'library', 'game-options.json')
 type Stored = Partial<{ graphics: GraphicsLevel; crt: boolean; patches: Record<string, boolean> }>
 
 function all(): Record<string, Stored> {
-  return readJson<Record<string, Stored>>(file(), {})
+  return readObject<Record<string, Stored>>(file(), {})
 }
 
 export function gameOptions(g: Game): GameOptions {

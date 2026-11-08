@@ -48,7 +48,12 @@ export const GUEST = 'guest'
 
 function load(): Store {
   const s = readJson<Store | null>(file(), null)
-  if (s?.list?.length) return s
+  if (Array.isArray(s?.list) && s.list.length && s.list.every((p) => p && typeof p.id === 'string' && typeof p.name === 'string')) {
+    // main / active must name a profile that exists (the active one may also be the guest)
+    if (!s.list.some((p) => p.id === s.main)) s.main = s.list[0].id
+    if (s.active !== GUEST && !s.list.some((p) => p.id === s.active)) s.active = s.main
+    return s
+  }
   // first v2 start: the existing setup becomes the main profile
   const main: Profile = { id: 'p1', name: 'Player 1', icon: 'p-star', createdAt: Date.now() }
   const fresh = { list: [main], main: main.id, active: main.id }

@@ -111,11 +111,19 @@ export function App() {
       setWalls(w)
       setExtra((x) => ({ ...x, wallpapers: w }))
     })
-    api.getState().then((s) => {
-      loaded = true
-      setState({ ...s, ...early })
-      if (!s.settings.bootAnimation) setBooting(false)
-    })
+    // everything the menu shows: asked again (up to a minute) if it fails, instead of an empty menu forever
+    const loadState = (tries: number) =>
+      api.getState().then(
+        (s) => {
+          loaded = true
+          setState({ ...s, ...early })
+          if (!s.settings.bootAnimation) setBooting(false)
+        },
+        () => {
+          if (tries < 30) window.setTimeout(() => void loadState(tries + 1), 2000)
+        }
+      )
+    void loadState(0)
     // first start on this PC: the setup wizard comes before the boot animation
     void api.setupStatus().then((setup) => {
       setExtra((x) => ({ ...x, setup }))

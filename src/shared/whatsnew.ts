@@ -12,6 +12,15 @@ export interface WhatsNew {
 
 export const WHATS_NEW: WhatsNew[] = [
   {
+    version: '2.0.20',
+    summary: ['A settings file edited by hand can’t confuse Starstation any more'],
+    details: [
+      'Each setting is only used if it is the right kind of value (for example "yes" where on/off belongs falls back to the default), so online play, the boot animation and the screensaver always get what they expect.',
+      'The same for collections, profiles, per-game options, mod lists and the other files in Files\\config: one that was changed into something else can no longer stop Starstation from starting (a broken profile list did) or break the menu.',
+      'If the menu can’t get its data at first, it asks again instead of staying empty.'
+    ]
+  },
+  {
     version: '2.0.19',
     summary: ['Play times stay readable even if their file was damaged'],
     details: [

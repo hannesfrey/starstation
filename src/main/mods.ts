@@ -3,7 +3,7 @@ import fsp from 'node:fs/promises'
 import crypto from 'node:crypto'
 import path from 'node:path'
 import { dir } from './paths'
-import { readJson, writeJson } from './store'
+import { readJson, readObject, writeJson } from './store'
 import { getConsole, type ConsolePreset, type GameOption, type ModTarget } from './presets'
 import { applyStep } from './emuconfig'
 import { artKey } from './library/library'
@@ -54,7 +54,15 @@ export function modsRoot(g: Game): string {
   return dir('mods', g.console, artKey(g))
 }
 const stateFile = (g: Game) => path.join(modsRoot(g), 'mods.json')
-const load = (g: Game): ModState => readJson<ModState>(stateFile(g), { mods: [], owners: {} })
+/** A game's mod list; a file of another shape (edited by hand) counts as "no mods" rather than breaking the game. */
+const load = (g: Game): ModState => {
+  const st = readObject<ModState>(stateFile(g), { mods: [], owners: {} })
+  return {
+    ...st,
+    mods: Array.isArray(st.mods) ? st.mods.filter((m) => m && typeof m.id === 'string' && Array.isArray(m.files) && Array.isArray(m.placement)) : [],
+    owners: st.owners && typeof st.owners === 'object' && !Array.isArray(st.owners) ? st.owners : {}
+  }
+}
 const save = (g: Game, s: ModState) => writeJson(stateFile(g), s)
 
 function targetsOf(c: ConsolePreset | undefined): ModTarget[] {

@@ -1,6 +1,6 @@
 import { net } from 'electron'
 import { dir } from './paths'
-import { readJson, writeJson } from './store'
+import { readObject, writeJson } from './store'
 import { getSecrets, isTester } from './settings'
 import { logger } from './log'
 import type { Compat, CompatLabel, Game } from '../shared/types'
@@ -16,7 +16,7 @@ const file = () => dir('config', 'library', 'compat.json')
 const WEEK = 7 * 24 * 3600_000
 type Cache = Record<string, (Compat & { at: number }) | { none: true; at: number }>
 let cache: Cache | null = null
-const load = (): Cache => (cache ??= readJson<Cache>(file(), {}))
+const load = (): Cache => (cache ??= readObject<Cache>(file(), {}))
 
 const rpcs3Base = () => process.env.STARSTATION_RPCS3_COMPAT ?? 'https://rpcs3.net/compatibility'
 const ghApi = () => process.env.STARSTATION_GITHUB_API ?? 'https://api.github.com'

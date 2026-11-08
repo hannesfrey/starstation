@@ -1,5 +1,5 @@
 import { dir } from './paths'
-import { readJson, writeJson } from './store'
+import { readJson, readObject, writeJson } from './store'
 import { inSafeMode } from './safeflag'
 import { DEFAULT_SETTINGS, type Settings } from '../shared/types'
 
@@ -8,16 +8,33 @@ let cache: Settings | null = null
 let safe: Settings | null = null
 const file = () => dir('config', 'settings.json')
 
+/**
+ * The saved settings, each one only if it is the right kind of value (settings.json can be edited by hand:
+ * "sounds": "yes" or a nickname that isn't text would otherwise reach code that expects true/false or text).
+ * Unknown keys (from older versions) are dropped.
+ */
+function load(): Settings {
+  const raw = readJson<Record<string, unknown> | null>(file(), {})
+  const s: Settings = { ...DEFAULT_SETTINGS }
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return s
+  for (const k of Object.keys(DEFAULT_SETTINGS) as (keyof Settings)[]) {
+    const v = raw[k]
+    const want = typeof DEFAULT_SETTINGS[k]
+    if (typeof v === want && (want !== 'number' || Number.isFinite(v))) (s as unknown as Record<string, unknown>)[k] = v
+  }
+  return s
+}
+
 export function getSettings(): Settings {
   if (inSafeMode()) return (safe ??= { ...DEFAULT_SETTINGS, bootAnimation: false })
   safe = null
-  if (!cache) cache = { ...DEFAULT_SETTINGS, ...readJson<Partial<Settings>>(file(), {}) }
+  if (!cache) cache = load()
   return cache
 }
 
 /** The saved settings, even in safe mode (packages, diagnostics). */
 export function savedSettings(): Settings {
-  return cache ?? (cache = { ...DEFAULT_SETTINGS, ...readJson<Partial<Settings>>(file(), {}) })
+  return cache ?? (cache = load())
 }
 
 export function setSetting<K extends keyof Settings>(key: K, value: Settings[K]): Settings {
@@ -43,7 +60,8 @@ export interface Secrets {
   nexus?: { apiKey?: string }
 }
 export function getSecrets(): Secrets {
-  return readJson<Secrets>(dir('config', 'secrets.json'), {})
+  // filled in by hand: anything but an object counts as empty
+  return readObject<Secrets>(dir('config', 'secrets.json'), {})
 }
 
 /** This PC tests new versions first (it has the GitHub login that can publish releases). */

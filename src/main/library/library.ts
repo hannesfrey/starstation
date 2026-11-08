@@ -29,7 +29,8 @@ const statsFile = () => profileFile(dir('config', 'library', 'stats.json'), 'sta
 
 export function loadLibrary(): void {
   const c = readJson<CacheFile>(cacheFile(), { version: 0, games: [] })
-  games = c.version === CACHE_VERSION ? c.games : []
+  // only a cache of this version with a real game list (anything else is rebuilt by the next scan)
+  games = c && c.version === CACHE_VERSION && Array.isArray(c.games) ? c.games.filter((g) => g && typeof g.id === 'string' && typeof g.console === 'string' && typeof g.path === 'string') : []
   const raw = readJson<Record<string, Partial<GameStats>> | null>(statsFile(), {})
   stats = Object.fromEntries(Object.entries(raw && typeof raw === 'object' ? raw : {}).map(([id, s]) => [id, cleanStats(s)]))
 }

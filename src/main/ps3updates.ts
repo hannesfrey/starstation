@@ -6,7 +6,7 @@ import https from 'node:https'
 import { spawn } from 'node:child_process'
 import { dir } from './paths'
 import { emulatorDir, getConsole, getEmulator } from './presets'
-import { readJson, writeJson } from './store'
+import { readObject, writeJson } from './store'
 import { parseSfo } from './formats/sfo'
 import { ps3FromFolder, ps3FromIso } from './formats/gameid'
 import { compareAppVer, isSonyPkgUrl, parseUpdateXml, pendingUpdates, pkgMatches, type UpdatePkg } from './formats/ps3update'
@@ -63,7 +63,7 @@ interface Entry {
 }
 const stateFile = () => dir('config', 'ps3updates.json')
 const cacheDir = () => dir('config', 'cache', 'ps3-updates')
-const readState = () => readJson<Record<string, Entry>>(stateFile(), {})
+const readState = () => readObject<Record<string, Entry>>(stateFile(), {})
 
 function rpcs3Dir(): string | null {
   const c = getConsole('ps3')

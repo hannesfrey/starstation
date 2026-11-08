@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { dir } from './paths'
-import { readJson, writeJson } from './store'
+import { readObject, writeJson } from './store'
 import { getConsole } from './presets'
 import { unpack } from './emulators'
 import { view } from './library/library'
@@ -122,7 +122,7 @@ function docsOf(folder: string): string {
   return text
 }
 
-const handled = () => readJson<Record<string, string>>(stateFile(), {})
+const handled = () => readObject<Record<string, string>>(stateFile(), {})
 function markHandled(p: string, sig: string): void {
   writeJson(stateFile(), { ...handled(), [p.toLowerCase()]: sig })
 }

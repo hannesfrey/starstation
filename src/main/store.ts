@@ -43,6 +43,15 @@ export function readJson<T>(file: string, fallback: T): T {
   return fallback
 }
 
+/**
+ * Like readJson, for files that hold an object (key → value): valid JSON of another shape (null, a list, a
+ * number — e.g. after editing by hand) gives the fallback instead of reaching code that expects an object.
+ */
+export function readObject<T extends object>(file: string, fallback: T): T {
+  const v = readJson<unknown>(file, fallback)
+  return v && typeof v === 'object' && !Array.isArray(v) ? (v as T) : fallback
+}
+
 function parse<T>(text: string): { ok: true; value: T } | { ok: false } {
   try {
     const t = text.replace(/^﻿/, '')

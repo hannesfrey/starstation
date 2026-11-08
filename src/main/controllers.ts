@@ -1,5 +1,5 @@
 import { dir } from './paths'
-import { readJson, writeJson } from './store'
+import { readObject, writeJson } from './store'
 import { logger } from './log'
 import type { PlayerPad } from '../shared/types'
 
@@ -23,7 +23,8 @@ interface Known {
 const IGNORED = /wheel|g29|g920|g923|driving|racing|pedal|throttle|hotas|flight|joystick|rudder|shifter/i
 
 export function known(): Known {
-  return readJson<Known>(file(), { api: 'xinput', pads: [] })
+  const k = readObject<Known>(file(), { api: 'xinput', pads: [] })
+  return { ...k, pads: Array.isArray(k.pads) ? k.pads.filter((p) => typeof p === 'string') : [] }
 }
 
 /** Gamepad ids seen by the menu (Gamepad API). Wheels etc. are ignored. */
