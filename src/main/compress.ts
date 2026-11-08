@@ -196,6 +196,7 @@ export async function decompressGame(g: Game, progress: Progress, trash: Trash):
   if (freeBytes(folder) < need) return { ok: false, error: 'Not enough free disk space to decompress this game.' }
   const work = dir('config', 'compress', `work-${Date.now()}`)
   await fsp.mkdir(work, { recursive: true })
+  let restored = false
   try {
     progress('Decompressing…')
     let made: { tmp: string; name: string; sha1?: string }[] = []
@@ -232,6 +233,7 @@ export async function decompressGame(g: Game, progress: Progress, trash: Trash):
     for (const t of targets) if (fs.existsSync(t)) throw new Error(`${path.basename(t)} already exists`)
     for (const m of made) await renameRetry(m.tmp, path.join(folder, m.name))
     if (cueText !== null) await fsp.writeFile(path.join(folder, cueName), cueText, 'latin1')
+    restored = true
     await trash(src)
     await fsp.rm(metaFile(g, src), { force: true })
     const main = cueText !== null ? path.join(folder, cueName) : path.join(folder, made[0].name)
@@ -239,6 +241,8 @@ export async function decompressGame(g: Game, progress: Progress, trash: Trash):
     return { ok: true, path: main }
   } catch (e) {
     log.warn(`${g.id}: decompress failed`, e)
+    if (restored)
+      return { ok: false, error: `Decompressed and checked, but the compressed file couldn't go to the Recycle Bin (${(e as Error).message}). Both are in the games folder; delete the compressed one by hand.` }
     return { ok: false, error: `Not decompressed: ${(e as Error).message}. The compressed file stays.` }
   } finally {
     await fsp.rm(work, { recursive: true, force: true })

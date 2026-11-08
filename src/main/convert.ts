@@ -63,9 +63,22 @@ export async function toXiso(file: string, trash: Trash): Promise<Note | null> {
     const code = await run(path.join(binDir(), 'extract-xiso.exe'), ['-r', '-d', outDir, link], tmp, 60 * 60_000)
     const out = path.join(outDir, 'disc.iso')
     if (code !== 0 || !fs.existsSync(out) || xboxImageKind(out) !== 'xiso') throw new Error(`extract-xiso failed (code ${code})`)
-    // checked: now the original can go (Recycle Bin), and the XISO takes its place
-    await trash(file)
-    await renameRetry(out, file)
+    // checked: the XISO goes next to the original first (it must never be left in the temporary folder, which is
+    // removed below), then the original goes to the Recycle Bin and the XISO takes its name
+    const next = `${file}.xiso-new`
+    await renameRetry(out, next)
+    try {
+      await trash(file)
+    } catch (e) {
+      await fsp.rm(next, { force: true }) // the original stays: so does everything else
+      throw e
+    }
+    try {
+      await renameRetry(next, file)
+    } catch (e) {
+      log.error(`${name}: the XISO is ready as ${path.basename(next)} but couldn't take the game's name`, e)
+      return { kind: 'warning', title: `${name} is almost converted`, detail: `The XISO version is next to it as ${path.basename(next)} (the original is in the Recycle Bin). Rename it to ${name} to play it.` }
+    }
     log.info(`${name}: XISO ${Math.round(size / 1024 ** 2)} MB → ${Math.round(fs.statSync(file).size / 1024 ** 2)} MB`)
     return { kind: 'success', title: 'Xbox game converted', detail: `${name} is now an XISO image (what xemu runs). The original is in the Recycle Bin.` }
   } catch (e) {

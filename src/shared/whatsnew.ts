@@ -12,6 +12,13 @@ export interface WhatsNew {
 
 export const WHATS_NEW: WhatsNew[] = [
   {
+    version: '2.0.27',
+    summary: ['Converting an Xbox game can no longer lose it'],
+    details: [
+      'When an Xbox disc is turned into the XISO version xemu needs, the new file is now put next to the original before the original goes to the Recycle Bin. Before, a hiccup at the last step could leave neither in the games folder.'
+    ]
+  },
+  {
     version: '2.0.26',
     summary: ['Crashes are reported after long sessions too'],
     details: [
