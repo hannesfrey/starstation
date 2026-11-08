@@ -259,7 +259,7 @@ The kept log (`rpcs3_20261107183640_…`) caught it: after 33 min of multiplayer
 
 - New unit `menumodel.test.ts`: `buildColumns` on 200 generated libraries (missing fields, empty / huge / RTL / format-string titles, NaN / Infinity / negative numbers, stats and collections pointing at games that are gone, a console that's gone, safe mode / tester) — every column and folder builds, keys unique per list; 3,000 games build in < 1.5 s. Passed as it was.
 - Found: a non-number play time showed "Played NaNh NaNm" and stayed NaN forever (each session adds to it). `formatPlayTime` treats non-finite / ≤ 0 as "Not played yet"; `loadLibrary` cleans every stats entry once (`cleanStats`: playTime / playCount → finite ≥ 0 else 0, lastPlayed finite or dropped; other fields kept). e2e `reliability` "garbled play time" (playTime "lots", playCount null → counted from 0, favorite kept, no NaN on screen).
-- Full e2e 60 passed (14 opt-in skipped), unit 87.
+- Full e2e 60 passed (14 opt-in skipped), unit 87. Released: commit 25dadea, tag `v2.0.19`, GitHub pre-release (beta); its packaged check passed.
 
 ## How to work on it
 
