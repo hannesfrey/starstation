@@ -396,7 +396,7 @@ His checklist answers (A1–A2, B1–B3) + logs; each item:
 - New pad helper alone: 0.8 % of the CPU (was 5.6 %), most of it the 2-s empty-slot probe.
 - Trade-off: a generic DirectInput pad (not Xbox-style, not DS4/DualSense) no longer drives the menu while the pad helper runs, unless a DS4/DualSense is also plugged in. Emulators are unaffected.
 - `STARSTATION_REAL_PADS=1`: a hidden run still uses the real pad helper stream (measuring).
-- Tests: unit `pads.test.ts` (virtual pads, Chromium never called without HID pads, HID pads added 10+, fallback, stream changes).
+- Tests: unit `pads.test.ts` (virtual pads, Chromium never called without HID pads, HID pads added 10+, fallback, stream changes). Unit 122, e2e 88 (assignment test: usual order now 2 players — fake pads are noticed now). Released: tag `v2.0.35`, GitHub pre-release (beta); packaged check passed.
 
 ## How to work on it
 
