@@ -77,6 +77,9 @@
         "Hotkeys": {
           "SaveSelectedSaveState": "Keyboard/F2",
           "LoadSelectedSaveState": "Keyboard/F1"
+        },
+        "AutoUpdater": {
+          "CheckAtStartup": "false"
         }
       }
     }

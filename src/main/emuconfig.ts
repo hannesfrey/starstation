@@ -1,12 +1,13 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fill, getEmulator, emulatorDir, vars, type ConfigStep, type ConsolePreset } from './presets'
-import { getIniValue, setIniValues, setKvValues, setYamlPlayers, stripLines } from './ini'
+import { getIniValue, setIniValues, setKvValues, setXemuPadButtons, setYamlPlayers, stripLines } from './ini'
 import { candidateBios } from './bios'
 import { dir } from './paths'
 import { writeFileAtomic } from './store'
 import { logger } from './log'
 import { withOneMii } from './formats/miidb'
+import { quoted, xeniaSlots, XUID } from './formats/xeniaprofile'
 
 const log = logger('emuconfig')
 
@@ -137,6 +138,30 @@ export function applyStep(step: ConfigStep, v: Record<string, string>): void {
         fs.mkdirSync(path.dirname(p), { recursive: true })
         writeFileAtomic(p, after)
       }
+      return
+    }
+    case 'xenia-profile': {
+      const p = fill(step.file, v)
+      const content = fill(step.content, v)
+      if (!fs.existsSync(p) || !fs.existsSync(content)) return
+      const text = fs.readFileSync(p, 'utf8')
+      const profiles = fs
+        .readdirSync(content, { withFileTypes: true })
+        .filter((d) => d.isDirectory() && XUID.test(d.name) && fs.existsSync(path.join(content, d.name, 'FFFE07D1')))
+        .map((d) => ({ xuid: d.name, mtime: fs.statSync(path.join(content, d.name)).mtimeMs }))
+      const slots = [0, 1, 2, 3].map((i) => quoted(getIniValue(text, 'Profiles', `logged_profile_slot_${i}_xuid`)))
+      const next = xeniaSlots(slots, profiles)
+      if (!next) return
+      const set = Object.fromEntries(next.map((x, i) => [`logged_profile_slot_${i}_xuid`, `"${x}"`]))
+      writeFileAtomic(p, setIniValues(text, { Profiles: set }))
+      log.info(`Xenia: profile ${next[0]} signed in as player 1 at start`)
+      return
+    }
+    case 'xemu-pads': {
+      const p = fill(step.file, v)
+      if (!fs.existsSync(p)) return
+      const after = setXemuPadButtons(fs.readFileSync(p, 'utf8'), step.buttons)
+      if (after !== null) writeFileAtomic(p, after)
       return
     }
     case 'strip-lines': {

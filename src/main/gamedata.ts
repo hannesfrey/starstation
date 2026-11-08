@@ -7,6 +7,7 @@ import { emulatorDir, getConsole, getEmulator, vars, type ConsolePreset } from '
 import { readJson, writeJson } from './store'
 import { artKey, getGame, getStats } from './library/library'
 import { partsOf, renameRetry } from './fsutil'
+import { knownPlayers } from './controllers'
 import { logger } from './log'
 import type { BackupInfo, Game, ResumeInfo } from '../shared/types'
 
@@ -338,13 +339,14 @@ export function resumeInfo(g: Game): ResumeInfo | null {
   const saved = getStats(g.id).resumeVersion
   const now = emulatorVersion(c)
   const e = getEmulator(c.emulator)
-  return {
-    savedAt: fs.statSync(state).mtimeMs,
-    warning:
-      saved && now && saved !== now
-        ? `${e?.name ?? 'The emulator'} was updated since this was saved (${saved} → ${now}). If resuming fails, start fresh.`
-        : undefined
-  }
+  const notes: string[] = []
+  if (saved && now && saved !== now) notes.push(`${e?.name ?? 'The emulator'} was updated since this was saved (${saved} → ${now}). If resuming fails, start fresh.`)
+  // a game only looks for controllers when it starts: resumed, it still knows only the players from back then
+  // (Hannes, 2026-11-08: Midnight Club 3 resumed from a 1-player point, one controller drove both cars)
+  const was = getStats(g.id).resumePlayers
+  const players = knownPlayers()
+  if (was && players > was) notes.push(`This was saved with ${was === 1 ? '1 controller' : `${was} controllers`}. To play with ${players}, start fresh, or the game won’t see the new ones.`)
+  return { savedAt: fs.statSync(state).mtimeMs, warning: notes.length ? notes.join(' ') : undefined }
 }
 
 /** Extra launch arguments and config values for Resume / Start fresh. */

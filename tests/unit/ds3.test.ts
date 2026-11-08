@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { ds3Instances, serviceOf, setupCommand } from '../../src/main/ds3'
+import { ds3Instances, isDsHidMini, serviceOf, setupCommand } from '../../src/main/ds3'
 
 describe('driver setup command', () => {
   // runs the real command (without the Windows permission prompt) on a stand-in script that records what it got;
@@ -62,5 +62,21 @@ describe('PS3 controller detection', () => {
     expect(serviceOf('\r\nHKEY_LOCAL_MACHINE\\SYSTEM\\...\\6&37e27229&0&1\r\n    Service    REG_SZ    WinUSB\r\n')).toBe('WinUSB')
     expect(serviceOf('    Service    REG_SZ    dshidmini\r\n')).toBe('dshidmini')
     expect(serviceOf('ERROR: no se encontró')).toBeUndefined()
+  })
+
+  it('knows DsHidMini by its maker: it runs under the mshidumdf service (Hannes’s PC after the install)', () => {
+    const hannes = [
+      'HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Enum\\USB\\VID_054C&PID_0268\\6&37E27229&0&1',
+      '    DeviceDesc    REG_SZ    @oem84.inf,%ds3devicename%;DS3 Compatible HID Device',
+      '    Service    REG_SZ    mshidumdf',
+      '    Mfg    REG_SZ    @oem84.inf,%manufacturerstring%;Nefarius Software Solutions e.U.',
+      '    LowerFilters    REG_MULTI_SZ    WUDFRd\\0nssmkig'
+    ].join('\r\n')
+    expect(isDsHidMini(hannes)).toBe(true)
+    expect(isDsHidMini('    Service    REG_SZ    dshidmini\r\n')).toBe(true)
+    // SCP's old WinUSB driver, another UMDF HID driver, nothing
+    expect(isDsHidMini('    Service    REG_SZ    WinUSB\r\n    Mfg    REG_SZ    Scarlet.Crush Productions\r\n')).toBe(false)
+    expect(isDsHidMini('    Service    REG_SZ    mshidumdf\r\n    Mfg    REG_SZ    Someone Else\r\n')).toBe(false)
+    expect(isDsHidMini('')).toBe(false)
   })
 })

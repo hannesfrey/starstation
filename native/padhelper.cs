@@ -598,6 +598,24 @@ static class PadHelper
         return "not found";
     }
 
+    /** Every connected XInput pad now: "slot:lx,ly,rx,ry,lt,rt,buttons;…" — lets the PS button menu find, among the
+     *  controllers the menu sees, the one that pressed PS (Chromium gives every Guide press to its first pad). */
+    static string XStateLine()
+    {
+        var parts = new List<string>();
+        for (uint i = 0; i < 4; i++)
+        {
+            var s = new XState();
+            uint r;
+            try { r = XInputGetStateEx(i, ref s); }
+            catch (Exception) { r = 1; }
+            if (r != 0) continue;
+            var g = s.Gamepad;
+            parts.Add(i + ":" + g.sThumbLX + "," + g.sThumbLY + "," + g.sThumbRX + "," + g.sThumbRY + "," + g.bLeftTrigger + "," + g.bRightTrigger + "," + g.wButtons);
+        }
+        return string.Join(";", parts.ToArray());
+    }
+
     // ---------------- main ----------------
     static void Main(string[] args)
     {
@@ -646,6 +664,7 @@ static class PadHelper
                 switch (a[0])
                 {
                     case "quit": return;
+                    case "xstate": Say("xstate " + XStateLine()); break;
                     case "fg":
                         {
                             uint p;

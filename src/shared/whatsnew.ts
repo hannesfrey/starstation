@@ -12,6 +12,20 @@ export interface WhatsNew {
 
 export const WHATS_NEW: WhatsNew[] = [
   {
+    version: '2.0.34',
+    summary: ['The PS menu follows the controller that opened it', 'PS3 games pause behind the PS menu', 'Fixes for Wii, Xbox and Xbox 360 from your test round'],
+    details: [
+      'PS menu with two controllers: it was always given to one of them, whoever pressed PS. Now it goes to the player who pressed it.',
+      'PS3: the game pauses while the PS menu is open, and goes on when you choose Resume.',
+      'Resume after plugging in a second controller: if the resume point was saved with fewer controllers, Starstation says so — a game only sees the controllers that were there when it started, so start fresh for two players.',
+      'Emulators no longer ask to update themselves; Starstation keeps them up to date.',
+      'Wii: swinging the Wii Remote works with the right stick (it also points), a forward thrust is on R1.',
+      'Xbox: the PS button no longer opens the emulator’s own menu under Starstation’s.',
+      'Xbox 360: player 1 is signed in to your Xenia profile at the start, so games don’t ask for a sign-in in the middle (that crashed Modern Warfare 2).',
+      'PS3 controller: after the driver install, Starstation recognises it and stops offering it again.'
+    ]
+  },
+  {
     version: '2.0.33',
     summary: ['"Install driver" for PS3 controllers works now', 'Dolphin 2609b'],
     details: [

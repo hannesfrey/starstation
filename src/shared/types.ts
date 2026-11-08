@@ -117,6 +117,8 @@ export interface GameStats {
   favorite?: boolean
   /** Emulator version that wrote the current resume state. */
   resumeVersion?: string
+  /** Controllers the game knew when it wrote the current resume state. */
+  resumePlayers?: number
 }
 
 export interface LibraryView {
@@ -263,6 +265,8 @@ export interface StarstationApi {
   guideSeen(keys: string[]): Promise<void>
   /** PS button menu (overlay window). */
   overlayState(): Promise<OverlayState>
+  /** Sticks / triggers / buttons of every XInput pad now (to find who pressed PS). */
+  padSnapshot(): Promise<import('./padmatch').XSlot[]>
   overlayAction(action: OverlayAction): Promise<{ ok: boolean; error?: string }>
   /** Couch check: the one-time test with the user's own controller (Settings → Diagnostics). */
   couchStart(): Promise<void>
@@ -318,7 +322,7 @@ export interface StarstationApi {
   packageFinish(folder: string, useSettings: boolean, choices: Record<string, ProfileMerge>): Promise<{ ok: boolean; error?: string }>
   nexusInstall(url: string, gameId: string): Promise<{ ok: boolean; error?: string }>
   /** Hidden tests only: act as if the PS button was pressed. */
-  testHome(): Promise<void>
+  testHome(pad?: string): Promise<void>
   gameDetails(gameId: string): Promise<GameDetails | null>
   backupNow(gameId: string): Promise<BackupInfo | null>
   restoreBackup(gameId: string, backupId: string): Promise<{ ok: boolean; error?: string }>
@@ -626,6 +630,8 @@ export interface OverlayState {
   quickResume: boolean
   /** Save and quit / Quit was chosen: the menu shows "Closing…" until the emulator is gone. */
   closing: boolean
+  /** The controller that pressed PS, as the pad helper saw it ("xinput:1", "hid:…"); none = keyboard / test. */
+  openedBy?: string
 }
 export type OverlayAction = 'resume' | 'save-state' | 'load-state' | 'screenshot' | 'save-quit' | 'quit'
 

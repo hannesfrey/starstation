@@ -126,6 +126,11 @@ export class InputManager {
     this.onlyPad = index
   }
 
+  /** The controller the PS button menu listens to (null = all); read by tests. */
+  get lockedPad(): number | null {
+    return this.onlyPad
+  }
+
   start(): void {
     window.addEventListener('keydown', this.onKey)
     window.addEventListener('wheel', this.onWheel, { passive: false })

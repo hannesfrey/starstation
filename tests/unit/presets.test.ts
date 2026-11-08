@@ -61,7 +61,7 @@ describe('presets', () => {
   })
 
   it('config steps are of known types', () => {
-    const known = ['touch', 'mkdir', 'mii-db', 'link', 'write', 'ini', 'yaml-players', 'strip-lines', 'kv']
+    const known = ['touch', 'mkdir', 'mii-db', 'link', 'write', 'ini', 'yaml-players', 'strip-lines', 'kv', 'xemu-pads', 'xenia-profile']
     const bad: string[] = []
     const steps = (list: unknown, at: string) => {
       for (const [i, s] of ((list as { type: string }[] | undefined) ?? []).entries()) if (!known.includes(s.type)) bad.push(`${at}[${i}]: ${s.type}`)

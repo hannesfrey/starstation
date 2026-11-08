@@ -21,6 +21,7 @@ const log = logger('overlay')
 const HEADLESS = process.env.STARSTATION_HEADLESS === '1'
 let win: BrowserWindow | null = null
 let open = false
+let openedBy: string | undefined
 let loader: ((w: BrowserWindow) => void) | null = null
 let preloadPath = ''
 
@@ -80,7 +81,8 @@ export function overlayState(): OverlayState {
     canSaveState: !!e?.overlay?.saveState,
     canLoadState: !!e?.overlay?.loadState,
     quickResume: !!c?.quickResume,
-    closing: runningClosing()
+    closing: runningClosing(),
+    openedBy: open ? openedBy : undefined
   }
 }
 
@@ -93,10 +95,11 @@ export function overlayOpen(): boolean {
 }
 
 /** PS button: open the menu over the game, or close it again (= Resume). */
-export function toggleOverlay(): void {
+/** pad: the controller that pressed PS (pad helper id), so only that player drives the menu. */
+export function toggleOverlay(pad?: string): void {
   if (runningClosing()) return // "Closing…" stays until the game is gone
   if (open) void hideOverlay(true)
-  else void showOverlay()
+  else void showOverlay(pad)
 }
 
 // Emulators with a pause key (Azahar) are paused by the menu itself: the key toggles, so it is pressed again
@@ -137,8 +140,9 @@ function continueGame(pid: number): Promise<void> {
   })
 }
 
-export async function showOverlay(): Promise<void> {
+export async function showOverlay(pad?: string): Promise<void> {
   if (!runningGame()) return
+  openedBy = pad
   const pid = runningPid()
   // pause first, while the game still has the focus: the key goes to the game window
   if (pid && pauseKey()) {

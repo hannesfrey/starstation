@@ -97,7 +97,17 @@
         },
         "sys.files": {
           "eeprom_path": "'{bios}\\eeprom.bin'"
+        },
+        "general.updates": {
+          "check": false
         }
+      }
+    },
+    {
+      "type": "xemu-pads",
+      "file": "{emu}/xemu.toml",
+      "buttons": {
+        "guide": -1
       }
     }
   ],

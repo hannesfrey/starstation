@@ -54,6 +54,9 @@
         "Analytics": {
           "PermissionAsked": "True",
           "Enabled": "False"
+        },
+        "AutoUpdate": {
+          "UpdateTrack": ""
         }
       }
     },
@@ -122,7 +125,15 @@
           "Nunchuk/Stick/Down": "`Left Y-`",
           "Nunchuk/Stick/Left": "`Left X-`",
           "Nunchuk/Stick/Right": "`Left X+`",
-          "Rumble/Motor": "`Motor L` | `Motor R`"
+          "Rumble/Motor": "`Motor L` | `Motor R`",
+          "Swing/Up": "`Right Y+`",
+          "Swing/Down": "`Right Y-`",
+          "Swing/Left": "`Right X-`",
+          "Swing/Right": "`Right X+`",
+          "Swing/Forward": "`Shoulder R`",
+          "Nunchuk/Shake/X": "`Thumb R`",
+          "Nunchuk/Shake/Y": "`Thumb R`",
+          "Nunchuk/Shake/Z": "`Thumb R`"
         },
         "Wiimote2": {
           "Device": "{dolpad2}",
@@ -152,7 +163,15 @@
           "Nunchuk/Stick/Left": "`Left X-`",
           "Nunchuk/Stick/Right": "`Left X+`",
           "Rumble/Motor": "`Motor L` | `Motor R`",
-          "Source": "{wiisrc2}"
+          "Source": "{wiisrc2}",
+          "Swing/Up": "`Right Y+`",
+          "Swing/Down": "`Right Y-`",
+          "Swing/Left": "`Right X-`",
+          "Swing/Right": "`Right X+`",
+          "Swing/Forward": "`Shoulder R`",
+          "Nunchuk/Shake/X": "`Thumb R`",
+          "Nunchuk/Shake/Y": "`Thumb R`",
+          "Nunchuk/Shake/Z": "`Thumb R`"
         },
         "Wiimote3": {
           "Device": "{dolpad3}",
@@ -182,7 +201,15 @@
           "Nunchuk/Stick/Left": "`Left X-`",
           "Nunchuk/Stick/Right": "`Left X+`",
           "Rumble/Motor": "`Motor L` | `Motor R`",
-          "Source": "{wiisrc3}"
+          "Source": "{wiisrc3}",
+          "Swing/Up": "`Right Y+`",
+          "Swing/Down": "`Right Y-`",
+          "Swing/Left": "`Right X-`",
+          "Swing/Right": "`Right X+`",
+          "Swing/Forward": "`Shoulder R`",
+          "Nunchuk/Shake/X": "`Thumb R`",
+          "Nunchuk/Shake/Y": "`Thumb R`",
+          "Nunchuk/Shake/Z": "`Thumb R`"
         },
         "Wiimote4": {
           "Device": "{dolpad4}",
@@ -212,7 +239,15 @@
           "Nunchuk/Stick/Left": "`Left X-`",
           "Nunchuk/Stick/Right": "`Left X+`",
           "Rumble/Motor": "`Motor L` | `Motor R`",
-          "Source": "{wiisrc4}"
+          "Source": "{wiisrc4}",
+          "Swing/Up": "`Right Y+`",
+          "Swing/Down": "`Right Y-`",
+          "Swing/Left": "`Right X-`",
+          "Swing/Right": "`Right X+`",
+          "Swing/Forward": "`Shoulder R`",
+          "Nunchuk/Shake/X": "`Thumb R`",
+          "Nunchuk/Shake/Y": "`Thumb R`",
+          "Nunchuk/Shake/Z": "`Thumb R`"
         }
       }
     },

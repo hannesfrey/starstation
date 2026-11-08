@@ -62,6 +62,9 @@
           "SIDevice1": "{gcport2}",
           "SIDevice2": "{gcport3}",
           "SIDevice3": "{gcport4}"
+        },
+        "AutoUpdate": {
+          "UpdateTrack": ""
         }
       }
     },

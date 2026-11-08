@@ -37,6 +37,10 @@ export type ConfigStep =
   | { type: 'yaml-players'; file: string; players: { Handler: string; Device: string }[]; upTo: string; config?: Record<string, string>; fresh?: Record<string, string> }
   /** Remove matching lines from every file with this extension under a folder (RetroArch's controller profiles). */
   | { type: 'strip-lines'; dir: string; ext: string; match: string }
+  /** xemu.toml: these buttons in every controller's mapping (guide = -1: the PS button no longer opens xemu's menu). */
+  | { type: 'xemu-pads'; file: string; buttons: Record<string, number> }
+  /** Xenia: sign a profile in as player 1 at boot when nobody is (formats/xeniaprofile.ts). */
+  | { type: 'xenia-profile'; file: string; content: string }
 
 export interface BiosFile {
   label: string

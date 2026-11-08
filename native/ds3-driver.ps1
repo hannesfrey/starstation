@@ -48,9 +48,10 @@ try {
   $ds3 = @(Get-PnpDevice -PresentOnly -InstanceId 'USB\VID_054C&PID_0268*' -ErrorAction SilentlyContinue)
   foreach ($d in $ds3) {
     $svc = (Get-PnpDeviceProperty -InstanceId $d.InstanceId -KeyName 'DEVPKEY_Device_Service').Data
-    if ($svc -eq 'dshidmini') { Step "$($d.InstanceId): DsHidMini"; continue }
     $inf = (Get-PnpDeviceProperty -InstanceId $d.InstanceId -KeyName 'DEVPKEY_Device_DriverInfPath').Data
     $prov = (Get-PnpDeviceProperty -InstanceId $d.InstanceId -KeyName 'DEVPKEY_Device_DriverProvider').Data
+    # DsHidMini devices run under Windows' mshidumdf service; the provider says it's DsHidMini
+    if ($svc -eq 'dshidmini' -or $prov -match 'Nefarius') { Step "$($d.InstanceId): DsHidMini"; continue }
     Step "$($d.InstanceId): on '$svc' ($inf, $prov)"
     if ($inf -match '^oem\d+\.inf$' -and $prov -notmatch 'Nefarius') {
       Step "removing old driver $inf ($prov)"

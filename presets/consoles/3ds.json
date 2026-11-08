@@ -82,6 +82,10 @@
           "confirmClose\\default": "false",
           "saveStateWarning": "false",
           "saveStateWarning\\default": "false"
+        },
+        "Miscellaneous": {
+          "check_for_update_on_start\\default": "false",
+          "check_for_update_on_start": "false"
         }
       },
       "spacing": "=",

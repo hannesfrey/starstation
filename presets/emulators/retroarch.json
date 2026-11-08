@@ -19,5 +19,8 @@
   "overlay": {
     "saveState": "F2",
     "loadState": "F4"
+  },
+  "log": {
+    "file": "{emu}/logs/retroarch.log"
   }
 }

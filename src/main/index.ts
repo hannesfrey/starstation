@@ -32,7 +32,7 @@ import { refreshCompat } from './compat'
 import { moveGameOptions } from './gameoptions'
 import { moveGameInCollections } from './collections'
 import { availableOptions, gameOptions, setGameOption } from './gameoptions'
-import { padVars, reportPads } from './controllers'
+import { knownPlayers, padVars, reportPads } from './controllers'
 import { checkNow, startUpdater, updateState } from './updater'
 import { addMod, deleteMod, finishAdd, gamebananaGame, listMods, modSupport, setGamebananaGame, setModEnabled } from './mods'
 import { gbModDetails, installGbMod, listGbMods, searchGames } from './gamebanana'
@@ -57,7 +57,7 @@ import { consoleInfos } from './consoles'
 import { CLOSE_TIMEOUT, closeRunning, launch, setLauncherWindow, runningGame, runningPid, stopRunning, onBeforeLaunch, onAfterExit } from './launcher'
 import { keepEmulatorLog } from './emulogs'
 import { hideOverlay, overlayAction, overlayOpen, overlayState, setupOverlay, toggleOverlay } from './overlay'
-import { audioOutputs, bluetoothDevices, bluetoothPair, bluetoothRemove, displayModes, foregroundPid, onHome, setAudioOutput, setDisplayMode, startPadHelper, stopPadHelper } from './padhelper'
+import { audioOutputs, bluetoothDevices, bluetoothPair, bluetoothRemove, displayModes, foregroundPid, onHome, setAudioOutput, setDisplayMode, startPadHelper, stopPadHelper, xinputSnapshot } from './padhelper'
 import { loadGpuDrivers, markGuideSeen, newHomeConflicts } from './system'
 import { couchMark, couchStatus, saveCouchCheck, startCouchCheck } from './couchcheck'
 import type { OverlayAction } from '../shared/types'
@@ -431,6 +431,7 @@ function registerIpc(): void {
     // controller assignment: player N → that pad, in every emulator's own way (controllers.ts)
     const order = Array.isArray(pads) ? pads.filter((p) => (p.api === 'xinput' || p.api === 'sdl') && Number.isInteger(p.index)).slice(0, 4) : []
     const vars = { ...(order.length ? padVars(order) : {}), ...(online ? netplayVars('host' in online) : {}) }
+    sessionPlayers.set(id, order.length || knownPlayers())
     let args: string[] = []
     try {
       args = online ? netplayArgs(online) : []
@@ -603,6 +604,7 @@ function registerIpc(): void {
   handle('guide-seen', (_e, keys: string[]) => markGuideSeen(Array.isArray(keys) ? keys.map(String) : []))
   // ---- PS button menu (SPEC-v2 A) ----
   handle('overlay-state', () => overlayState())
+  handle('pad-snapshot', () => xinputSnapshot())
   // ---- library & storage (SPEC-v2 D) ----
   handle('storage', (_e, fresh?: boolean) => storageInfo(!!fresh))
   // ---- system settings from the menu (SPEC-v2 G; Hannes allowed changing them when picked here) ----
@@ -757,8 +759,8 @@ function registerIpc(): void {
     return f
   })
   handle('overlay-action', (_e, a: OverlayAction) => overlayAction(a))
-  handle('test-home', () => {
-    if (HEADLESS || COUCH_TEST) toggleOverlay()
+  handle('test-home', (_e, pad?: unknown) => {
+    if (HEADLESS || COUCH_TEST) toggleOverlay(typeof pad === 'string' ? pad : undefined)
   })
   // couch test: who has the focus right now (the game, the PS button menu or Starstation)?
   handle('test-fg', async () => (COUCH_TEST ? { fg: await foregroundPid(), emulator: runningPid(), starstation: process.pid } : null))
@@ -1175,9 +1177,13 @@ function registerHooks(): void {
   })
   onAfterExit((id, _s, _c, startedAt) => {
     const v = noteResumeVersion(id, startedAt)
-    if (v) updateStats(id, (s) => ({ ...s, resumeVersion: v }))
+    // a resume state written this session: note the emulator version and how many controllers the game knew
+    if (v) updateStats(id, (s) => ({ ...s, resumeVersion: v, resumePlayers: sessionPlayers.get(id) ?? knownPlayers() }))
   })
 }
+
+/** Players each game was started with (the game only looks for controllers when it boots). */
+const sessionPlayers = new Map<string, number>()
 
 function registerMediaProtocol(): void {
   // starstation-media://local/<encoded absolute path> → file, only inside Files\ or game folders
@@ -1277,12 +1283,12 @@ async function start(): Promise<void> {
   // one press = one toggle: presses closer than this are a bounce or mashing (2026-11-07 log: the menu opened
   // again 90 ms after it closed, over and over)
   let lastHome = 0
-  onHome(() => {
+  onHome((pad) => {
     const now = Date.now()
     if (now - lastHome < 400) return
     lastHome = now
     couchMark('home')
-    toggleOverlay()
+    toggleOverlay(pad)
   })
   // scan after the window is up so startup stays fast (cache is shown first)
   win.webContents.once('did-finish-load', () => {

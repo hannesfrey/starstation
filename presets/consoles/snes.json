@@ -86,7 +86,11 @@
         "input_player1_joypad_index = \"{rapad1}\"",
         "input_player2_joypad_index = \"{rapad2}\"",
         "input_player3_joypad_index = \"{rapad3}\"",
-        "input_player4_joypad_index = \"{rapad4}\""
+        "input_player4_joypad_index = \"{rapad4}\"",
+        "log_to_file = \"true\"",
+        "log_to_file_timestamp = \"false\"",
+        "log_dir = \"{emu}/logs\"",
+        "log_verbosity = \"true\""
       ]
     },
     {

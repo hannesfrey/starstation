@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from './api'
 import { guideHolder, input, isMenuPad, padName } from './input'
+import { matchXInputPad } from '../../shared/padmatch'
 import { sfx } from './sound'
 import type { OverlayAction, OverlayState } from '../../shared/types'
 
@@ -41,12 +42,31 @@ export function Overlay() {
 
   useEffect(() => {
     document.documentElement.classList.add('overlay-page')
+    ;(window as unknown as { ssInput?: typeof input }).ssInput = input // tests read which pad drives the menu
     void api.overlayState().then(setState)
-    // only the player who pressed PS drives the menu: the controller still holding PS as it appears.
-    // Not seen (a very short tap) → every controller, as before; never a guess.
+    // only the player who pressed PS drives the menu. An XInput pad (the pad helper says which slot): match the
+    // slots' live state to the menu's pads — Chromium gives every Guide press to its first pad, so "who holds
+    // PS" can't be read there. Other pads (PS4 / PS5 over HID): the controller still holding PS as it appears.
+    // No clear answer → every controller, as before; never a guess.
     let watch = 0
-    const findOpener = () => {
+    let opening = 0 // which opening of the menu an answer belongs to (a late answer must not lock a later one)
+    const findOpener = (openedBy: string | undefined) => {
       window.clearInterval(watch)
+      const mine = ++opening
+      const slot = /^xinput:(\d)$/.exec(openedBy ?? '')
+      if (slot) {
+        void api
+          .padSnapshot()
+          .then((slots) => {
+            const pads = (navigator.getGamepads ? navigator.getGamepads() : []).filter(
+              (p): p is Gamepad => !!p && p.connected && isMenuPad(p) && /xinput|xbox/i.test(p.id)
+            )
+            const who = matchXInputPad(Number(slot[1]), slots, pads)
+            if (who !== null && mine === opening) input.setOnlyPad(who)
+          })
+          .catch(() => undefined)
+        return
+      }
       const until = performance.now() + 800
       watch = window.setInterval(() => {
         const who = guideHolder(navigator.getGamepads ? navigator.getGamepads() : [])
@@ -58,9 +78,10 @@ export function Overlay() {
       if (s.open && !stateRef.current?.open) {
         openedAt.current = performance.now()
         input.setOnlyPad(null)
-        findOpener()
+        findOpener(s.openedBy)
       }
       if (!s.open) {
+        opening++
         window.clearInterval(watch)
         input.setOnlyPad(null)
       }

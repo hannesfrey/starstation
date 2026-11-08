@@ -15,6 +15,9 @@
     "rpcs3"
   ],
   "license": "GPL-2.0",
+  "overlay": {
+    "pauseKey": "CTRL+P"
+  },
   "log": {
     "file": "{emu}/log/RPCS3.log",
     "fatal": "^·F \\S+ (.*)$",

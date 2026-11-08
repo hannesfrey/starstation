@@ -57,6 +57,11 @@
         }
       },
       "ifExists": true
+    },
+    {
+      "type": "xenia-profile",
+      "file": "{emu}/xenia-canary.config.toml",
+      "content": "{emu}/content"
     }
   ],
   "quickResume": false,

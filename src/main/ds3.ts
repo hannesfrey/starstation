@@ -50,10 +50,22 @@ export async function checkDs3(): Promise<Ds3Status> {
   }
   const ids = ds3Instances(await run(path.join(sys32, 'pnputil.exe'), ['/enum-devices', '/connected']))
   if (!ids.length) return (last = { state: 'none' })
-  const services = await Promise.all(ids.map(async (id) => serviceOf(await run(path.join(sys32, 'reg.exe'), ['query', `HKLM\\SYSTEM\\CurrentControlSet\\Enum\\${id}`, '/v', 'Service']))))
-  const other = services.find((s) => s?.toLowerCase() !== 'dshidmini')
-  last = other === undefined && services.length ? { state: 'ready', service: 'dshidmini' } : { state: 'needs-driver', service: other ?? services[0] }
+  const keys = await Promise.all(ids.map((id) => run(path.join(sys32, 'reg.exe'), ['query', `HKLM\\SYSTEM\\CurrentControlSet\\Enum\\${id}`])))
+  const notReady = keys.find((k) => !isDsHidMini(k))
+  last = notReady === undefined ? { state: 'ready', service: 'dshidmini' } : { state: 'needs-driver', service: serviceOf(notReady) }
   return last
+}
+
+/**
+ * A device's registry key (reg query output) → is it on DsHidMini? DsHidMini is a UMDF driver: its devices run
+ * under Windows' "mshidumdf" service, made by Nefarius (2.0.3–2.0.33 looked for a service named "dshidmini" only,
+ * so after a working install it still said "needs driver" and offered it again). Exported for tests.
+ */
+export function isDsHidMini(regOutput: string): boolean {
+  const svc = serviceOf(regOutput)?.toLowerCase()
+  if (svc === 'dshidmini') return true
+  const mfg = /^\s+Mfg\s+REG_SZ\s+(.+?)\s*$/im.exec(regOutput)?.[1] ?? ''
+  return svc === 'mshidumdf' && /nefarius/i.test(mfg)
 }
 
 export function ds3Status(): Ds3Status {

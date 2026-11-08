@@ -27,6 +27,11 @@ export function known(): Known {
   return { ...k, pads: Array.isArray(k.pads) ? k.pads.filter((p) => typeof p === 'string') : [] }
 }
 
+/** How many players a game gets when no order was chosen: every known controller (1–4). */
+export function knownPlayers(): number {
+  return Math.max(1, Math.min(4, known().pads.length))
+}
+
 /** Gamepad ids seen by the menu (Gamepad API). Wheels etc. are ignored. */
 export function reportPads(ids: string[]): void {
   const pads = ids.filter((id) => !IGNORED.test(id))

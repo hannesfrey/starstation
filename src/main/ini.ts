@@ -115,6 +115,73 @@ export function stripLines(text: string, pattern: string): string | null {
     .join(eol)
 }
 
+/**
+ * xemu.toml: in every `gamepad_mappings = [ { gamepad_id = '…' … }, … ]` entry, set these `controller_mapping`
+ * buttons (e.g. guide = -1: no button, so the PS / Guide press doesn't open xemu's own menu under Starstation's).
+ * Only the entries xemu itself wrote are touched (it adds one per controller it has seen). null = nothing to change.
+ */
+export function setXemuPadButtons(text: string, set: Record<string, number>): string | null {
+  const start = /^\s*gamepad_mappings\s*=\s*\[/m.exec(text)
+  if (!start) return null
+  // the array: from its "[" to the matching "]" (inline tables inside may nest)
+  const open = start.index + start[0].length - 1
+  let depth = 0
+  let end = -1
+  for (let i = open; i < text.length; i++) {
+    const ch = text[i]
+    if (ch === "'" || ch === '"') {
+      const close = text.indexOf(ch, i + 1)
+      if (close < 0) return null
+      i = close
+    } else if (ch === '[' || ch === '{') depth++
+    else if (ch === ']' || ch === '}') {
+      depth--
+      if (depth === 0) {
+        end = i
+        break
+      }
+    }
+  }
+  if (end < 0) return null
+  const body = text.slice(open + 1, end)
+  // each top-level "{ … }" entry
+  const entries: { from: number; to: number }[] = []
+  depth = 0
+  let from = -1
+  for (let i = 0; i < body.length; i++) {
+    const ch = body[i]
+    if (ch === "'" || ch === '"') {
+      i = body.indexOf(ch, i + 1)
+      if (i < 0) return null
+    } else if (ch === '{') {
+      if (depth === 0) from = i
+      depth++
+    } else if (ch === '}') {
+      depth--
+      if (depth === 0 && from >= 0) entries.push({ from, to: i })
+    }
+  }
+  let out = body
+  for (const e of [...entries].reverse()) {
+    let entry = body.slice(e.from, e.to + 1)
+    const cm = /controller_mapping\s*=\s*\{([^{}]*)\}/.exec(entry)
+    if (cm) {
+      let inner = cm[1]
+      for (const [k, val] of Object.entries(set)) {
+        const re = new RegExp(`(^|,)\\s*${escapeRe(k)}\\s*=\\s*-?\\d+\\s*`)
+        inner = re.test(inner) ? inner.replace(re, `$1 ${k} = ${val} `) : `${inner.trim() ? `${inner.trimEnd()}, ` : ' '}${k} = ${val} `
+      }
+      entry = entry.slice(0, cm.index) + `controller_mapping = {${inner.replace(/^\s*/, ' ').replace(/\s*$/, ' ')}}` + entry.slice(cm.index + cm[0].length)
+    } else {
+      const add = `controller_mapping = { ${Object.entries(set).map(([k, val]) => `${k} = ${val}`).join(', ')} }`
+      entry = entry.slice(0, -1).trimEnd() + `, ${add} }`
+    }
+    out = out.slice(0, e.from) + entry + out.slice(e.to + 1)
+  }
+  if (out === body) return null
+  return text.slice(0, open + 1) + out + text.slice(end)
+}
+
 function escapeRe(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }

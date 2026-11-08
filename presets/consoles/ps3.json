@@ -53,6 +53,9 @@
           "confirmationBoxExitGame": "false",
           "confirmationBoxBootGame": "false",
           "infoBoxEnabledWelcome": "false"
+        },
+        "Meta": {
+          "checkUpdateStart": "false"
         }
       }
     },
@@ -89,7 +92,7 @@
       "sep": ": ",
       "set": {
         "Exclusive Fullscreen Mode": "Disable",
-        "Pause emulation on RPCS3 focus loss": "true",
+        "Pause emulation on RPCS3 focus loss": "false",
         "Emulated Midi devices": "Keyboardßßß@@@Keyboardßßß@@@Keyboardßßß@@@"
       }
     }

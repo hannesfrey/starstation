@@ -84,6 +84,9 @@
         "Hotkeys": {
           "SaveStateToSlot": "Keyboard/F1",
           "LoadStateFromSlot": "Keyboard/F3"
+        },
+        "AutoUpdater": {
+          "CheckAtStartup": "false"
         }
       }
     }

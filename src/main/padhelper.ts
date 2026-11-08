@@ -1,3 +1,4 @@
+import { parseXState, type XSlot } from '../shared/padmatch'
 import fs from 'node:fs'
 import path from 'node:path'
 import { spawn, type ChildProcess } from 'node:child_process'
@@ -109,6 +110,14 @@ export function onPads(fn: (pads: string[]) => void): () => void {
 /** Pads the helper sees right now ("xinput:0", "hid:1" = number of DS4/DualSense read directly). */
 export function helperPads(): string[] {
   return lastPads
+}
+
+/** Sticks, triggers and buttons of every connected XInput pad right now (see matchXInputPad). */
+export async function xinputSnapshot(): Promise<XSlot[]> {
+  // hidden tests: fake pads (no real controllers there)
+  if (process.env.STARSTATION_HEADLESS === '1') return parseXState(process.env.STARSTATION_TEST_XSTATE ?? '')
+  const line = await ask('xstate', 1000)
+  return line.startsWith('xstate') ? parseXState(line.slice(6)) : []
 }
 
 function ask(cmd: string, timeoutMs = 5000): Promise<string> {

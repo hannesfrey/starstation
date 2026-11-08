@@ -265,3 +265,133 @@ test('an emulator the menu pauses itself (3DS): paused on open, continued on Res
     await app.close()
   }
 })
+
+test('PS menu: an XInput player who pressed PS is found by the pads’ live state, not Chromium’s Guide button', async () => {
+  test.setTimeout(60_000)
+  const files = makeFiles('overlaywho')
+  const presets = makePresets(files, 60_000)
+  writeSettings(files, { bootAnimation: false })
+  fs.mkdirSync(path.join(files, 'games', 'testcon'), { recursive: true })
+  fs.writeFileSync(path.join(files, 'games', 'testcon', 'Alpha.tst'), 'a')
+  // Hannes's two DS3 pads at rest (pad helper: XInput slots 0 and 1)
+  process.env.STARSTATION_TEST_XSTATE = '0:-129,-900,0,0,0,0,0;1:-1157,-900,0,0,0,0,0'
+  const { app, page } = await launchApp(files, presets)
+  try {
+    const ov = await overlayPage(app)
+    // Chromium numbers them the other way round and gives the Guide press to its first pad (index 0)
+    await ov.evaluate(() => {
+      const mk = (index: number, lx: number, guide: boolean) => ({
+        index,
+        id: 'Xbox 360 Controller (XInput STANDARD GAMEPAD)',
+        connected: true,
+        mapping: 'standard',
+        buttons: Array.from({ length: 17 }, (_v, i) => ({ pressed: i === 16 && guide, value: i === 16 && guide ? 1 : 0 })),
+        axes: [lx / 32767, 900 / 32767, 0, 0]
+      })
+      const pads = [mk(0, -1157, true), mk(1, -129, false)]
+      navigator.getGamepads = () => pads as unknown as Gamepad[]
+    })
+    const locked = () => ov.evaluate(() => (window as unknown as { ssInput: { lockedPad: number | null } }).ssInput.lockedPad)
+    await expect(page.getByTestId('game-info')).toContainText('Alpha')
+    expect((await api<{ ok: boolean }>(page, 'launch', 'testcon:alpha.tst')).ok).toBe(true)
+
+    // slot 0 pressed PS → the menu's pad 1 (Chromium's Guide on pad 0 is ignored)
+    await api(page, 'testHome', 'xinput:0')
+    await expect(ov.getByTestId('overlay-resume')).toBeVisible()
+    await expect.poll(locked).toBe(1)
+    await ov.getByTestId('overlay-resume').click()
+    await expect.poll(locked).toBeNull()
+    await expect(ov.getByTestId('overlay-closed')).toBeAttached()
+
+    // slot 1 → pad 0
+    await api(page, 'testHome', 'xinput:1')
+    await expect(ov.getByTestId('overlay-resume')).toBeVisible()
+    await expect.poll(locked).toBe(0)
+    await ov.getByTestId('overlay-resume').click()
+    await expect(ov.getByTestId('overlay-closed')).toBeAttached()
+
+    // the keyboard / no known pad: the old way (whoever holds Guide in Chromium = pad 0 here)
+    await api(page, 'testHome')
+    await expect(ov.getByTestId('overlay-resume')).toBeVisible()
+    await expect.poll(locked).toBe(0)
+    await ov.getByTestId('overlay-resume').click()
+  } finally {
+    await app.close()
+    delete process.env.STARSTATION_TEST_XSTATE
+  }
+})
+
+test('a resume point saved with fewer controllers says so (the game only looks for controllers when it boots)', async () => {
+  test.setTimeout(60_000)
+  const files = makeFiles('resumeplayers')
+  const presets = makePresets(files, 800, { quickResume: true })
+  writeSettings(files, { bootAnimation: false })
+  fs.mkdirSync(path.join(files, 'games', 'testcon'), { recursive: true })
+  fs.writeFileSync(path.join(files, 'games', 'testcon', 'Alpha.tst'), 'a')
+  const state = path.join(files, 'saves', 'testcon', 'states', 'Alpha.state')
+  fs.mkdirSync(path.dirname(state), { recursive: true })
+  fs.writeFileSync(state, 'one-player moment')
+  fs.mkdirSync(path.join(files, 'config', 'library'), { recursive: true })
+  fs.writeFileSync(path.join(files, 'config', 'library', 'stats.json'), JSON.stringify({ 'testcon:alpha.tst': { playTime: 60, playCount: 1, resumePlayers: 1 } }))
+  const pads = (n: number) =>
+    fs.writeFileSync(path.join(files, 'config', 'controllers.json'), JSON.stringify({ api: 'xinput', pads: Array.from({ length: n }, () => 'Xbox 360 Controller (XInput STANDARD GAMEPAD)') }))
+  pads(2)
+  const { app, page } = await launchApp(files, presets)
+  try {
+    await expect(page.getByTestId('game-info')).toContainText('Alpha')
+    const d = await api<{ resume: { warning?: string } | null }>(page, 'gameDetails', 'testcon:alpha.tst')
+    expect(d.resume?.warning).toContain('saved with 1 controller')
+    expect(d.resume?.warning).toContain('start fresh')
+  } finally {
+    await app.close()
+  }
+  // the same number of controllers as back then: nothing to say
+  pads(1)
+  const again = await launchApp(files, presets)
+  try {
+    await expect(again.page.getByTestId('game-info')).toContainText('Alpha')
+    const d = await api<{ resume: { warning?: string } | null }>(again.page, 'gameDetails', 'testcon:alpha.tst')
+    expect(d.resume).not.toBeNull()
+    expect(d.resume?.warning).toBeUndefined()
+  } finally {
+    await again.app.close()
+  }
+})
+
+test('Xenia: before a game, player 1 gets a signed-in profile (moved from the slot it landed in)', async () => {
+  test.setTimeout(60_000)
+  const files = makeFiles('xeniaprofile')
+  const presets = makePresets(files, 800, { extra: { config: [{ type: 'xenia-profile', file: '{emu}/xenia.toml', content: '{emu}/content' }] } })
+  writeSettings(files, { bootAnimation: false })
+  fs.mkdirSync(path.join(files, 'games', 'testcon'), { recursive: true })
+  fs.writeFileSync(path.join(files, 'games', 'testcon', 'Alpha.tst'), 'a')
+  const emu = path.join(files, '_fakeemu')
+  fs.mkdirSync(path.join(emu, 'content', 'E03000005A8B21C9', 'FFFE07D1'), { recursive: true })
+  const toml = path.join(emu, 'xenia.toml')
+  fs.writeFileSync(
+    toml,
+    [
+      '[HID]',
+      'guide_button = false',
+      '',
+      '[Profiles]',
+      'logged_profile_slot_0_xuid = ""                   \t# XUID of the profile to load on boot in slot 0',
+      'logged_profile_slot_1_xuid = "E03000005A8B21C9"   \t# XUID of the profile to load on boot in slot 1',
+      'logged_profile_slot_2_xuid = ""                   \t# XUID of the profile to load on boot in slot 2',
+      'logged_profile_slot_3_xuid = ""                   \t# XUID of the profile to load on boot in slot 3',
+      ''
+    ].join('\r\n')
+  )
+  const { app, page } = await launchApp(files, presets)
+  try {
+    await expect(page.getByTestId('game-info')).toContainText('Alpha')
+    expect((await api<{ ok: boolean }>(page, 'launch', 'testcon:alpha.tst')).ok).toBe(true)
+    await expect.poll(() => fs.readFileSync(toml, 'utf8'), { timeout: 10_000 }).toContain('logged_profile_slot_0_xuid = "E03000005A8B21C9"')
+    const t = fs.readFileSync(toml, 'utf8')
+    expect(t).toContain('logged_profile_slot_1_xuid = ""')
+    expect(t).toContain('guide_button = false')
+    expect(t).not.toMatch(/[^\r]\n/) // Windows line endings kept
+  } finally {
+    await app.close()
+  }
+})
