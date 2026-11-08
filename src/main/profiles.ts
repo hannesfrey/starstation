@@ -215,8 +215,21 @@ export async function finishInterruptedSwitch(): Promise<void> {
   save(s)
 }
 
+/** A switch is moving save folders right now: a second one (a double press) must not move them at the same time. */
+let switching = false
+
 /** Switch profile (no game may run). Checks the PIN; Guest is cleared when its session ends. */
-export async function switchProfile(id: string, pin?: string): Promise<{ ok: boolean; error?: string }> {
+export async function switchProfile(id: string, pin?: string): Promise<{ ok: boolean; error?: string; busy?: boolean }> {
+  if (switching) return { ok: false, error: 'A profile switch is already on its way.', busy: true }
+  switching = true
+  try {
+    return await switchNow(id, pin)
+  } finally {
+    switching = false
+  }
+}
+
+async function switchNow(id: string, pin?: string): Promise<{ ok: boolean; error?: string }> {
   const s = load()
   if (id === s.active) return { ok: true }
   const target = id === GUEST ? null : s.list.find((p) => p.id === id)

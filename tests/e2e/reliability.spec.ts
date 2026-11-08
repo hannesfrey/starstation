@@ -314,3 +314,75 @@ test('a damaged user-made console file (config/consoles) is skipped; everything 
     await app.close()
   }
 })
+
+test('two mods switched on at the same moment both stay tracked: switching them off leaves nothing behind', async () => {
+  const files = makeFiles('mod-race')
+  const presets = makePresets(files, 300, { extra: { mods: { targets: [{ id: 'patches', label: 'Patch (.pnach)', dir: '{emu}/patches', match: '\.pnach$', flatten: true }] } } })
+  writeSettings(files, { bootAnimation: false })
+  fs.mkdirSync(path.join(files, 'games', 'testcon'), { recursive: true })
+  fs.writeFileSync(path.join(files, 'games', 'testcon', 'Alpha.tst'), 'a')
+  // saves exist: the first switch-on of each mod backs them up first (that wait is where two changes overlapped)
+  fs.mkdirSync(path.join(files, 'saves', 'testcon'), { recursive: true })
+  fs.writeFileSync(path.join(files, 'saves', 'testcon', 'Alpha.sav'), 'save')
+  for (const n of ['Faster', 'Widescreen']) fs.writeFileSync(path.join(files, `${n}.pnach`), `patch=${n}`)
+  const gid = 'testcon:alpha.tst'
+  const placed = path.join(files, '_fakeemu', 'patches')
+  const { app, page } = await launchApp(files, presets)
+  try {
+    await expect(page.getByTestId('game-info')).toContainText('Alpha')
+    const a = await api<{ ok: boolean; mod: { id: string } }>(page, 'modAdd', gid, path.join(files, 'Faster.pnach'))
+    const b = await api<{ ok: boolean; mod: { id: string } }>(page, 'modAdd', gid, path.join(files, 'Widescreen.pnach'))
+    const [ra, rb] = await page.evaluate(
+      ([g, x, y]) => {
+        const s = (window as unknown as { starstation: { modToggle: (g: string, m: string, on: boolean) => Promise<{ ok: boolean }> } }).starstation
+        return Promise.all([s.modToggle(g, x, true), s.modToggle(g, y, true)])
+      },
+      [gid, a.mod.id, b.mod.id] as const
+    )
+    expect(ra.ok && rb.ok).toBe(true)
+    expect(fs.readdirSync(placed).sort()).toEqual(['Faster.pnach', 'Widescreen.pnach'])
+    const mods = await api<{ mods: { id: string; enabled: boolean }[] }>(page, 'mods', gid)
+    expect(mods.mods.every((m) => m.enabled)).toBe(true)
+    // both off again: every file Starstation placed goes (an untracked one would stay for ever)
+    await page.evaluate(
+      ([g, x, y]) => {
+        const s = (window as unknown as { starstation: { modToggle: (g: string, m: string, on: boolean) => Promise<{ ok: boolean }> } }).starstation
+        return Promise.all([s.modToggle(g, x, false), s.modToggle(g, y, false)])
+      },
+      [gid, a.mod.id, b.mod.id] as const
+    )
+    expect(fs.existsSync(placed) ? fs.readdirSync(placed) : []).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('a double press on a profile switches once; save folders are moved by one switch only', async () => {
+  const { files, presets } = setup('profile-double', 300)
+  const { app, page } = await launchApp(files, presets)
+  try {
+    await expect(page.getByTestId('game-info')).toContainText('Alpha')
+    await api(page, 'profileAdd', 'Sis')
+    const sis = (await api<{ id: string; name: string }[]>(page, 'profiles')).find((p) => p.name === 'Sis')!
+    // a save that lives in an emulator (the Xbox hard disk): every switch moves it, so the first switch is
+    // still busy when the second press arrives
+    const hdd = path.join(files, 'bios', 'xbox', 'xbox_hdd.qcow2')
+    fs.mkdirSync(path.dirname(hdd), { recursive: true })
+    fs.writeFileSync(hdd, 'player 1 hard disk')
+    const [a, b] = await page.evaluate((id) => {
+      const s = (window as unknown as { starstation: { profileSwitch: (id: string) => Promise<{ ok: boolean; busy?: boolean }> } }).starstation
+      return Promise.all([s.profileSwitch(id), s.profileSwitch(id)])
+    }, sis.id)
+    expect([a, b].filter((r) => r.ok)).toHaveLength(1)
+    expect([a, b].filter((r) => r.busy)).toHaveLength(1)
+    const prof = JSON.parse(fs.readFileSync(path.join(files, 'config', 'profiles.json'), 'utf8'))
+    expect(prof.active).toBe(sis.id)
+    expect(fs.existsSync(path.join(files, 'config', 'profiles-switch.json'))).toBe(false)
+    // player 1's hard disk was put away exactly once, intact; Sis starts without one
+    expect(fs.readFileSync(path.join(files, 'config', 'profiles', 'p1', 'emulator-saves', 'xbox-hdd.qcow2'), 'utf8')).toBe('player 1 hard disk')
+    expect(fs.existsSync(hdd)).toBe(false)
+    expect(logText(files).match(/\[profiles\] profile p1 → /g)).toHaveLength(1)
+  } finally {
+    await app.close()
+  }
+})

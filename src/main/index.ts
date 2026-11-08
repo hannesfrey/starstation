@@ -995,7 +995,20 @@ async function doAddGames(paths: string[], consoleId?: string): Promise<AddGames
 }
 
 /** Move the game (and, if asked, its own saves) to the Recycle Bin, then forget it. */
+/** Games being deleted right now (a second press while the first is binning the files does nothing). */
+const deleting = new Set<string>()
+
 async function deleteGame(id: string, withSaves: boolean): Promise<{ ok: boolean; error?: string }> {
+  if (deleting.has(id)) return { ok: true }
+  deleting.add(id)
+  try {
+    return await deleteGameNow(id, withSaves)
+  } finally {
+    deleting.delete(id)
+  }
+}
+
+async function deleteGameNow(id: string, withSaves: boolean): Promise<{ ok: boolean; error?: string }> {
   const g = getGame(id)
   if (!g) return { ok: false, error: 'Game not found' }
   if (runningGame()?.gameId === id) return { ok: false, error: 'Close the game first.' }

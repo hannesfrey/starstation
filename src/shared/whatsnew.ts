@@ -12,6 +12,14 @@ export interface WhatsNew {
 
 export const WHATS_NEW: WhatsNew[] = [
   {
+    version: '2.0.22',
+    summary: ['Mods: two changes at once can no longer lose track of a mod’s files'],
+    details: [
+      'Switching mods on or off, adding, deleting or a mod set now happen one after the other for each game. Before, two at the same moment (a double press, or the mods folder installing while you switched a mod) could leave a mod’s files in the game that Starstation no longer knew about and so never removed.',
+      'A double press on a profile switches once: two switches at the same moment could move the same save folders twice.'
+    ]
+  },
+  {
     version: '2.0.21',
     summary: ['A damaged console you added yourself no longer stops Starstation from starting'],
     details: [

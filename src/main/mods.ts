@@ -202,7 +202,11 @@ export async function addMod(
 }
 
 /** Second half of adding (also used after "Where does this mod go?"). */
-export async function finishAdd(g: Game, pending: string, targetId?: string): Promise<AddModResult> {
+export function finishAdd(g: Game, pending: string, targetId?: string): Promise<AddModResult> {
+  return withModLock(g.id, () => finishAddNow(g, pending, targetId))
+}
+
+async function finishAddNow(g: Game, pending: string, targetId?: string): Promise<AddModResult> {
   const root = modsRoot(g)
   const tmp = path.join(root, pending)
   if (!pending.startsWith('.incoming-') || !fs.existsSync(tmp)) return { ok: false, error: 'That mod is no longer waiting to be added.' }
@@ -291,7 +295,28 @@ function removeEmptyDirs(from: string, stop: string): void {
  * Switch a mod on or off. `winner`: when files clash with another mod that is on,
  * 'this' = this mod's files replace the other's, 'other' = the other mod keeps them.
  */
-export async function setModEnabled(g: Game, id: string, on: boolean, winner?: 'this' | 'other'): Promise<ToggleResult> {
+/**
+ * One change to a game's mods at a time. Two at once (a double press, the mods folder installing while you
+ * switch a mod) each read the mod list, wait for files, and save their own view: the other's placed files
+ * were then no longer tracked — never removed, never replaced. Calls queue per game instead.
+ */
+const modLocks = new Map<string, Promise<unknown>>()
+function withModLock<T>(gameId: string, fn: () => Promise<T>): Promise<T> {
+  const run = (modLocks.get(gameId) ?? Promise.resolve()).then(fn, fn)
+  const tail = run.catch(() => undefined)
+  modLocks.set(gameId, tail)
+  void tail.then(() => {
+    if (modLocks.get(gameId) === tail) modLocks.delete(gameId)
+  })
+  return run
+}
+
+export function setModEnabled(g: Game, id: string, on: boolean, winner?: 'this' | 'other'): Promise<ToggleResult> {
+  return withModLock(g.id, () => toggleMod(g, id, on, winner))
+}
+
+/** Switch a mod on or off (callers hold the game's mod lock). */
+async function toggleMod(g: Game, id: string, on: boolean, winner?: 'this' | 'other'): Promise<ToggleResult> {
   const st = load(g)
   const m = st.mods.find((x) => x.id === id)
   if (!m) return { ok: false, error: 'Mod not found.' }
@@ -351,7 +376,7 @@ export async function setModEnabled(g: Game, id: string, on: boolean, winner?: '
       log.warn(`${g.id}: mod ${id} could not be switched on`, e)
       m.enabled = true
       save(g, st)
-      await setModEnabled(g, id, false).catch((e2) => log.warn(`${g.id}: mod ${id} not fully taken out again`, e2))
+      await toggleMod(g, id, false).catch((e2) => log.warn(`${g.id}: mod ${id} not fully taken out again`, e2))
       return { ok: false, error: `The mod could not be switched on: ${(e as Error).message}` }
     }
     m.enabled = true
@@ -387,25 +412,29 @@ export async function setModEnabled(g: Game, id: string, on: boolean, winner?: '
   return { ok: true, skipped: 0 }
 }
 
-export async function deleteMod(g: Game, id: string): Promise<void> {
-  const st = load(g)
-  if (st.mods.find((x) => x.id === id)?.enabled) await setModEnabled(g, id, false)
-  const after = load(g)
-  after.mods = after.mods.filter((x) => x.id !== id)
-  save(g, after)
-  await fsp.rm(path.join(modsRoot(g), id), { recursive: true, force: true })
+export function deleteMod(g: Game, id: string): Promise<void> {
+  return withModLock(g.id, async () => {
+    const st = load(g)
+    if (st.mods.find((x) => x.id === id)?.enabled) await toggleMod(g, id, false)
+    const after = load(g)
+    after.mods = after.mods.filter((x) => x.id !== id)
+    save(g, after)
+    await fsp.rm(path.join(modsRoot(g), id), { recursive: true, force: true })
+  })
 }
 
 /** Mods that arrived in a package and were on at the sender: switch them on here (this PC's paths). */
-export async function enablePending(g: Game): Promise<number> {
-  const st = load(g)
-  const pending = st.mods.filter((m) => (m as ModEntry & { pendingOn?: boolean }).pendingOn)
-  if (!pending.length) return 0
-  for (const m of pending) delete (m as ModEntry & { pendingOn?: boolean }).pendingOn
-  save(g, st)
-  let n = 0
-  for (const m of pending) if ((await setModEnabled(g, m.id, true, 'other')).ok) n++
-  return n
+export function enablePending(g: Game): Promise<number> {
+  return withModLock(g.id, async () => {
+    const st = load(g)
+    const pending = st.mods.filter((m) => (m as ModEntry & { pendingOn?: boolean }).pendingOn)
+    if (!pending.length) return 0
+    for (const m of pending) delete (m as ModEntry & { pendingOn?: boolean }).pendingOn
+    save(g, st)
+    let n = 0
+    for (const m of pending) if ((await toggleMod(g, m.id, true, 'other')).ok) n++
+    return n
+  })
 }
 
 export function hasEnabledMods(g: Game): boolean {
@@ -518,7 +547,11 @@ export async function wrongBase(g: Game, docs: string): Promise<string | null> {
   return `It's made for a different version of the game than yours (${path.basename(g.launchPath)}). Its instructions say: “${need}”`
 }
 
-async function addPatchMod(g: Game, patchFile: string, opts: { name?: string; description?: string; source?: ModEntry['source'] }): Promise<AddModResult> {
+function addPatchMod(g: Game, patchFile: string, opts: { name?: string; description?: string; source?: ModEntry['source'] }): Promise<AddModResult> {
+  return withModLock(g.id, () => addPatchModNow(g, patchFile, opts))
+}
+
+async function addPatchModNow(g: Game, patchFile: string, opts: { name?: string; description?: string; source?: ModEntry['source'] }): Promise<AddModResult> {
   const root = modsRoot(g)
   const st = load(g)
   const name = opts.name ?? path.basename(patchFile, path.extname(patchFile))
@@ -604,17 +637,21 @@ export function deleteModProfile(g: Game, id: string): void {
 }
 
 /** Switch to a profile: mods not in it go off, mods in it come on (in the profile's order: later ones win clashes). */
-export async function applyModProfile(g: Game, id: string): Promise<{ ok: boolean; error?: string }> {
+export function applyModProfile(g: Game, id: string): Promise<{ ok: boolean; error?: string }> {
+  return withModLock(g.id, () => applyProfileNow(g, id))
+}
+
+async function applyProfileNow(g: Game, id: string): Promise<{ ok: boolean; error?: string }> {
   const prof = modProfiles(g).profiles.find((p) => p.id === id)
   if (!prof) return { ok: false, error: 'Profile not found.' }
   for (const m of load(g).mods.filter((x) => x.enabled && !prof.mods.includes(x.id))) {
-    const r = await setModEnabled(g, m.id, false)
+    const r = await toggleMod(g, m.id, false)
     if (!r.ok) return { ok: false, error: 'error' in r ? r.error : 'A mod could not be switched off.' }
   }
   for (const mid of prof.mods) {
     const m = load(g).mods.find((x) => x.id === mid)
     if (!m || m.enabled) continue
-    const r = await setModEnabled(g, mid, true, 'this')
+    const r = await toggleMod(g, mid, true, 'this')
     if (!r.ok) return { ok: false, error: 'error' in r ? r.error : `${m.name} could not be switched on.` }
   }
   log.info(`${g.id}: mod profile ${prof.name}`)

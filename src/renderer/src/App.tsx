@@ -559,7 +559,7 @@ export function App() {
       // a PIN first, on the on-screen keyboard
       if (p.hasPin) return askField(`PIN for ${p.name}`, `pin:${p.id}`)
       void api.profileSwitch(p.id).then((r) => {
-        if (!r.ok) notify({ kind: 'error', title: 'Profile not switched', detail: r.error })
+        if (!r.ok && !r.busy) notify({ kind: 'error', title: 'Profile not switched', detail: r.error })
       })
     },
     [askField, notify]
@@ -1053,7 +1053,7 @@ export function App() {
         const pid = tg.slice(tg.indexOf(':') + 1)
         if (tg.startsWith('pin:'))
           void api.profileSwitch(pid, value).then((r) => {
-            if (!r.ok) notify({ kind: 'error', title: 'Profile not switched', detail: r.error })
+            if (!r.ok && !r.busy) notify({ kind: 'error', title: 'Profile not switched', detail: r.error })
           })
         else if (tg.startsWith('setpin:'))
           void api.profilePin(pid, value, undefined).then((r) => {

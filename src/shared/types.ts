@@ -300,7 +300,8 @@ export interface StarstationApi {
   /** Own picture (file dialog; a path only in hidden tests). */
   profilePicture(id: string, file?: string): Promise<ProfileInfo[]>
   /** Switch profile (the menu starts again for the new profile). */
-  profileSwitch(id: string, pin?: string): Promise<{ ok: boolean; error?: string }>
+  /** busy: another switch (a double press) is already on its way — nothing to show. */
+  profileSwitch(id: string, pin?: string): Promise<{ ok: boolean; error?: string; busy?: boolean }>
   /** System settings from the menu (SPEC-v2 G). */
   sysAudio(): Promise<{ id: string; name: string; default: boolean }[]>
   sysAudioSet(id: string): Promise<boolean>
