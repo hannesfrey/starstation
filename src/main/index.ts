@@ -764,8 +764,27 @@ function registerIpc(): void {
   handle('game-details', (_e, id: string): GameDetails | null => {
     const g = getGame(id)
     if (!g) return null
-    const ml = listMods(g)
-    return { mods: { total: ml.length, on: ml.filter((m) => m.enabled).length, supported: modSupport(g).targets.length > 0 }, options: gameOptions(g), available: availableOptions(g), resume: resumeInfo(g), backups: listBackups(g), ownSaves: ownSaves(g).length, canBackup: !!getConsole(g.console)?.backup?.length, previousResume: previousResume(g)?.savedAt ?? null, compress: compressOption(g) ?? undefined }
+    // each part on its own: one that fails (a save file gone between listing and reading) leaves the rest
+    const safe = <T>(what: string, fn: () => T, fallback: T): T => {
+      try {
+        return fn()
+      } catch (e) {
+        log.warn(`${id}: ${what} could not be read`, e)
+        return fallback
+      }
+    }
+    const ml = safe('mods', () => listMods(g), [])
+    return {
+      mods: { total: ml.length, on: ml.filter((m) => m.enabled).length, supported: safe('mod support', () => modSupport(g).targets.length > 0, false) },
+      options: safe('options', () => gameOptions(g), { graphics: getSettings().graphicsDefault, crt: getSettings().crtDefault, patches: {} }),
+      available: safe('available options', () => availableOptions(g), { graphics: false, crt: false, patches: [] }),
+      resume: safe('resume state', () => resumeInfo(g), null),
+      backups: safe('backups', () => listBackups(g), []),
+      ownSaves: safe('own saves', () => ownSaves(g).length, 0),
+      canBackup: !!getConsole(g.console)?.backup?.length,
+      previousResume: safe('earlier resume state', () => previousResume(g)?.savedAt ?? null, null),
+      compress: safe('compress option', () => compressOption(g) ?? undefined, undefined)
+    }
   })
   handle('backup-now', async (_e, id: string) => {
     const g = getGame(id)

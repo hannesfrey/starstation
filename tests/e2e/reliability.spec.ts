@@ -419,3 +419,25 @@ test('restoring a save backup twice at the same moment: one restore runs, the sa
     await app.close()
   }
 })
+
+test('✕ still starts a game when part of its details can not be read (a broken backup folder)', async () => {
+  const files = makeFiles('details-broken')
+  const presets = makePresets(files, 300, { quickResume: true })
+  writeSettings(files, { bootAnimation: false })
+  fs.mkdirSync(path.join(files, 'games', 'testcon'), { recursive: true })
+  fs.writeFileSync(path.join(files, 'games', 'testcon', 'Alpha.tst'), 'a')
+  // a file where the game's backup folder belongs: reading its backups fails
+  fs.mkdirSync(path.join(files, 'backups', 'testcon'), { recursive: true })
+  fs.writeFileSync(path.join(files, 'backups', 'testcon', 'Alpha'), 'not a folder')
+  const { app, page } = await launchApp(files, presets)
+  try {
+    await expect(page.getByTestId('game-info')).toContainText('Alpha')
+    const d = await api<{ backups: unknown[] } | null>(page, 'gameDetails', 'testcon:alpha.tst')
+    expect(d?.backups).toEqual([]) // the rest of the details still come
+    await page.keyboard.press('Enter')
+    await expect(page.getByTestId('running')).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByTestId('running')).toHaveCount(0, { timeout: 15_000 })
+  } finally {
+    await app.close()
+  }
+})

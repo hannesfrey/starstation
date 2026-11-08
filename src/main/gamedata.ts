@@ -285,8 +285,12 @@ export function resumeStatePath(g: Game): string | null {
   if (!c?.quickResume || !c.resume) return null
   const p = fillStrict(c.resume.state, gameVars(g))
   if (!p) return null
+  // a state file can vanish between listing and reading it (the emulator replacing it): skip it
   const hits = expandGlob(p)
-    .map((f) => ({ f, t: fs.statSync(f).mtimeMs }))
+    .flatMap((f) => {
+      const st = fs.statSync(f, { throwIfNoEntry: false })
+      return st ? [{ f, t: st.mtimeMs }] : []
+    })
     .sort((a, b) => b.t - a.t)
   return hits[0]?.f ?? null
 }

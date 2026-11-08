@@ -12,6 +12,14 @@ export interface WhatsNew {
 
 export const WHATS_NEW: WhatsNew[] = [
   {
+    version: '2.0.24',
+    summary: ['A game always starts with ✕, even if some of its details can’t be read'],
+    details: [
+      'Before starting a game Starstation looks at its resume point, backups and mods. If one of those couldn’t be read (for example a broken backup folder), pressing ✕ did nothing. Now the game starts and only that detail is left out.',
+      'Screens that load something when opened (Emulators, RetroAchievements, Steam, Sound output, Screen, Licenses) no longer stay on “Loading…” if that fails.'
+    ]
+  },
+  {
     version: '2.0.23',
     summary: ['Restoring saves can’t overlap with itself or with starting the game'],
     details: [

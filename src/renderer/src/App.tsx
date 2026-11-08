@@ -229,7 +229,8 @@ export function App() {
   }, [])
 
   const loadDetails = useCallback(async (id: string) => {
-    const d = await api.gameDetails(id)
+    // a failure (logged by the main process) must not stop ✕ from starting the game: it starts without the extras
+    const d = await api.gameDetails(id).catch(() => null)
     if (d) setExtra((x) => ({ ...x, details: { ...x.details, [id]: d } }))
     return d
   }, [])

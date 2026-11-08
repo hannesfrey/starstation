@@ -89,7 +89,8 @@ export function Overlay() {
     if (!it.action) return
     sfx.confirm()
     setBusy(true)
-    await api.overlayAction(it.action)
+    // a failed action must not leave the menu deaf to every button for the rest of the game
+    await api.overlayAction(it.action).catch(() => undefined)
     setBusy(false)
   }, [])
 
