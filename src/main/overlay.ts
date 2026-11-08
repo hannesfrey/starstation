@@ -96,11 +96,56 @@ export function overlayOpen(): boolean {
 export function toggleOverlay(): void {
   if (runningClosing()) return // "Closing…" stays until the game is gone
   if (open) void hideOverlay(true)
-  else showOverlay()
+  else void showOverlay()
 }
 
-export function showOverlay(): void {
+// Emulators with a pause key (Azahar) are paused by the menu itself: the key toggles, so it is pressed again
+// only for the game the menu paused. One press at a time, so a quick PS-PS can't leave the game paused.
+let pausedPid = 0
+let pauseQueue: Promise<unknown> = Promise.resolve()
+
+function pauseKey(): string | undefined {
+  const r = runningGame()
+  const g = r ? getGame(r.gameId) : undefined
+  return g ? getEmulator(getConsole(g.console)?.emulator ?? '')?.overlay?.pauseKey : undefined
+}
+
+function queued(job: () => Promise<void>): Promise<void> {
+  const p = pauseQueue.then(job, job)
+  pauseQueue = p.catch(() => undefined)
+  return p
+}
+
+function pauseGame(pid: number): Promise<void> {
+  return queued(async () => {
+    const key = pauseKey()
+    if (!key || pausedPid === pid) return
+    const ok = HEADLESS || (await sendKeys(pid, key))
+    if (ok) pausedPid = pid
+    log.info(ok ? `game paused (${key})` : `could not pause the game (${key})`)
+  })
+}
+
+/** Press the pause key again if the menu paused this game (focuses the game, then the key). */
+function continueGame(pid: number): Promise<void> {
+  return queued(async () => {
+    const key = pauseKey()
+    if (!key || pausedPid !== pid) return
+    pausedPid = 0
+    const ok = HEADLESS || (await sendKeys(pid, key))
+    log.info(ok ? `game continued (${key})` : `could not continue the game (${key})`)
+  })
+}
+
+export async function showOverlay(): Promise<void> {
   if (!runningGame()) return
+  const pid = runningPid()
+  // pause first, while the game still has the focus: the key goes to the game window
+  if (pid && pauseKey()) {
+    open = true
+    await pauseGame(pid)
+    if (!open || !runningGame()) return // closed again meanwhile
+  }
   const w = ensure()
   // the display the game is on is usually the primary one
   w.setBounds(screen.getPrimaryDisplay().bounds)
@@ -132,6 +177,7 @@ export async function hideOverlay(resume: boolean): Promise<void> {
     await focusWindow(pid)
     await closeEmulatorMenu(pid)
   }
+  if (resume && pid) await continueGame(pid)
 }
 
 /** Emulators that open their own menu on the PS / Guide button too (xemu can't be told not to): close it. */
@@ -177,6 +223,7 @@ export async function overlayAction(action: OverlayAction): Promise<{ ok: boolea
       const combo = action === 'save-state' ? e?.overlay?.saveState : e?.overlay?.loadState
       if (!combo) return { ok: false, error: 'This emulator has no save states.' }
       await hideOverlay(false)
+      await continueGame(pid) // a paused Azahar would only save / load once it runs again
       const ok = HEADLESS || (await sendKeys(pid, combo))
       if (ok) notify({ kind: 'save', title: action === 'save-state' ? 'State saved' : 'State loaded', detail: r.title })
       return ok ? { ok: true } : { ok: false, error: 'The emulator window could not be reached.' }
@@ -186,6 +233,7 @@ export async function overlayAction(action: OverlayAction): Promise<{ ok: boolea
       if (!HEADLESS) await closeEmulatorMenu(pid) // (xemu's own menu would be in the picture)
       const file = HEADLESS ? null : await screenshot().catch((err) => (log.warn('screenshot failed', err), null))
       if (!HEADLESS) await focusWindow(pid)
+      await continueGame(pid)
       if (file) notify({ kind: 'info', title: 'Screenshot saved', detail: r.title })
       return { ok: HEADLESS || !!file }
     }

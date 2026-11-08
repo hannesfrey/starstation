@@ -36,6 +36,9 @@ const downloadsBase = () => process.env.STARSTATION_GITHUB_DOWNLOADS ?? `https:/
 const updatesDir = (...p: string[]) => dir('config', 'updates', ...p)
 const installersDir = () => updatesDir('installers')
 const installerName = (v: string) => `Starstation-Setup-${v}.exe`
+// electron-updater's cache folder (LOCALAPPDATA points into Files\config\electron, see paths.ts)
+const updaterCache = () => path.join(process.env.LOCALAPPDATA ?? '', 'starstation-updater')
+const INSTALLER_VERSION = 'installer.version'
 
 let state: UpdateState = { status: 'idle' }
 let releases: Release[] | null = null
@@ -226,11 +229,11 @@ function wireUpdater(notify: (n: Omit<Notice, 'id'>) => void): void {
   autoUpdater.on('update-downloaded', (i) => {
     state = { status: 'ready', version: i.version }
     void keepInstaller(i.downloadedFile, i.version).catch((e) => log.warn('could not keep the installer', e))
-    // the next update only downloads what changed: the updater compares against the installed version's
-    // installer, which it looks for as installer.exe in its cache folder (it never found one, so every update
-    // downloaded all 150 MB)
+    // the next update only downloads what changed: the updater compares against installer.exe in its cache
+    // folder, using current.blockmap next to it (it has just put the new version's blockmap there)
     void fsp
-      .copyFile(i.downloadedFile, path.join(path.dirname(path.dirname(i.downloadedFile)), 'installer.exe'))
+      .copyFile(i.downloadedFile, path.join(updaterCache(), 'installer.exe'))
+      .then(() => fsp.writeFile(path.join(updaterCache(), INSTALLER_VERSION), i.version))
       .catch((e) => log.warn('could not keep the installer for smaller updates', e))
     notify({ kind: 'update', title: 'Starstation update ready', detail: `Version ${i.version} is used from the next start.` })
   })
@@ -256,7 +259,9 @@ export async function checkNow(notify: (n: Omit<Notice, 'id'>) => void = () => u
     if (app.isPackaged && !HEADLESS) {
       wireUpdater(notify)
       // versions are plain numbers (1.9.1, 2.0.0): every release has latest.yml, so v1 PCs can update too
-      autoUpdater.setFeedURL({ provider: 'generic', url: `${downloadsBase()}/v${target}`, channel: 'latest' })
+      // GitHub's download server answers 501 to a request for several byte ranges at once, which made every
+      // smaller (differential) update fall back to the full installer: ask for one range at a time
+      autoUpdater.setFeedURL({ provider: 'generic', url: `${downloadsBase()}/v${target}`, channel: 'latest', useMultipleRangeRequest: false })
       void autoUpdater.checkForUpdates().catch((e) => {
         state = { status: 'error', error: (e as Error).message }
         log.warn('update download failed', e)
@@ -271,14 +276,21 @@ export async function checkNow(notify: (n: Omit<Notice, 'id'>) => void = () => u
 
 /** At start: check for updates, and make sure the running version's installer is kept (for Undo update). */
 /** The running version's installer as the updater's installer.exe, so updates only download what changed. */
+// installer.exe and current.blockmap in the updater's cache must describe the same version, else the smaller
+// download can't be put together (the result fails its checksum and the full installer is downloaded)
 async function seedDifferential(): Promise<void> {
-  const cache = path.join(process.env.LOCALAPPDATA ?? '', 'starstation-updater')
+  const cache = updaterCache()
   const kept = path.join(installersDir(), installerName(version()))
-  if (!fs.existsSync(cache) || !fs.existsSync(kept)) return
+  if (!fs.existsSync(kept)) return
   const target = path.join(cache, 'installer.exe')
-  const st = fs.existsSync(target) ? await fsp.stat(target) : null
-  if (st && st.size === (await fsp.stat(kept)).size) return
+  const marker = path.join(cache, INSTALLER_VERSION)
+  const has = fs.existsSync(marker) ? (await fsp.readFile(marker, 'utf8')).trim() : ''
+  if (has === version() && fs.existsSync(target)) return
+  await fsp.mkdir(cache, { recursive: true })
+  // the blockmap of another version: without it the updater downloads this version's blockmap from GitHub
+  await fsp.rm(path.join(cache, 'current.blockmap'), { force: true })
   await fsp.copyFile(kept, target)
+  await fsp.writeFile(marker, version())
   log.info(`installer ${version()} ready for smaller updates`)
 }
 

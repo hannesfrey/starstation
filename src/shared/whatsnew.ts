@@ -12,6 +12,15 @@ export interface WhatsNew {
 
 export const WHATS_NEW: WhatsNew[] = [
   {
+    version: '2.0.32',
+    summary: ['3DS games no longer freeze after switching to another window', 'Updates are much smaller from now on'],
+    details: [
+      '3DS: the emulator paused itself when another window was in front, then never continued (also not with Resume in the PS menu). That setting is off now; the PS menu pauses and continues the game itself. Switching to another window leaves a 3DS game running.',
+      'Every update used to download the whole 230 MB installer, because GitHub refused the way Starstation asked for only the changed parts. Now it asks for them one at a time: a typical update is about 2 MB and takes seconds.',
+      'This update itself still downloads in full; the next one is the first small one.'
+    ]
+  },
+  {
     version: '2.0.31',
     summary: ['A full disk can no longer leave the menu stuck after a game'],
     details: [

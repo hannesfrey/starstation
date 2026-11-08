@@ -22,7 +22,8 @@
   "license": "GPL-3.0",
   "overlay": {
     "saveState": "CTRL+C",
-    "loadState": "CTRL+V"
+    "loadState": "CTRL+V",
+    "pauseKey": "F4"
   },
   "log": {
     "file": "{emu}/user/log/azahar_log.txt"

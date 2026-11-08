@@ -74,8 +74,10 @@
         "UI": {
           "Shortcuts\\Main%20Window\\Capture%20Screenshot\\KeySeq\\default": "false",
           "Shortcuts\\Main%20Window\\Capture%20Screenshot\\KeySeq": "F12",
-          "pauseWhenInBackground": "true",
-          "pauseWhenInBackground\\default": "false",
+          "pauseWhenInBackground": "false",
+          "pauseWhenInBackground\\default": "true",
+          "Shortcuts\\Main%20Window\\Continue\\Pause%20Emulation\\KeySeq\\default": "false",
+          "Shortcuts\\Main%20Window\\Continue\\Pause%20Emulation\\KeySeq": "F4",
           "confirmClose": "false",
           "confirmClose\\default": "false",
           "saveStateWarning": "false",

@@ -196,3 +196,72 @@ test('couch check: the steps tick off as they happen, the result is saved', asyn
     await app.close()
   }
 })
+
+test('an emulator the menu pauses itself (3DS): paused on open, continued on Resume / Save state / Screenshot, never left paused', async () => {
+  test.setTimeout(90_000)
+  const files = makeFiles('overlaypause')
+  const presets = makePresets(files, 60_000)
+  const emuFile = path.join(presets, 'emulators', 'fakeemu.json')
+  const emu = JSON.parse(fs.readFileSync(emuFile, 'utf8'))
+  emu.overlay = { saveState: 'F1', loadState: 'F3', pauseKey: 'F4' }
+  fs.writeFileSync(emuFile, JSON.stringify(emu))
+  writeSettings(files, { bootAnimation: false })
+  fs.mkdirSync(path.join(files, 'games', 'testcon'), { recursive: true })
+  fs.writeFileSync(path.join(files, 'games', 'testcon', 'Alpha.tst'), 'a')
+  const logDir = path.join(files, 'config', 'logs')
+  const lines = () =>
+    fs
+      .readdirSync(logDir)
+      .filter((n) => n.endsWith('.log'))
+      .map((n) => fs.readFileSync(path.join(logDir, n), 'utf8'))
+      .join('')
+      .split('\n')
+      .map((l) => /game (paused|continued) \(F4\)/.exec(l)?.[1])
+      .filter(Boolean)
+  const { app, page } = await launchApp(files, presets)
+  try {
+    const ov = await overlayPage(app)
+    expect((await api<{ ok: boolean }>(page, 'launch', 'testcon:alpha.tst')).ok).toBe(true)
+
+    await api(page, 'testHome')
+    await expect(ov.getByTestId('overlay-resume')).toBeVisible()
+    await expect.poll(lines).toEqual(['paused'])
+    await ov.getByTestId('overlay-resume').click()
+    await expect.poll(lines).toEqual(['paused', 'continued'])
+
+    // PS pressed twice quickly: still one pause, one continue
+    await api(page, 'testHome')
+    await api(page, 'testHome')
+    await expect.poll(lines).toEqual(['paused', 'continued', 'paused', 'continued'])
+    await expect(ov.getByTestId('overlay-closed')).toBeAttached()
+
+    // Save state: the game runs again first (Azahar only saves while running)
+    await api(page, 'testHome')
+    await expect(ov.getByTestId('overlay-save')).toBeVisible()
+    await ov.getByTestId('overlay-save').click()
+    await expect.poll(lines).toEqual(['paused', 'continued', 'paused', 'continued', 'paused', 'continued'])
+
+    // Screenshot: continued afterwards
+    await api(page, 'testHome')
+    await expect(ov.getByTestId('overlay-shot')).toBeVisible()
+    await ov.getByTestId('overlay-shot').click()
+    await expect.poll(() => lines().length).toBe(8)
+    expect(lines().slice(-2)).toEqual(['paused', 'continued'])
+
+    // Save and quit from a paused game: closes, nothing pressed after it
+    await api(page, 'testHome')
+    await expect.poll(() => lines().length).toBe(9)
+    await ov.getByTestId('overlay-savequit').click()
+    await expect.poll(async () => (await api<{ running: unknown }>(page, 'getState')).running, { timeout: 15_000 }).toBeNull()
+    expect(lines().length).toBe(9)
+
+    // the next game starts unpaused: its first menu pauses it again
+    expect((await api<{ ok: boolean }>(page, 'launch', 'testcon:alpha.tst')).ok).toBe(true)
+    await api(page, 'testHome')
+    await expect.poll(() => lines().slice(9)).toEqual(['paused'])
+    await ov.getByTestId('overlay-resume').click()
+    await expect.poll(() => lines().slice(9)).toEqual(['paused', 'continued'])
+  } finally {
+    await app.close()
+  }
+})

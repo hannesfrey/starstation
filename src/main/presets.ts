@@ -176,7 +176,9 @@ export interface EmulatorPreset {
   log?: { file: string; fatal?: string; config?: string }
   /** PS-button menu: keys the emulator is set up to use for save / load state (missing = no save states). */
   /** resumeKeys: pressed in the emulator when the PS button menu closes (xemu: Esc closes its own Guide menu). */
-  overlay?: { saveState?: string; loadState?: string; resumeKeys?: string }
+  /** pauseKey: the emulator's pause / continue key, pressed when the PS menu opens and again when the game goes on
+   *  (Azahar: its own pause-in-background never un-pauses, so it is off and the menu pauses it itself). */
+  overlay?: { saveState?: string; loadState?: string; resumeKeys?: string; pauseKey?: string }
 }
 
 let consoles: ConsolePreset[] = []
