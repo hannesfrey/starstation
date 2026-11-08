@@ -313,7 +313,7 @@ The kept log (`rpcs3_20261107183640_…`) caught it: after 33 min of multiplayer
 
 - Found: `keepEmulatorLog` read the log for fatal / refused-setting lines only if it was ≤ 64 MB — long RPCS3 sessions (where crashes happen) were never checked. `readEnds()` reads the whole log when small, else its first and last 32 MB (refused settings come at start-up, a fatal error at the end). Unit `emulogs.test.ts` (70 MB log: both found).
 - Save-backup fingerprint (`walkFiles`) has a depth limit for links pointing back up their own tree. e2e "a save folder with a link pointing back into itself" pins that the game still starts — note: the old code passed too (Windows answers ELOOP after ~31 levels; the before-launch backup fails with a warning, the game starts), so this was a guard, not a bug.
-- Full e2e 70 passed (14 opt-in skipped), unit 90.
+- Full e2e 70 passed (14 opt-in skipped), unit 90. Released: tag `v2.0.26`, GitHub pre-release (beta); its packaged check passed.
 
 ## How to work on it
 
