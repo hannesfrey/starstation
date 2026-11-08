@@ -286,7 +286,7 @@ The kept log (`rpcs3_20261107183640_…`) caught it: after 33 min of multiplayer
 - `withModLock(gameId)` (mods.ts): per-game promise queue around every public change — setModEnabled, deleteMod, enablePending, applyModProfile, finishAdd (covers keepManual), addPatchMod. Internals call the unlocked `toggleMod` / `…Now`, so nothing waits on itself.
 - Test: e2e `reliability` "two mods switched on at the same moment" (both first-time, saves present → backups) → both tracked, both off leaves no file. Fails on the old mods.ts (one mod not marked on), passes now.
 - Profiles: two `switchProfile` calls at once (double press) both saw the old profile active and ran the save-folder journal in parallel. Now one at a time (`switching`); the second answers `busy` and the menu stays quiet. e2e "double press on a profile" (with the Xbox hard disk to move: one switch, p1's disk put away once and intact, one log line) fails on the old profiles.ts.
-- Delete game: a second press while the first is binning the files does nothing (`deleting`). Full e2e 66 passed (14 opt-in skipped), unit 88.
+- Delete game: a second press while the first is binning the files does nothing (`deleting`). Full e2e 66 passed (14 opt-in skipped), unit 88. Released: commit d0a7145, tag `v2.0.22`, GitHub pre-release (beta); its packaged check passed.
 
 ## How to work on it
 
