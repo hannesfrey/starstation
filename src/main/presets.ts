@@ -182,6 +182,20 @@ export interface EmulatorPreset {
 let consoles: ConsolePreset[] = []
 let emulators: Record<string, EmulatorPreset> = {}
 
+/** A user-made console file ("Add a console") with everything the rest of Starstation relies on, or null. */
+function customConsole(x: unknown): { console: ConsolePreset; emulator: EmulatorPreset } | null {
+  if (!x || typeof x !== 'object') return null
+  const { console: c, emulator: e } = x as { console?: Partial<ConsolePreset>; emulator?: Partial<EmulatorPreset> }
+  const str = (v: unknown) => typeof v === 'string' && v.length > 0
+  if (!c || typeof c !== 'object' || !e || typeof e !== 'object') return null
+  if (!str(c.id) || !String(c.id).startsWith('x-') || !str(c.name) || !str(e.id) || !str(e.exe) || c.emulator !== e.id) return null
+  if (!Array.isArray(c.extensions) || !c.extensions.every(str) || !c.launch || !Array.isArray(c.launch.args) || !c.launch.args.every((a) => typeof a === 'string')) return null
+  return {
+    console: { ...c, short: str(c.short) ? c.short : c.name, order: Number.isFinite(c.order) ? c.order : 1000, config: Array.isArray(c.config) ? c.config : [] } as ConsolePreset,
+    emulator: { ...e, name: str(e.name) ? e.name : e.id, folder: typeof e.folder === 'string' ? e.folder : '', portable: Array.isArray(e.portable) ? e.portable : [], importNames: Array.isArray(e.importNames) ? e.importNames : [] } as EmulatorPreset
+  }
+}
+
 export function loadPresets(): void {
   const base = presetsDir()
   const load = <T>(sub: string): T[] => {
@@ -202,8 +216,13 @@ export function loadPresets(): void {
     ? fs
         .readdirSync(dir('config', 'consoles'))
         .filter((f) => f.endsWith('.json'))
-        .map((f) => readJson<{ console: ConsolePreset; emulator: EmulatorPreset } | null>(dir('config', 'consoles', f), null))
-        .filter((x): x is { console: ConsolePreset; emulator: EmulatorPreset } => !!x)
+        .flatMap((f) => {
+          const x = readJson<unknown>(dir('config', 'consoles', f), null)
+          const ok = customConsole(x)
+          // a damaged or hand-edited file is left out (it used to stop Starstation from starting)
+          if (!ok) log.warn(`config\\consoles\\${f} is not a usable console: skipped`)
+          return ok ? [ok] : []
+        })
     : []
   for (const c of custom) emulators[c.emulator.id] = c.emulator
   consoles = [...load<ConsolePreset>('consoles'), ...custom.map((c) => ({ ...c.console, custom: true }))].sort(

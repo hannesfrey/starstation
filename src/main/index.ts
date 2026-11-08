@@ -54,7 +54,7 @@ import { cancelTransfer, packageSize, receiveByCode, receiveFromFolder, sendByCo
 import { applyModProfile, deleteModProfile, enablePending, modProfiles, saveModProfile } from './mods'
 import { readJson } from './store'
 import { consoleInfos } from './consoles'
-import { closeRunning, launch, setLauncherWindow, runningGame, runningPid, stopRunning, onBeforeLaunch, onAfterExit } from './launcher'
+import { CLOSE_TIMEOUT, closeRunning, launch, setLauncherWindow, runningGame, runningPid, stopRunning, onBeforeLaunch, onAfterExit } from './launcher'
 import { keepEmulatorLog } from './emulogs'
 import { hideOverlay, overlayAction, overlayOpen, overlayState, setupOverlay, toggleOverlay } from './overlay'
 import { audioOutputs, bluetoothDevices, bluetoothPair, bluetoothRemove, displayModes, foregroundPid, onHome, setAudioOutput, setDisplayMode, startPadHelper, stopPadHelper } from './padhelper'
@@ -1285,20 +1285,27 @@ function quitAll(): void {
 app.on('window-all-closed', quitAll)
 let guestCleared = false
 let closingGameForQuit = false
+let gaveUpWaiting = false
 /** Windows is shutting down: it closes the emulator itself, Starstation doesn't wait. */
 let windowsEnding = false
 app.on('before-quit', (e) => {
   // a game is running: it is saved and closed first, like "Save and quit" — never cut off mid-save
-  if (runningGame() && !windowsEnding) {
+  if (runningGame() && !windowsEnding && !gaveUpWaiting) {
     e.preventDefault()
     if (closingGameForQuit) return
     closingGameForQuit = true
     log.info('closing Starstation: the running game is saved and closed first')
     void closeRunning(true)
-    // closeRunning ends the emulator by itself if it hasn't closed within its time limit
+    // closeRunning ends the emulator by itself if it hasn't closed within its time limit; should even that never
+    // be noticed, Starstation still closes a little later (quitting must never hang)
+    const deadline = Date.now() + CLOSE_TIMEOUT + 10_000
     const t = setInterval(() => {
-      if (runningGame()) return
+      if (runningGame() && Date.now() < deadline) return
       clearInterval(t)
+      if (runningGame()) {
+        log.warn('the game did not close in time: Starstation closes anyway')
+        gaveUpWaiting = true
+      }
       app.quit()
     }, 200)
     return

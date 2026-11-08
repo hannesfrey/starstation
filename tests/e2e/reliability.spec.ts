@@ -263,6 +263,12 @@ test('config files holding valid JSON of the wrong shape (edited by hand) never 
   w('config/ps3updates.json', 'x')
   w('config/mods-inbox.json', 5)
   w('config/secrets.json', null) // filled in by hand
+  // read at start, before the window: none of them may stop Starstation from starting
+  w('config/updates/session.json', 'x')
+  w('config/updates/state.json', null)
+  w('config/updates/skip.json', [1])
+  w('config/guides.json', 'seen')
+  w('config/safe-mode.json', null)
   w('mods/testcon/Alpha/mods.json', { mods: { a: 1 }, owners: [] })
   const { app, page } = await launchApp(files, presets)
   try {
@@ -276,6 +282,32 @@ test('config files holding valid JSON of the wrong shape (edited by hand) never 
     // and things can be saved again
     expect(Array.isArray(await api(page, 'collectionCreate', 'Couch'))).toBe(true)
     expect((await api<{ name: string }[]>(page, 'profiles')).length).toBeGreaterThan(0)
+    await expect(page.getByTestId('error-screen')).toHaveCount(0)
+    expect(logText(files)).not.toMatch(/ ERROR /)
+  } finally {
+    await app.close()
+  }
+})
+
+test('a damaged user-made console file (config/consoles) is skipped; everything else works', async () => {
+  const { files, presets } = setup('custom-garbled', 300)
+  const w = (name: string, data: unknown) => {
+    fs.mkdirSync(path.join(files, 'config', 'consoles'), { recursive: true })
+    fs.writeFileSync(path.join(files, 'config', 'consoles', name), JSON.stringify(data))
+  }
+  w('x-broken.json', { console: { id: 'x-broken', name: 'Broken' }, emulator: { id: 'custom-x-broken' } })
+  w('x-null.json', null)
+  w('x-list.json', [1, 2])
+  w('x-strings.json', { console: 'x', emulator: 'y' })
+  const { app, page } = await launchApp(files, presets)
+  try {
+    await expect(page.getByTestId('xmb')).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByTestId('game-info')).toContainText('Alpha')
+    const s = await api<{ consoles: { id: string }[] }>(page, 'getState')
+    expect(s.consoles.some((c) => c.id.startsWith('x-'))).toBe(false)
+    expect((await api<{ ok: boolean }>(page, 'launch', 'testcon:alpha.tst')).ok).toBe(true)
+    await expect(page.getByTestId('running')).toHaveCount(0, { timeout: 15_000 })
+    expect(Array.isArray(await api(page, 'health'))).toBe(true)
     await expect(page.getByTestId('error-screen')).toHaveCount(0)
     expect(logText(files)).not.toMatch(/ ERROR /)
   } finally {

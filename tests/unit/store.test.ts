@@ -64,6 +64,23 @@ describe('JSON store', () => {
     expect(log.split(`${f} is damaged`).length - 1).toBe(1)
   })
 
+  it('valid JSON of the wrong shape gives the fallback (object ↔ object, list ↔ list); a null fallback takes anything', () => {
+    const f = path.join(tmp, 'config', 'shape.json')
+    const put = (v: unknown) => fs.writeFileSync(f, JSON.stringify(v))
+    put(null)
+    expect(readJson(f, { a: 1 })).toEqual({ a: 1 })
+    put([1, 2])
+    expect(readJson(f, { a: 1 })).toEqual({ a: 1 })
+    expect(readJson(f, [] as number[])).toEqual([1, 2])
+    put({ b: 2 })
+    expect(readJson(f, [] as unknown[])).toEqual([])
+    expect(readJson(f, {})).toEqual({ b: 2 })
+    put('text')
+    expect(readJson(f, {})).toEqual({})
+    expect(readJson<unknown>(f, null)).toBe('text')
+    expect(fs.readFileSync(f, 'utf8')).toBe('"text"') // the file itself is left alone
+  })
+
   it('reads files written with a UTF-8 BOM (Notepad, PowerShell)', () => {
     const f = path.join(tmp, 'config', 'secrets.json')
     fs.writeFileSync(f, '﻿{"ok": true}')

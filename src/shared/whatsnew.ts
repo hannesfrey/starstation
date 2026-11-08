@@ -12,6 +12,14 @@ export interface WhatsNew {
 
 export const WHATS_NEW: WhatsNew[] = [
   {
+    version: '2.0.21',
+    summary: ['A damaged console you added yourself no longer stops Starstation from starting'],
+    details: [
+      'Consoles made with "Add a console" are checked when Starstation starts. One whose file is damaged is left out (noted in the log) instead of stopping Starstation; everything else works as usual.',
+      'Every file Starstation keeps in Files\\config is now checked the same way when it is read, including the ones it reads first while starting.'
+    ]
+  },
+  {
     version: '2.0.20',
     summary: ['A settings file edited by hand can’t confuse Starstation any more'],
     details: [

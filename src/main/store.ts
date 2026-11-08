@@ -19,7 +19,14 @@ export function readJson<T>(file: string, fallback: T): T {
     return fallback // missing: that's what the fallback is for
   }
   const parsed = parse<T>(text)
-  if (parsed.ok) return parsed.value
+  if (parsed.ok) {
+    // valid JSON of another shape than expected (null or a list where an object belongs, e.g. after editing by
+    // hand) would reach code that reads its fields: the fallback is used instead (the file stays as it is)
+    if (sameShape(parsed.value, fallback)) return parsed.value
+    if (!reported.has(file)) log.warn(`${file} doesn't hold what Starstation expects; using defaults`)
+    reported.add(file)
+    return fallback
+  }
   // some files are read very often (secrets.json on every menu update): note and keep a damaged one only once
   const first = !reported.has(file)
   reported.add(file)
@@ -50,6 +57,14 @@ export function readJson<T>(file: string, fallback: T): T {
 export function readObject<T extends object>(file: string, fallback: T): T {
   const v = readJson<unknown>(file, fallback)
   return v && typeof v === 'object' && !Array.isArray(v) ? (v as T) : fallback
+}
+
+/** The value is the same kind as the fallback: object ↔ object, list ↔ list (a null fallback accepts anything). */
+function sameShape(value: unknown, fallback: unknown): boolean {
+  if (fallback === null || fallback === undefined) return true
+  if (Array.isArray(fallback)) return Array.isArray(value)
+  if (typeof fallback === 'object') return !!value && typeof value === 'object' && !Array.isArray(value)
+  return typeof value === typeof fallback
 }
 
 function parse<T>(text: string): { ok: true; value: T } | { ok: false } {

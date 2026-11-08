@@ -1,5 +1,5 @@
 import { dir } from './paths'
-import { readJson, writeJson } from './store'
+import { readObject, writeJson } from './store'
 
 /**
  * Did Starstation close normally last time? Every start writes a "running" note; a normal close
@@ -29,8 +29,20 @@ export interface StartInfo {
 const file = () => dir('config', 'updates', 'session.json')
 let info: StartInfo | null = null
 
+/** Read before anything else at start: a file of another shape must never stop Starstation from starting. */
+function load(): SessionFile {
+  const st = readObject<Partial<SessionFile>>(file(), {})
+  const last = st.last && typeof st.last === 'object' && typeof st.last.version === 'string' ? st.last : undefined
+  return {
+    last,
+    crashesInARow: Number.isInteger(st.crashesInARow) && st.crashesInARow! >= 0 ? st.crashesInARow! : 0,
+    cleanRuns: st.cleanRuns && typeof st.cleanRuns === 'object' && !Array.isArray(st.cleanRuns) ? st.cleanRuns : {},
+    versions: Array.isArray(st.versions) ? st.versions.filter((v) => typeof v === 'string') : []
+  }
+}
+
 export function startSession(version: string): StartInfo {
-  const st = readJson<SessionFile>(file(), { crashesInARow: 0, cleanRuns: {}, versions: [] })
+  const st = load()
   // another version ran last: an update replaced it (the installer ends a running Starstation), not a crash
   const crashed = !!st.last && !st.last.clean && st.last.version === version
   st.crashesInARow = crashed ? st.crashesInARow + 1 : 0
@@ -48,7 +60,7 @@ export function startSession(version: string): StartInfo {
 
 /** Normal close: not a crash. */
 export function endSession(): void {
-  const st = readJson<SessionFile>(file(), { crashesInARow: 0, cleanRuns: {}, versions: [] })
+  const st = load()
   if (!st.last || st.last.clean) return
   st.last.clean = true
   st.crashesInARow = 0
