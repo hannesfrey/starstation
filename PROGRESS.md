@@ -327,6 +327,7 @@ The kept log (`rpcs3_20261107183640_…`) caught it: after 33 min of multiplayer
 - **Monkey test** (`monkey.spec.ts`): 3 fixed seeds × 600 weighted random presses (directions, ✕, ○, △, Start, L1/R1, Select) on a library with saves and a mod target, hidden + offline; restarts if a press quits; every 25 presses no error screen and the main process answers; at the end no ERROR / menu error in the log. Explores for real (one seed: 6 game sessions, Guest profile and back, 8 folder opens held back). Mutation-checked: a planted crash in the game-options panel fails it after 74 presses.
 - Test: e2e `reliability` "hidden test runs are sealed off".
 - Full e2e 74 passed (14 opt-in skipped), unit 90. Released: tag `v2.0.28`, GitHub pre-release (beta); its packaged check passed.
+- After 2.0.28 (tests only): `monkey.spec` also covers the PS button menu during games (12 sessions: 95 menu opens, 73 resumes, 10 screenshots, 12 save-and-quits, double PS presses; play count = sessions, no ERROR) and the first-start wizard (3 seeds × 150 presses, offline; no error screen / ERROR).
 
 ## How to work on it
 

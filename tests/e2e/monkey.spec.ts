@@ -78,3 +78,74 @@ for (const seed of [1108, 2026, 4242]) test(`monkey (seed ${seed}): 600 random m
     if (app && (app as ElectronApplication).process().exitCode === null) await (app as ElectronApplication).close()
   }
 })
+
+test('monkey in the PS button menu: random presses over running games, opened and closed again and again', async () => {
+  test.setTimeout(300_000)
+  const files = makeFiles('monkey-overlay')
+  const presets = makePresets(files, 60_000, { quickResume: true }) // the fake emulator stays until it is closed
+  writeSettings(files, { bootAnimation: false })
+  fs.mkdirSync(path.join(files, 'games', 'testcon'), { recursive: true })
+  fs.writeFileSync(path.join(files, 'games', 'testcon', 'Alpha.tst'), 'a')
+  process.env.STARSTATION_TEST_OFFLINE = '1'
+  const { app, page } = await launchApp(files, presets)
+  const api = <T>(fn: string, ...args: unknown[]) =>
+    page.evaluate(([f, a]) => (window as unknown as { starstation: Record<string, (...x: unknown[]) => Promise<unknown>> }).starstation[f as string](...(a as unknown[])), [fn, args] as const) as Promise<T>
+  const running = async () => !!(await api<{ running: unknown }>('getState')).running
+  const rand = rng(77)
+  const keys = ['ArrowDown', 'ArrowDown', 'ArrowUp', 'Enter', 'Enter', 'Escape']
+  let sessions = 0
+  try {
+    await expect(page.getByTestId('game-info')).toContainText('Alpha')
+    await expect.poll(() => app.windows().some((w) => w.url().includes('#overlay')), { timeout: 10_000 }).toBe(true)
+    const ov = app.windows().find((w) => w.url().includes('#overlay'))!
+    for (let round = 0; round < 12; round++) {
+      if (!(await running())) {
+        expect((await api<{ ok: boolean; error?: string }>('launch', 'testcon:alpha.tst', rand() < 0.5 ? 'resume' : 'fresh')).ok).toBe(true)
+        sessions++
+      }
+      for (let i = 0; i < 30 && (await running()); i++) {
+        // the PS button (sometimes twice quickly), then menu presses
+        if (rand() < 0.3) await api('testHome')
+        await ov.keyboard.press(keys[Math.floor(rand() * keys.length)]).catch(() => undefined)
+        await page.waitForTimeout(40)
+        await expect(ov.getByTestId('error-screen')).toHaveCount(0)
+      }
+      // whatever happened, the game can always be ended from the menu
+      if (await running()) {
+        await api('overlayAction', 'save-quit')
+        await expect.poll(running, { timeout: 15_000 }).toBe(false)
+      }
+    }
+    expect(sessions).toBeGreaterThan(3)
+    const st = await api<{ library: { stats: Record<string, { playCount: number }> } }>('getState')
+    expect(st.library.stats['testcon:alpha.tst'].playCount).toBe(sessions)
+    const errors = logText(files).split('\n').filter((l) => / ERROR /.test(l))
+    expect(errors, errors.join('\n')).toEqual([])
+  } finally {
+    delete process.env.STARSTATION_TEST_OFFLINE
+    await app.close()
+  }
+})
+
+test('monkey in the first-start wizard: random presses never break it, and it can always be finished', async () => {
+  test.setTimeout(180_000)
+  for (const seed of [5, 6, 7]) {
+    const files = makeFiles(`monkey-wizard-${seed}`, { wizard: true })
+    process.env.STARSTATION_TEST_OFFLINE = '1'
+    const { app, page } = await launchApp(files)
+    try {
+      const rand = rng(seed)
+      const keys = ['ArrowDown', 'ArrowUp', 'Enter', 'Enter', 'Escape', 'ArrowLeft', 'ArrowRight']
+      for (let i = 0; i < 150 && app.process().exitCode === null; i++) {
+        await page.keyboard.press(keys[Math.floor(rand() * keys.length)]).catch(() => undefined)
+        await page.waitForTimeout(25).catch(() => undefined)
+        if (i % 25 === 24) await expect(page.getByTestId('error-screen')).toHaveCount(0)
+      }
+      const errors = logText(files).split('\n').filter((l) => / ERROR /.test(l))
+      expect(errors, errors.join('\n')).toEqual([])
+    } finally {
+      delete process.env.STARSTATION_TEST_OFFLINE
+      if (app.process().exitCode === null) await app.close()
+    }
+  }
+})
