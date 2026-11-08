@@ -406,6 +406,8 @@ let cancelled = false
 function croc(args: string[], onLine: (l: string) => void): Promise<number> {
   const relay = process.env.STARSTATION_CROC_RELAY ? ['--relay', process.env.STARSTATION_CROC_RELAY] : []
   if (cancelled) return Promise.resolve(-1)
+  // hidden test runs only ever use a local relay, never the public one
+  if (!relay.length && process.env.STARSTATION_HEADLESS === '1') return Promise.resolve(-1)
   return new Promise((resolve, reject) => {
     const p = spawn(path.join(binDir(), 'croc.exe'), ['--yes', '--disable-clipboard', ...relay, ...args], { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
     running = p
@@ -470,7 +472,11 @@ async function sendInventory(code: string, waitMs: number): Promise<void> {
   }
 }
 
+/** Hidden test runs only transfer through a local relay (never the public one, never waiting minutes). */
+const sealed = () => process.env.STARSTATION_HEADLESS === '1' && !process.env.STARSTATION_CROC_RELAY
+
 export async function sendByCode(c: PackageChoice, onCode: (code: string) => void, progress: (p: PackageProgress) => void): Promise<{ ok: boolean; error?: string }> {
+  if (sealed()) return { ok: false, error: 'No transfers in hidden test runs.' }
   const stage = dir('config', 'packages', `send-${Date.now()}`)
   const folder = path.join(stage, `Starstation package ${new Date().toISOString().slice(0, 10)}`)
   cancelled = false
@@ -503,6 +509,7 @@ export async function receiveByCode(
 ): Promise<{ ok: boolean; error?: string; added?: number; kept?: number; ask?: string[]; folder?: string }> {
   const clean = code.trim().toLowerCase().replace(/\s+/g, '-')
   if (clean.length < 6) return { ok: false, error: 'The code is too short.' }
+  if (sealed()) return { ok: false, error: 'No transfers in hidden test runs.' }
   cancelled = false
   // download into Files\config\packages (same drive: no extra copy later), keep it until it's unpacked
   const out = dir('config', 'packages', `receive-${clean.replace(/[^\w-]/g, '')}`)

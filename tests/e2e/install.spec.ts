@@ -6,6 +6,8 @@ import { launchApp, makeFiles, writeSettings } from './helpers'
 // Downloads real emulators from their official sources: NETWORK=1 npx playwright test install
 // (several GB; each emulator gets its own throw-away Files folder)
 test.skip(!process.env.NETWORK, 'network tests only on request')
+// hidden runs only download for real when a test says so (the app refuses otherwise)
+if (process.env.NETWORK) process.env.STARSTATION_TEST_NETWORK = '1'
 
 const EMULATORS: [id: string, exe: string][] = [
   ['pcsx2', 'pcsx2-qt.exe'],

@@ -73,6 +73,8 @@ const HEADLESS = process.env.STARSTATION_HEADLESS === '1'
 /** scripts/couch-test.mjs: real games on screen, everything muted (Starstation and the games). */
 const COUCH_TEST = process.env.STARSTATION_COUCH_TEST === '1'
 if (HEADLESS || COUCH_TEST) app.commandLine.appendSwitch('mute-audio')
+// tests that must never reach the internet (e.g. the monkey test pressing every button): all requests fail fast
+if (HEADLESS && process.env.STARSTATION_TEST_OFFLINE === '1') app.commandLine.appendSwitch('proxy-server', '127.0.0.1:9')
 const log = logger('main')
 protocol.registerSchemesAsPrivileged([
   { scheme: 'starstation-media', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }
@@ -84,6 +86,35 @@ const primary = app.requestSingleInstanceLock()
 if (!primary) app.exit(0)
 
 let win: BrowserWindow | null = null
+
+/**
+ * Explorer windows and web pages: never from hidden test runs (they would open on the screen) — there the
+ * request is only written to the log, so tests can still see it was asked for.
+ */
+const outside = {
+  openPath: async (p: string): Promise<string> => (HEADLESS ? (log.info(`(hidden run) would open ${p}`), '') : shell.openPath(p)),
+  openExternal: async (url: string): Promise<void> => (HEADLESS ? void log.info(`(hidden run) would open ${url}`) : shell.openExternal(url)),
+  showItemInFolder: (p: string): void => (HEADLESS ? void log.info(`(hidden run) would show ${p}`) : shell.showItemInFolder(p))
+}
+
+// Windows dialogs: never in hidden test runs (they would pop up on the screen) — there they answer "cancelled";
+// and without the menu window (closing) they open on their own instead of failing.
+const owner = () => (win && !win.isDestroyed() ? win : null)
+function openDialog(opts: Electron.OpenDialogOptions): Promise<Electron.OpenDialogReturnValue> {
+  if (HEADLESS) return Promise.resolve({ canceled: true, filePaths: [] })
+  const w = owner()
+  return w ? dialog.showOpenDialog(w, opts) : dialog.showOpenDialog(opts)
+}
+function saveDialog(opts: Electron.SaveDialogOptions): Promise<Electron.SaveDialogReturnValue> {
+  if (HEADLESS) return Promise.resolve({ canceled: true, filePath: '' })
+  const w = owner()
+  return w ? dialog.showSaveDialog(w, opts) : dialog.showSaveDialog(opts)
+}
+function messageBox(opts: Electron.MessageBoxOptions): Promise<Electron.MessageBoxReturnValue> {
+  if (HEADLESS) return Promise.resolve({ response: opts.cancelId ?? 0, checkboxChecked: false })
+  const w = owner()
+  return w ? dialog.showMessageBox(w, opts) : dialog.showMessageBox(opts)
+}
 
 /** TV mode: the whole menu (and the PS button menu) a quarter bigger, for reading from the couch. */
 function applyTvMode(): void {
@@ -121,7 +152,7 @@ function createWindow(): BrowserWindow {
   if (HEADLESS) w.webContents.setAudioMuted(true)
   else w.once('ready-to-show', () => w.show())
   w.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https?:\/\//.test(url)) shell.openExternal(url)
+    if (/^https?:\/\//.test(url)) outside.openExternal(url)
     return { action: 'deny' }
   })
   w.webContents.on('will-navigate', (e) => e.preventDefault())
@@ -193,20 +224,20 @@ async function runCommand(command: string, arg?: string): Promise<void> {
       const f = arg ? folderFor(arg) : null
       if (f) {
         fs.mkdirSync(f, { recursive: true })
-        await shell.openPath(f)
+        await outside.openPath(f)
       }
       return
     }
     case 'show-file': {
       // only files inside Files (e.g. the diagnostics report)
       const p = arg ? path.resolve(arg) : ''
-      if (p && fs.existsSync(p)) shell.showItemInFolder(p)
+      if (p && fs.existsSync(p)) outside.showItemInFolder(p)
       return
     }
     case 'open-path': {
       // only folders inside Files\ (e.g. one save backup)
       const p = arg ? path.resolve(arg) : ''
-      if (p && p.toLowerCase().startsWith(path.resolve(filesDir()).toLowerCase() + path.sep) && fs.existsSync(p)) await shell.openPath(p)
+      if (p && p.toLowerCase().startsWith(path.resolve(filesDir()).toLowerCase() + path.sep) && fs.existsSync(p)) await outside.openPath(p)
       return
     }
     case 'rescan':
@@ -226,7 +257,7 @@ async function runCommand(command: string, arg?: string): Promise<void> {
       if (arg) await doInstallEmulator(arg)
       return
     case 'install-core':
-      if (!arg || runningGame() || installing.has('retroarch')) return
+      if (!arg || runningGame() || installing.has('retroarch') || (HEADLESS && process.env.STARSTATION_TEST_NETWORK !== '1')) return
       installing.add('retroarch')
       try {
         await installCore(arg, (text) => send('emulator-progress', { id: 'retroarch', text }))
@@ -245,12 +276,12 @@ async function runCommand(command: string, arg?: string): Promise<void> {
     case 'open-secrets': {
       const f = dir('config', 'secrets.json')
       if (!fs.existsSync(f)) writeJson(f, { screenscraper: { username: '', password: '', devid: '', devpassword: '' }, retroachievements: { username: '', password: '', webApiKey: '' } })
-      await shell.openPath(f)
+      await outside.openPath(f)
       return
     }
     case 'open-url':
       // only official pages from presets are passed here
-      if (arg && /^https:\/\//.test(arg)) await shell.openExternal(arg)
+      if (arg && /^https:\/\//.test(arg)) await outside.openExternal(arg)
       return
     case 'quit':
       app.quit()
@@ -270,6 +301,8 @@ async function doInstallEmulator(id: string): Promise<{ ok: boolean; error?: str
     return { ok: false, error: 'Close the game first.' }
   }
   if (installing.has(id)) return { ok: false, error: 'It is being installed already.' }
+  // hidden test runs never download real emulators (hundreds of MB) unless a test asks for it on purpose
+  if (HEADLESS && process.env.STARSTATION_TEST_NETWORK !== '1') return { ok: false, error: 'No downloads in hidden test runs.' }
   installing.add(id)
   try {
     const info = await installEmulator(id, (text) => send('emulator-progress', { id, text }))
@@ -294,7 +327,7 @@ async function installPs3Firmware(): Promise<void> {
     notify({ kind: 'error', title: 'RPCS3 is not installed', detail: 'Install it in Settings → Games & emulators → Emulators first.' })
     return
   }
-  const choice = await dialog.showMessageBox(win!, {
+  const choice = await messageBox({
     type: 'question',
     title: 'PS3 firmware',
     message: 'RPCS3 needs the official PS3 system software (PS3UPDAT.PUP).',
@@ -302,9 +335,9 @@ async function installPs3Firmware(): Promise<void> {
     buttons: ['Choose PS3UPDAT.PUP…', 'Open download page', 'Cancel'],
     cancelId: 2
   })
-  if (choice.response === 1 && ps3.bios?.url) await shell.openExternal(ps3.bios.url)
+  if (choice.response === 1 && ps3.bios?.url) await outside.openExternal(ps3.bios.url)
   if (choice.response !== 0) return
-  const pick = await dialog.showOpenDialog(win!, {
+  const pick = await openDialog({
     title: 'Choose PS3UPDAT.PUP',
     filters: [{ name: 'PS3 firmware', extensions: ['PUP', 'pup'] }],
     properties: ['openFile']
@@ -411,7 +444,7 @@ function registerIpc(): void {
     const name = `starstation-report-${new Date().toISOString().slice(0, 10)}.zip`
     let to = dir('config', 'diagnostics', name)
     if (!HEADLESS) {
-      const pick = await dialog.showSaveDialog(win!, { title: 'Save diagnostics report', defaultPath: to, filters: [{ name: 'Zip', extensions: ['zip'] }] })
+      const pick = await saveDialog({ title: 'Save diagnostics report', defaultPath: to, filters: [{ name: 'Zip', extensions: ['zip'] }] })
       if (pick.canceled || !pick.filePath) return null
       to = pick.filePath
     }
@@ -451,7 +484,7 @@ function registerIpc(): void {
     send('consoles', consoleInfos())
   })
   handle('pick-exe', async () => {
-    const pick = await dialog.showOpenDialog(win!, { title: 'Choose the emulator program', properties: ['openFile'], filters: [{ name: 'Programs', extensions: ['exe'] }] })
+    const pick = await openDialog({ title: 'Choose the emulator program', properties: ['openFile'], filters: [{ name: 'Programs', extensions: ['exe'] }] })
     return pick.canceled ? null : (pick.filePaths[0] ?? null)
   })
   handle('library-clear-cache', () => {
@@ -493,7 +526,7 @@ function registerIpc(): void {
   handle('package-save-folder', async (_e, c: PackageChoice) => {
     let base = dir('backups', 'packages')
     if (!HEADLESS) {
-      const pick = await dialog.showOpenDialog(win!, { title: 'Choose where to save the package (e.g. a USB drive)', properties: ['openDirectory', 'createDirectory'] })
+      const pick = await openDialog({ title: 'Choose where to save the package (e.g. a USB drive)', properties: ['openDirectory', 'createDirectory'] })
       if (pick.canceled || !pick.filePaths[0]) return null
       base = pick.filePaths[0]
     }
@@ -518,7 +551,7 @@ function registerIpc(): void {
     let f = folder
     if (!f || !HEADLESS) {
       if (HEADLESS) return null
-      const pick = await dialog.showOpenDialog(win!, { title: 'Choose the package folder', properties: ['openDirectory'] })
+      const pick = await openDialog({ title: 'Choose the package folder', properties: ['openDirectory'] })
       if (pick.canceled || !pick.filePaths[0]) return null
       f = pick.filePaths[0]
     }
@@ -529,7 +562,7 @@ function registerIpc(): void {
   handle('package-prepare-folder', async (_e, folder?: string) => {
     let f = HEADLESS && typeof folder === 'string' ? folder : null
     if (!f) {
-      const pick = await dialog.showOpenDialog(win!, { title: 'Choose the drive or folder the package will be saved to', properties: ['openDirectory', 'createDirectory'] })
+      const pick = await openDialog({ title: 'Choose the drive or folder the package will be saved to', properties: ['openDirectory', 'createDirectory'] })
       if (pick.canceled || !pick.filePaths[0]) return null
       f = pick.filePaths[0]
     }
@@ -622,7 +655,7 @@ function registerIpc(): void {
   handle('profile-picture', async (_e, id: string, file?: string) => {
     let src = HEADLESS && typeof file === 'string' ? file : null
     if (!src) {
-      const pick = await dialog.showOpenDialog(win!, { title: 'Choose a profile picture', properties: ['openFile'], filters: [{ name: 'Pictures', extensions: ['png', 'jpg', 'jpeg'] }] })
+      const pick = await openDialog({ title: 'Choose a profile picture', properties: ['openFile'], filters: [{ name: 'Pictures', extensions: ['png', 'jpg', 'jpeg'] }] })
       if (pick.canceled || !pick.filePaths[0]) return listProfiles()
       src = pick.filePaths[0]
     }
@@ -650,7 +683,7 @@ function registerIpc(): void {
     let src: string | null = HEADLESS && typeof file === 'string' ? file : null
     if (file === null) src = null
     else if (!src) {
-      const pick = await dialog.showOpenDialog(win!, { title: 'Choose a picture', properties: ['openFile'], filters: [{ name: 'Pictures', extensions: ['png', 'jpg', 'jpeg'] }] })
+      const pick = await openDialog({ title: 'Choose a picture', properties: ['openFile'], filters: [{ name: 'Pictures', extensions: ['png', 'jpg', 'jpeg'] }] })
       if (pick.canceled || !pick.filePaths[0]) return { ok: false }
       src = pick.filePaths[0]
     }
@@ -854,7 +887,7 @@ function registerIpc(): void {
     if (kind !== 'icon' && kind !== 'background') return { ok: false, error: 'Unknown picture' }
     let src = HEADLESS && typeof file === 'string' ? file : null
     if (!src) {
-      const pick = await dialog.showOpenDialog(win!, {
+      const pick = await openDialog({
         title: `${kind === 'icon' ? 'Choose a cover' : 'Choose a background'} for ${g.title}`,
         properties: ['openFile'],
         filters: [{ name: 'Pictures', extensions: ['png', 'jpg', 'jpeg'] }]
@@ -898,7 +931,7 @@ function registerIpc(): void {
   handle('mod-add-dialog', async (_e, id: string, folder: boolean) => {
     const g = getGame(id)
     if (!g) return null
-    const pick = await dialog.showOpenDialog(win!, {
+    const pick = await openDialog({
       title: folder ? 'Choose a mod folder' : 'Choose a mod file',
       properties: [folder ? 'openDirectory' : 'openFile'],
       ...(folder ? {} : { filters: [{ name: 'Mods', extensions: ['zip', '7z', 'rar', 'pnach', 'png', 'dds', 'ips', 'bps', 'ppf', 'xdelta', 'vcdiff'] }, { name: 'All files', extensions: ['*'] }] })
@@ -932,7 +965,7 @@ function registerIpc(): void {
   handle('collection-toggle', (_e, id: string, gameId: string) => pushCollections(toggleInCollection(id, gameId)))
   handle('add-games', (_e, paths: string[], consoleId?: string) => doAddGames(paths, consoleId))
   handle('add-games-dialog', async () => {
-    const pick = await dialog.showOpenDialog(win!, { title: 'Add games', properties: ['openFile', 'multiSelections'] })
+    const pick = await openDialog({ title: 'Add games', properties: ['openFile', 'multiSelections'] })
     if (pick.canceled || !pick.filePaths.length) return null
     return doAddGames(pick.filePaths)
   })

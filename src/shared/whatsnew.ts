@@ -12,6 +12,15 @@ export interface WhatsNew {
 
 export const WHATS_NEW: WhatsNew[] = [
   {
+    version: '2.0.28',
+    summary: ['Tested with thousands of random button presses'],
+    details: [
+      'A new "monkey" test presses random menu buttons hundreds of times in a row (like a controller in a child’s hands) and checks that no screen breaks and nothing goes wrong. It passes.',
+      'Windows file dialogs (choose a picture, add games…) can no longer fail when Starstation’s window is closing.',
+      'Starstation’s hidden tests can no longer open windows on your screen, touch your real Steam folder, download, or install a driver by accident.'
+    ]
+  },
+  {
     version: '2.0.27',
     summary: ['Converting an Xbox game can no longer lose it'],
     details: [

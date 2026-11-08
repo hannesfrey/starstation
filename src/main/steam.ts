@@ -70,6 +70,8 @@ export function writeVdf(m: VdfMap): Buffer {
 // ---------- Steam folders ----------
 export function steamDir(): string | null {
   if (process.env.STARSTATION_STEAM_DIR) return process.env.STARSTATION_STEAM_DIR
+  // hidden test runs never touch the real Steam folder
+  if (process.env.STARSTATION_HEADLESS === '1') return null
   try {
     // read-only registry lookup of where Steam is installed
     const out = execFileSync('reg', ['query', 'HKCU\\Software\\Valve\\Steam', '/v', 'SteamPath'], { encoding: 'utf8', windowsHide: true })

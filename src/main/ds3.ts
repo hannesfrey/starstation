@@ -74,8 +74,10 @@ export async function installDs3Driver(): Promise<{ ok: boolean; error?: string;
     const logFile = dir('config', 'logs', 'ds3-driver.log')
     fs.mkdirSync(out, { recursive: true })
     fs.rmSync(path.join(out, 'ds3-install.json'), { force: true })
-    log.info('installing the PS3 controller driver (DsHidMini) — Windows asks for permission')
     const t = process.env.STARSTATION_TEST_DS3_INSTALL
+    // a hidden test run never starts the real (elevated) driver setup
+    if (!t && process.env.STARSTATION_HEADLESS === '1') return { ok: false, error: 'No driver setup in hidden test runs.' }
+    log.info('installing the PS3 controller driver (DsHidMini) — Windows asks for permission')
     let code: number | null
     if (t) {
       // hidden tests: no Windows prompt; "ok" writes what the real script writes

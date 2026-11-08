@@ -500,3 +500,22 @@ test('a save folder with a link pointing back into itself: the game still starts
     await app.close()
   }
 })
+
+test('hidden test runs are sealed off: no Explorer / browser windows, no real Steam, downloads, driver setup or public relay', async () => {
+  const { files, presets } = setup('sealed', 300)
+  const { app, page } = await launchApp(files, presets)
+  try {
+    await expect(page.getByTestId('game-info')).toContainText('Alpha')
+    await api(page, 'runCommand', 'open-folder', 'logs')
+    await api(page, 'runCommand', 'open-url', 'https://example.com/')
+    await expect.poll(() => logText(files)).toContain('(hidden run) would open https://example.com/')
+    expect(logText(files)).toMatch(/\(hidden run\) would open .*logs/)
+    expect((await api<{ found: boolean }>(page, 'steamStatus')).found).toBe(false)
+    expect((await api<{ ok: boolean; error?: string }>(page, 'installEmulator', 'duckstation')).error).toContain('No downloads in hidden test runs')
+    expect((await api<{ ok: boolean; error?: string }>(page, 'packageReceive', '1234-not-sent-anywhere', false)).ok).toBe(false)
+    await api(page, 'runCommand', 'install-ds3-driver')
+    await expect.poll(() => logText(files)).not.toContain('installing the PS3 controller driver')
+  } finally {
+    await app.close()
+  }
+})
