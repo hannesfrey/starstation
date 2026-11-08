@@ -29,7 +29,7 @@ export interface PadLike {
 export function parseXState(text: string): XSlot[] {
   const out: XSlot[] = []
   for (const part of text.trim().split(';')) {
-    const m = /^(\d):(-?\d+),(-?\d+),(-?\d+),(-?\d+),(\d+),(\d+),(\d+)$/.exec(part.trim())
+    const m = /^(\d+):(-?\d+),(-?\d+),(-?\d+),(-?\d+),(\d+),(\d+),(\d+)$/.exec(part.trim())
     if (!m) continue
     const n = m.slice(1).map(Number)
     out.push({ slot: n[0], lx: n[1], ly: n[2], rx: n[3], ry: n[4], lt: n[5], rt: n[6], buttons: n[7] })

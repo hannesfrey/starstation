@@ -12,8 +12,18 @@ import type { XSlot } from '../../shared/padmatch'
 /** A pad the menu can read: Chromium's Gamepad, or one made from the pad helper (xinputSlot = its XInput slot). */
 export type MenuPad = Gamepad & { xinputSlot?: number }
 
+interface PadInfo {
+  vendor: string
+  product: string
+  type: number
+  kind: 'gamepad' | 'joystick'
+  name: string
+}
+
 interface Feed {
   slots: XSlot[]
+  /** Pads read through SDL (10+): name and maker, so the menu shows the right button icons. */
+  info?: Record<number, PadInfo>
   /** PlayStation pads on HID the pad helper sees. */
   hid: number
   /** The pad helper isn't running: Chromium only. */
@@ -60,7 +70,7 @@ const BITS: [number, number][] = [
 ]
 
 /** A pad helper slot as a standard-mapping Gamepad (index = XInput slot, so the PS menu and player screen know it). */
-export function virtualPad(s: XSlot): MenuPad {
+export function virtualPad(s: XSlot, info?: PadInfo): MenuPad {
   const off = { pressed: false, touched: false, value: 0 }
   const buttons = Array.from({ length: 17 }, () => off)
   for (const [bit, i] of BITS) if (s.buttons & bit) buttons[i] = { pressed: true, touched: true, value: 1 }
@@ -70,7 +80,8 @@ export function virtualPad(s: XSlot): MenuPad {
   const n = (v: number) => Math.max(-1, Math.min(1, v / 32767))
   return {
     index: s.slot,
-    id: XINPUT_ID,
+    // XInput slots 0-3: an Xbox-style pad; SDL pads (10+): named like a browser names them, maker ids included
+    id: s.slot < 10 || !info ? XINPUT_ID : `${info.name} (STANDARD GAMEPAD Vendor: ${info.vendor} Product: ${info.product})`,
     connected: true,
     mapping: 'standard',
     // Gamepad Y axes point down, XInput's up
@@ -78,7 +89,7 @@ export function virtualPad(s: XSlot): MenuPad {
     buttons,
     timestamp: performance.now(),
     vibrationActuator: null,
-    xinputSlot: s.slot
+    xinputSlot: s.slot < 10 ? s.slot : undefined
   } as unknown as MenuPad
 }
 
@@ -96,7 +107,8 @@ export function getPads(): (MenuPad | null)[] {
   hook()
   if (!feed && waiting) return []
   if (!feed || feed.off) return chromium()
-  const pads: MenuPad[] = feed.slots.map(virtualPad)
+  const info = feed.info ?? {}
+  const pads: MenuPad[] = feed.slots.map((s) => virtualPad(s, info[s.slot]))
   // Chromium only for PlayStation pads on HID (it would also list the Xbox-style ones again)
   if (feed.hid > 0) for (const p of chromium()) if (p && p.connected && !XINPUT.test(p.id)) pads.push(shifted(p))
   return pads

@@ -22,7 +22,21 @@ export interface XPadFeed {
   slots: XSlot[]
   hid: number
   off?: boolean
+  /** Pads the helper reads through SDL (number 10+): who they are (XInput slots 0-3 need no info). */
+  info?: Record<number, PadInfo>
 }
+export interface PadInfo {
+  vendor: string
+  product: string
+  /** SDL gamepad type (PS4 5, PS5 6, Switch Pro 7, ...), 0 = unknown */
+  type: number
+  /** gamepad = SDL knows its layout; joystick = buttons in the usual order */
+  kind: 'gamepad' | 'joystick'
+  name: string
+}
+/** The helper reads non-Xbox pads itself through SDL: Chromium is then never needed. */
+let sdlOn = false
+const padInfo: Record<number, PadInfo> = {}
 let xfeed: XPadFeed = { slots: [], hid: 0, off: true }
 let xpadListeners: ((f: XPadFeed) => void)[] = []
 const hidCount = (pads: string[]) => Number(pads.find((p) => p.startsWith('hid:'))?.slice(4) ?? 0) || 0
@@ -55,6 +69,8 @@ export function startPadHelper(): void {
   }
   const p = spawn(exe, [], { stdio: ['pipe', 'pipe', 'ignore'], windowsHide: true })
   proc = p
+  sdlOn = false
+  for (const k of Object.keys(padInfo)) delete padInfo[Number(k)]
   pushFeed({ slots: [], hid: 0 }) // running: the menu waits for its pads instead of falling back to Chromium
   // writing to a helper that just died must not throw
   p.stdin?.on('error', () => undefined)
@@ -71,9 +87,18 @@ export function startPadHelper(): void {
     } else if (line.startsWith('pads ')) {
       lastPads = line.slice(5).split(',').filter(Boolean)
       for (const l of padsListeners) l(lastPads)
-      if (hidCount(lastPads) !== xfeed.hid) pushFeed({ ...xfeed, hid: hidCount(lastPads) })
+      const hid = sdlOn ? 0 : hidCount(lastPads)
+      if (hid !== xfeed.hid) pushFeed({ ...xfeed, hid })
     } else if (line.startsWith('xpads')) {
-      pushFeed({ slots: parseXState(line.slice(5)), hid: hidCount(lastPads) })
+      pushFeed({ slots: parseXState(line.slice(5)), hid: sdlOn ? 0 : hidCount(lastPads), info: { ...padInfo } })
+    } else if (line.startsWith('padinfo ')) {
+      const [index, vendor, product, type, kind, ...name] = line.slice(8).split('|')
+      padInfo[Number(index)] = { vendor, product, type: Number(type) || 0, kind: kind === 'joystick' ? 'joystick' : 'gamepad', name: name.join('|').trim() || 'Controller' }
+      log.info(`controller via SDL: ${padInfo[Number(index)].name} (${vendor}:${product})`)
+    } else if (line.startsWith('sdl ')) {
+      sdlOn = line.startsWith('sdl on')
+      if (sdlOn) log.info(`controllers: ${line}`)
+      else log.warn(`controllers: ${line} (PlayStation pads on HID are read by Chromium instead)`)
     } else if (line === 'ready') log.info('helper ready')
     else {
       const cmd = answerTo(line)

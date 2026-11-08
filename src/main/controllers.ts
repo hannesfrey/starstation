@@ -12,6 +12,7 @@ import type { PlayerPad } from '../shared/types'
 
 const log = logger('controllers')
 const file = () => dir('config', 'controllers.json')
+const XINPUT_ID = /xinput|xbox/i
 
 interface Known {
   api: 'xinput' | 'sdl'
@@ -62,7 +63,12 @@ export function padVars(order?: PlayerPad[]): Record<string, string> {
   const k = known()
   const sdl = k.api === 'sdl'
   const count = Math.max(1, Math.min(4, order?.length ?? k.pads.length))
-  const players: PlayerPad[] = [0, 1, 2, 3].map((i) => order?.[i] ?? { api: k.api, index: i, id: sdl ? k.pads[i] : undefined })
+  // no chosen order: the known controllers in the menu's order, each with its own kind — an Xbox-style pad and a
+  // PS5 pad together are XInput-0 and SDL-0, not XInput-0 and XInput-1 (2.0.36; before, all got the first's kind)
+  let nx = 0
+  let ns = 0
+  const known4 = k.pads.slice(0, 4).map((id): PlayerPad => (XINPUT_ID.test(id) ? { api: 'xinput', index: nx++ } : { api: 'sdl', index: ns++, id }))
+  const players: PlayerPad[] = [0, 1, 2, 3].map((i) => order?.[i] ?? known4[i] ?? { api: k.api, index: i, id: sdl ? k.pads[i] : undefined })
   const v: Record<string, string> = {
     // extra screenshot buttons (only SDL can see the PlayStation touchpad / Xbox Share button)
     padshot: sdl ? 'SDL-0/Touchpad' : '',

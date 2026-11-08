@@ -25,7 +25,7 @@ Updates install themselves (active on the next start). Uninstalling removes only
 
 BIOS files, firmware and games are not included and never downloaded by Starstation — use dumps of your own consoles and games. PS3 firmware comes from Sony's official page.
 
-Starstation uses only its own artwork and sounds. The emulators belong to their authors under their own licenses (Settings → About → Licenses). Bundled helpers: 7-Zip (`7zr.exe`, LGPL) and croc (MIT).
+Starstation uses only its own artwork and sounds. The emulators belong to their authors under their own licenses (Settings → About → Licenses). Bundled helpers: 7-Zip (`7zr.exe`, LGPL), croc (MIT), SDL 3 and SDL_GameControllerDB (zlib; controller support in the menu).
 
 ## Development
 

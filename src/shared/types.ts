@@ -268,7 +268,7 @@ export interface StarstationApi {
   /** Sticks / triggers / buttons of every XInput pad now (to find who pressed PS). */
   padSnapshot(): Promise<import('./padmatch').XSlot[]>
   /** The pad helper's Xbox-style pads now (null in hidden test runs). */
-  xpadsNow(): Promise<{ slots: import('./padmatch').XSlot[]; hid: number; off?: boolean } | null>
+  xpadsNow(): Promise<{ slots: import('./padmatch').XSlot[]; hid: number; off?: boolean; info?: Record<number, { vendor: string; product: string; type: number; kind: 'gamepad' | 'joystick'; name: string }> } | null>
   overlayAction(action: OverlayAction): Promise<{ ok: boolean; error?: string }>
   /** Couch check: the one-time test with the user's own controller (Settings → Diagnostics). */
   couchStart(): Promise<void>

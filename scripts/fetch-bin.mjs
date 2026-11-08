@@ -73,6 +73,23 @@ const files = [
     local: [path.resolve(import.meta.dirname, '..', 'tools', 'cache', 'dshidmini', 'rt', 'windowsdesktop-runtime-10.0.14-win-x64.exe')],
     signer: 'Microsoft Corporation',
     timeout: 300_000
+  },
+  {
+    // SDL 3.4.20 (zlib) — the pad helper reads every non-Xbox controller with it (PS4/PS5, Switch, 8BitDo, generic),
+    // like the emulators do. https://github.com/libsdl-org/SDL/releases — sha256 = GitHub's digest for the asset.
+    name: 'SDL3-3.4.20-win32-x64.zip',
+    url: 'https://github.com/libsdl-org/SDL/releases/download/release-3.4.20/SDL3-3.4.20-win32-x64.zip',
+    sha256: '368bed8b24e44ad9ea372990814f2343fcfb9e468abb7f8f4a3bc146c7304752',
+    local: [],
+    unzip: { 'SDL3.dll': 'SDL3.dll', 'LICENSE.txt': 'SDL3-LICENSE.txt' }
+  },
+  {
+    // SDL_GameControllerDB (zlib), pinned commit 07af1d5 (2026-11-02): layouts of ~870 more Windows controllers
+    // https://github.com/mdqinc/SDL_GameControllerDB
+    name: 'gamecontrollerdb.txt',
+    url: 'https://raw.githubusercontent.com/mdqinc/SDL_GameControllerDB/07af1d50187e94c861c9f9f5d8a55b148f11306b/gamecontrollerdb.txt',
+    sha256: '4ef169fcee14ef9563e36ebf731dc6950494e553bf8b56b5fc8aa70181f0d25c',
+    local: []
   }
 ]
 

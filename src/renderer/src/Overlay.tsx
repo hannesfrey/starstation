@@ -55,9 +55,11 @@ export function Overlay() {
       window.clearInterval(watch)
       const mine = ++opening
       const slot = /^xinput:(\d)$/.exec(openedBy ?? '')
-      // the pad helper feeds the menu: its pads are numbered by XInput slot, so the presser is known for sure
-      if (slot && padHelperFeeds()) {
-        input.setOnlyPad(Number(slot[1]))
+      // the pad helper feeds the menu: its pads are numbered by XInput slot (0-3) or SDL pad (10+), so the presser
+      // is known for sure
+      const any = /^(?:xinput|pad):(\d+)$/.exec(openedBy ?? '')
+      if (any && padHelperFeeds()) {
+        input.setOnlyPad(Number(any[1]))
         return
       }
       if (slot) {

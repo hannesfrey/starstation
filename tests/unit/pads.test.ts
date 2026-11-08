@@ -72,3 +72,23 @@ describe('menu controllers: Xbox-style pads from the pad helper, Chromium only w
     expect(m.getPads()).toEqual([ds4])
   })
 })
+
+describe('menu controllers read through SDL (PS4/PS5, Switch, 8BitDo, generic)', () => {
+  it('become standard pads numbered 10+, named with their maker so the menu shows the right buttons', async () => {
+    const dualsense = { slot: 10, lx: 0, ly: 0, rx: 0, ry: 0, lt: 0, rt: 0, buttons: 0x2000 | 0x0400 }
+    const info = { 10: { vendor: '054c', product: '0ce6', type: 6, kind: 'gamepad', name: 'DualSense Wireless Controller' } }
+    const { m } = await load({ slots: [slots[0], dualsense], hid: 0, info })
+    const pads = m.getPads()
+    expect(pads.map((p) => p!.index)).toEqual([0, 10])
+    expect(pads[1]!.id).toBe('DualSense Wireless Controller (STANDARD GAMEPAD Vendor: 054c Product: 0ce6)')
+    expect(pads[1]!.xinputSlot).toBeUndefined()
+    expect(pads[1]!.buttons[1].pressed).toBe(true) // ○ / east
+    expect(pads[1]!.buttons[16].pressed).toBe(true) // PS
+    expect(pads[0]!.xinputSlot).toBe(0)
+  })
+
+  it('the stream format carries two-digit numbers', async () => {
+    const { parseXState } = await import('../../src/shared/padmatch')
+    expect(parseXState('0:1,2,3,4,5,6,7;12:-1,-2,-3,-4,0,255,4096').map((s) => s.slot)).toEqual([0, 12])
+  })
+})

@@ -12,6 +12,16 @@ export interface WhatsNew {
 
 export const WHATS_NEW: WhatsNew[] = [
   {
+    version: '2.0.36',
+    summary: ['Almost every controller works in the menu', 'Starstation uses next to no computer power while waiting'],
+    details: [
+      'Starstation now reads controllers with SDL, the same controller library the emulators use, plus a database of about 870 more controller models: PS4 and PS5 pads, Switch Pro and Joy-Cons, 8BitDo, Stadia, Logitech, and most other gamepads. Xbox-style pads (and PS3 pads with their driver) keep their own fast reader.',
+      'Unknown gamepads still work in the menu with the usual button order. Wheels, flight sticks and dance mats are left out, so they never move the menu.',
+      'The PS menu knows exactly which controller pressed PS / Home, for every kind of controller.',
+      'Mixed controllers (e.g. an Xbox-style pad and a PS5 pad): each player now gets their own controller in the game, also without the "Press ✕ for Player 1" screen.'
+    ]
+  },
+  {
     version: '2.0.35',
     summary: ['The menu reacts instantly again'],
     details: [

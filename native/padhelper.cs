@@ -602,9 +602,192 @@ static class PadHelper
      *  Windows again here would include the slow empty slots). */
     static volatile string lastXState = "";
 
+    // ---------------- SDL3: every other controller ----------------
+    // PS4 / PS5 / Switch Pro / Joy-Cons / 8BitDo / Stadia / generic pads, through SDL (zlib license, bundled as SDL3.dll)
+    // and the community controller database (gamecontrollerdb.txt) — the same library the emulators use, so the menu
+    // supports what the games support. SDL's own XInput reading is off (it is slow on some PCs, and it would list the
+    // Xbox-style pads a second time): those come from the XInput reader above, which also knows their slot.
+    const string SDL = "SDL3.dll";
+    const CallingConvention CD = CallingConvention.Cdecl;
+    [DllImport(SDL, CallingConvention = CD)] [return: MarshalAs(UnmanagedType.I1)] static extern bool SDL_SetHint(byte[] name, byte[] value);
+    [DllImport(SDL, CallingConvention = CD)] [return: MarshalAs(UnmanagedType.I1)] static extern bool SDL_Init(uint flags);
+    [DllImport(SDL, CallingConvention = CD)] [return: MarshalAs(UnmanagedType.I1)] static extern bool SDL_PollEvent(IntPtr ev);
+    [DllImport(SDL, CallingConvention = CD)] static extern void SDL_free(IntPtr p);
+    [DllImport(SDL, CallingConvention = CD)] static extern int SDL_AddGamepadMappingsFromFile(byte[] file);
+    [DllImport(SDL, CallingConvention = CD)] static extern IntPtr SDL_GetJoysticks(out int count);
+    [DllImport(SDL, CallingConvention = CD)] [return: MarshalAs(UnmanagedType.I1)] static extern bool SDL_IsGamepad(uint id);
+    [DllImport(SDL, CallingConvention = CD)] static extern int SDL_GetJoystickTypeForID(uint id);
+    [DllImport(SDL, CallingConvention = CD)] static extern IntPtr SDL_GetJoystickPathForID(uint id);
+    [DllImport(SDL, CallingConvention = CD)] static extern IntPtr SDL_GetJoystickNameForID(uint id);
+    [DllImport(SDL, CallingConvention = CD)] static extern ushort SDL_GetJoystickVendorForID(uint id);
+    [DllImport(SDL, CallingConvention = CD)] static extern ushort SDL_GetJoystickProductForID(uint id);
+    [DllImport(SDL, CallingConvention = CD)] static extern IntPtr SDL_OpenGamepad(uint id);
+    [DllImport(SDL, CallingConvention = CD)] static extern void SDL_CloseGamepad(IntPtr g);
+    [DllImport(SDL, CallingConvention = CD)] static extern int SDL_GetGamepadType(IntPtr g);
+    [DllImport(SDL, CallingConvention = CD)] static extern IntPtr SDL_GetGamepadName(IntPtr g);
+    [DllImport(SDL, CallingConvention = CD)] static extern short SDL_GetGamepadAxis(IntPtr g, int axis);
+    [DllImport(SDL, CallingConvention = CD)] [return: MarshalAs(UnmanagedType.I1)] static extern bool SDL_GetGamepadButton(IntPtr g, int button);
+    [DllImport(SDL, CallingConvention = CD)] static extern IntPtr SDL_OpenJoystick(uint id);
+    [DllImport(SDL, CallingConvention = CD)] static extern void SDL_CloseJoystick(IntPtr j);
+    [DllImport(SDL, CallingConvention = CD)] static extern int SDL_GetNumJoystickButtons(IntPtr j);
+    [DllImport(SDL, CallingConvention = CD)] static extern int SDL_GetNumJoystickAxes(IntPtr j);
+    [DllImport(SDL, CallingConvention = CD)] static extern int SDL_GetNumJoystickHats(IntPtr j);
+    [DllImport(SDL, CallingConvention = CD)] [return: MarshalAs(UnmanagedType.I1)] static extern bool SDL_GetJoystickButton(IntPtr j, int b);
+    [DllImport(SDL, CallingConvention = CD)] static extern short SDL_GetJoystickAxis(IntPtr j, int a);
+    [DllImport(SDL, CallingConvention = CD)] static extern byte SDL_GetJoystickHat(IntPtr j, int h);
+    [DllImport("winmm.dll")] static extern uint timeBeginPeriod(uint ms);
+
+    static byte[] Utf8z(string s) { return Encoding.UTF8.GetBytes(s + "\0"); }
+    static string FromUtf8(IntPtr p)
+    {
+        if (p == IntPtr.Zero) return "";
+        int n = 0;
+        while (Marshal.ReadByte(p, n) != 0) n++;
+        var b = new byte[n];
+        Marshal.Copy(p, b, 0, n);
+        return Encoding.UTF8.GetString(b);
+    }
+
+    class SdlPad
+    {
+        public uint Id;
+        public int Index;          // 10 + n: the menu's number for it (0-3 are XInput slots)
+        public IntPtr Gamepad;     // SDL knows its layout
+        public IntPtr Joystick;    // unknown device: buttons / hat / sticks in the usual order
+        public bool WasGuide;
+    }
+    static readonly object sdlLock = new object();
+    static string sdlState = "";        // "index:lx,ly,rx,ry,lt,rt,buttons;…" in XInput terms
+    static volatile bool sdlOn = false;
+    static readonly AutoResetEvent devicesChanged = new AutoResetEvent(false);
+
+    // SDL gamepad buttons (positional) → XInput button bits
+    static readonly ushort[] SDL_BITS = { 0x1000, 0x2000, 0x4000, 0x8000, 0x0020, 0x0400, 0x0010, 0x0040, 0x0080, 0x0100, 0x0200, 0x0001, 0x0002, 0x0004, 0x0008 };
+    // unknown devices: button n → the usual meaning (south, east, west, north, LB, RB, LT, RT, back, start, LS, RS, guide)
+    static readonly ushort[] GENERIC_BITS = { 0x1000, 0x2000, 0x4000, 0x8000, 0x0100, 0x0200, 0, 0, 0x0020, 0x0010, 0x0040, 0x0080, 0x0400 };
+
+    static short Up(short v) { return (short)(v == short.MinValue ? short.MaxValue : -v); } // SDL Y points down, XInput up
+
+    static string SdlLine(SdlPad p)
+    {
+        int lx = 0, ly = 0, rx = 0, ry = 0, lt = 0, rt = 0, b = 0;
+        if (p.Gamepad != IntPtr.Zero)
+        {
+            lx = SDL_GetGamepadAxis(p.Gamepad, 0); ly = Up(SDL_GetGamepadAxis(p.Gamepad, 1));
+            rx = SDL_GetGamepadAxis(p.Gamepad, 2); ry = Up(SDL_GetGamepadAxis(p.Gamepad, 3));
+            lt = Math.Max(0, (int)SDL_GetGamepadAxis(p.Gamepad, 4)) * 255 / 32767;
+            rt = Math.Max(0, (int)SDL_GetGamepadAxis(p.Gamepad, 5)) * 255 / 32767;
+            for (int i = 0; i < SDL_BITS.Length; i++) if (SDL_GetGamepadButton(p.Gamepad, i)) b |= SDL_BITS[i];
+        }
+        else
+        {
+            int nb = SDL_GetNumJoystickButtons(p.Joystick), na = SDL_GetNumJoystickAxes(p.Joystick);
+            for (int i = 0; i < nb && i < GENERIC_BITS.Length; i++)
+            {
+                if (!SDL_GetJoystickButton(p.Joystick, i)) continue;
+                if (i == 6) lt = 255; else if (i == 7) rt = 255; else b |= GENERIC_BITS[i];
+            }
+            if (na > 0) lx = SDL_GetJoystickAxis(p.Joystick, 0);
+            if (na > 1) ly = Up(SDL_GetJoystickAxis(p.Joystick, 1));
+            if (na > 3) { rx = SDL_GetJoystickAxis(p.Joystick, 2); ry = Up(SDL_GetJoystickAxis(p.Joystick, 3)); }
+            if (SDL_GetNumJoystickHats(p.Joystick) > 0)
+            {
+                byte h = SDL_GetJoystickHat(p.Joystick, 0); // up 1, right 2, down 4, left 8
+                if ((h & 1) != 0) b |= 0x0001;
+                if ((h & 4) != 0) b |= 0x0002;
+                if ((h & 8) != 0) b |= 0x0004;
+                if ((h & 2) != 0) b |= 0x0008;
+            }
+        }
+        return p.Index + ":" + lx + "," + ly + "," + rx + "," + ry + "," + lt + "," + rt + "," + b;
+    }
+
+    /** Joystick types that never drive a menu: wheels, flight sticks, dance pads, guitars, drums, throttles. */
+    static bool MenuType(int t) { return t == 0 || t == 1 || t == 3 || t == 8; }
+
+    static void SdlThread()
+    {
+        try
+        {
+            SDL_SetHint(Utf8z("SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS"), Utf8z("1"));
+            SDL_SetHint(Utf8z("SDL_XINPUT_ENABLED"), Utf8z("0"));
+            if (!SDL_Init(0x2000)) { Say("sdl off: init failed"); return; } // SDL_INIT_GAMEPAD
+            string db = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "gamecontrollerdb.txt");
+            int maps = File.Exists(db) ? SDL_AddGamepadMappingsFromFile(Utf8z(db)) : 0;
+            sdlOn = true;
+            Say("sdl on (" + maps + " extra mappings)");
+        }
+        catch (Exception e) { Say("sdl off: " + e.GetType().Name); return; }
+
+        var pads = new Dictionary<uint, SdlPad>();
+        IntPtr ev = Marshal.AllocHGlobal(256);
+        bool rescan = true;
+        while (true)
+        {
+            // device events: SDL_EVENT_JOYSTICK_ADDED 0x605 / REMOVED 0x606, GAMEPAD_ADDED 0x653 / REMOVED 0x654
+            while (SDL_PollEvent(ev))
+            {
+                int type = Marshal.ReadInt32(ev);
+                if (type == 0x605 || type == 0x606 || type == 0x653 || type == 0x654) rescan = true;
+            }
+            if (rescan)
+            {
+                rescan = false;
+                devicesChanged.Set(); // the XInput reader looks at its empty slots too
+                int n;
+                IntPtr list = SDL_GetJoysticks(out n);
+                var seen = new HashSet<uint>();
+                for (int i = 0; i < n; i++)
+                {
+                    uint id = (uint)Marshal.ReadInt32(list, i * 4);
+                    seen.Add(id);
+                    if (pads.ContainsKey(id)) continue;
+                    // Xbox-style (XInput) devices: the XInput reader has them, with their slot
+                    if (FromUtf8(SDL_GetJoystickPathForID(id)).IndexOf("IG_", StringComparison.OrdinalIgnoreCase) >= 0) continue;
+                    if (!MenuType(SDL_GetJoystickTypeForID(id))) continue;
+                    var p = new SdlPad { Id = id };
+                    var used = new HashSet<int>();
+                    foreach (var q in pads.Values) used.Add(q.Index);
+                    p.Index = 10;
+                    while (used.Contains(p.Index)) p.Index++;
+                    string name;
+                    int kind;
+                    if (SDL_IsGamepad(id)) { p.Gamepad = SDL_OpenGamepad(id); name = FromUtf8(SDL_GetGamepadName(p.Gamepad)); kind = p.Gamepad == IntPtr.Zero ? -1 : SDL_GetGamepadType(p.Gamepad); }
+                    else { p.Joystick = SDL_OpenJoystick(id); name = FromUtf8(SDL_GetJoystickNameForID(id)); kind = 0; }
+                    if (p.Gamepad == IntPtr.Zero && p.Joystick == IntPtr.Zero) continue;
+                    pads[id] = p;
+                    // the menu's name for it: like a browser's ("<name> (STANDARD GAMEPAD Vendor: vvvv Product: pppp)")
+                    Say("padinfo " + p.Index + "|" + SDL_GetJoystickVendorForID(id).ToString("x4") + "|" + SDL_GetJoystickProductForID(id).ToString("x4") + "|" + kind + "|" + (p.Gamepad != IntPtr.Zero ? "gamepad" : "joystick") + "|" + name.Replace("|", " "));
+                }
+                SDL_free(list);
+                foreach (var id in new List<uint>(pads.Keys))
+                {
+                    if (seen.Contains(id)) continue;
+                    var p = pads[id];
+                    if (p.Gamepad != IntPtr.Zero) SDL_CloseGamepad(p.Gamepad);
+                    if (p.Joystick != IntPtr.Zero) SDL_CloseJoystick(p.Joystick);
+                    pads.Remove(id);
+                }
+            }
+            var parts = new List<string>();
+            foreach (var p in pads.Values)
+            {
+                string line = SdlLine(p);
+                parts.Add(line);
+                bool guide = (int.Parse(line.Substring(line.LastIndexOf(',') + 1)) & 0x0400) != 0;
+                if (guide && !p.WasGuide) Say("home pad:" + p.Index);
+                p.WasGuide = guide;
+            }
+            string st = string.Join(";", parts.ToArray());
+            lock (sdlLock) { sdlState = st; }
+            Thread.Sleep(16);
+        }
+    }
+
     // ---------------- main ----------------
     static void Main(string[] args)
     {
+        timeBeginPeriod(1); // so the 16 ms waits are 16 ms, not Windows' default 15.6 ms steps (31 ms)
         Console.OutputEncoding = Encoding.UTF8;
         // XInput: asking about an EMPTY slot can be very slow (Hannes's PC with two DsHidMini pads: ~70 ms per call,
         // it makes Windows look at every XInput device). So only connected slots are read every 16 ms; empty slots
@@ -623,12 +806,17 @@ static class PadHelper
                     catch (Exception) { r = 1; }
                     if (r == 0) Volatile.Write(ref connected[i], true);
                 }
-                try { ScanHid(); } catch (Exception) { }
-                Thread.Sleep(2000);
+                // PS4 / PS5 pads: SDL reads them (and their PS button); only without SDL the own HID readers do
+                if (!sdlOn) try { ScanHid(); } catch (Exception) { }
+                // with SDL: look again when a device comes or goes (SDL tells), at the latest after 30 s
+                devicesChanged.WaitOne(sdlOn ? 30000 : 2000);
             }
         });
         probe.IsBackground = true;
         probe.Start();
+        var sdl = new Thread(SdlThread);
+        sdl.IsBackground = true;
+        sdl.Start();
 
         var poll = new Thread(() =>
         {
@@ -660,6 +848,9 @@ static class PadHelper
                 if (now != lastPads) { Say("pads " + now); lastPads = now; }
                 // the menu reads Xbox-style pads from here (Chromium's own reading asks about empty slots ~60 times a
                 // second): every change, as one line with all connected pads
+                string fromSdl;
+                lock (sdlLock) { fromSdl = sdlState; }
+                if (fromSdl.Length > 0) state.Add(fromSdl);
                 string st = string.Join(";", state.ToArray());
                 lastXState = st;
                 if (st != lastState) { Say("xpads " + st); lastState = st; }
