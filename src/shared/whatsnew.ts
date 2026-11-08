@@ -12,6 +12,14 @@ export interface WhatsNew {
 
 export const WHATS_NEW: WhatsNew[] = [
   {
+    version: '2.0.30',
+    summary: ['Better on USB sticks and exFAT / FAT32 drives'],
+    details: [
+      'Xbox discs are converted there too (a copy is used where the drive can’t do hard links).',
+      'The Health check now tells you when the drive can’t link folders, which means some emulators keep their saves in their own folder, out of reach of save backups and profiles. An NTFS drive avoids that.'
+    ]
+  },
+  {
     version: '2.0.29',
     summary: ['Works on PCs whose user name isn’t written in Latin letters'],
     details: [

@@ -59,7 +59,11 @@ export async function toXiso(file: string, trash: Trash): Promise<Note | null> {
     // extract-xiso renames the file it reads to ".old" (even on failure): give it a hard link, so the
     // game itself is never touched until the new image checks out (same drive: no extra space)
     const link = path.join(tmp, 'disc.iso')
-    await fsp.link(file, link)
+    await fsp.link(file, link).catch(async (e) => {
+      // a drive without hard links (exFAT / FAT32, e.g. a USB stick): a copy, if there's room for it next to the XISO
+      if (freeBytes(path.dirname(file)) < size * 2 + 512 * 1024 ** 2) throw e
+      await fsp.copyFile(file, link)
+    })
     // extract-xiso works with paths in the PC's old code page: a Files path with e.g. Japanese or Cyrillic letters
     // fails, even as relative names. It runs in the short (plain ASCII) form of tmp, with relative names.
     const code = await run(path.join(binDir(), 'extract-xiso.exe'), ['-r', '-d', path.relative(tmp, outDir), path.basename(link)], await plainFolder(tmp), 60 * 60_000)

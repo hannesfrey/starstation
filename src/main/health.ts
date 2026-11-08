@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { filesDir } from './paths'
+import { dir, filesDir } from './paths'
 import { allConsoles, getEmulator } from './presets'
 import { emulatorInstalled } from './emuconfig'
 import { biosStatus } from './bios'
@@ -10,6 +10,26 @@ import { emulatorInfos } from './emulators'
 import { gpuDrivers, homeConflicts } from './system'
 import { ds3Status } from './ds3'
 import type { HealthIssue } from '../shared/types'
+
+/** Can a folder link (junction) be made on the drive with Files\? Tried once in Files\config. */
+let linkCheck: boolean | null = null
+export function canLinkFolders(): boolean {
+  if (linkCheck !== null) return linkCheck
+  const target = dir('config', 'link-check-target')
+  const link = dir('config', 'link-check')
+  try {
+    fs.mkdirSync(target, { recursive: true })
+    fs.rmSync(link, { recursive: true, force: true })
+    fs.symlinkSync(target, link, 'junction')
+    linkCheck = true
+  } catch {
+    linkCheck = false
+  } finally {
+    fs.rmSync(link, { recursive: true, force: true })
+    fs.rmSync(target, { recursive: true, force: true })
+  }
+  return linkCheck
+}
 
 /** Settings → Health check: everything that would stop a game from starting, each with a fix or an instruction. */
 export function healthCheck(): HealthIssue[] {
@@ -75,6 +95,15 @@ export function healthCheck(): HealthIssue[] {
   } catch {
     /* statfs not available */
   }
+
+  // a drive that can't link folders (exFAT / FAT32, e.g. a USB stick): saves of some emulators then stay inside the
+  // emulator, where backups and profiles don't see them — say so instead of failing quietly at every start
+  if (!canLinkFolders())
+    issues.push({
+      severity: 'warning',
+      title: 'This drive can’t link folders',
+      detail: 'Starstation is on a drive formatted as exFAT or FAT32. Some emulators then keep their saves in their own folder, where save backups and profiles don’t reach them. On an NTFS drive everything works.'
+    })
 
   // OneDrive syncing the folder would upload every game and fight over open saves
   if (/\\OneDrive[^\\]*\\/i.test(filesDir() + '\\'))

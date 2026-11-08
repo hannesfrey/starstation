@@ -112,3 +112,42 @@ test('Xbox conversion also works when the Starstation folder has Japanese / Cyri
     await app.close()
   }
 })
+
+test('a drive without hard links (exFAT / FAT32 USB stick): Xbox conversion and packages fall back to copies', async () => {
+  test.setTimeout(120_000)
+  const files = makeFiles('nolinks')
+  writeSettings(files, { bootAnimation: false })
+  const inbox = path.join(files, '_inbox')
+  fs.mkdirSync(inbox, { recursive: true })
+  fullXboxDisc(path.join(files, '_work'), path.join(inbox, 'Big Game (USA).iso'))
+  const { app, page } = await launchApp(files)
+  try {
+    // from now on every hard link fails, like on exFAT
+    await app.evaluate(() => {
+      const fs = (process as unknown as { getBuiltinModule: (m: string) => typeof import('node:fs') }).getBuiltinModule('node:fs')
+      const no = () => Object.assign(new Error('EPERM: operation not permitted, link'), { code: 'EPERM' })
+      fs.linkSync = () => {
+        throw no()
+      }
+      fs.promises.link = async () => {
+        throw no()
+      }
+      // folder links (junctions) neither
+      fs.symlinkSync = () => {
+        throw no()
+      }
+    })
+    const x = await api<{ added: { path: string }[] }>(page, 'addGames', [path.join(inbox, 'Big Game (USA).iso')], 'xbox')
+    expect(x.added).toHaveLength(1)
+    await expect(page.getByTestId('notices')).toContainText('Xbox game converted', { timeout: 30_000 })
+    // a package saved to a folder copies instead of linking
+    const pkg = await api<{ ok: boolean; folder: string }>(page, 'packageSaveToFolder', { emulators: false, bios: false, games: 'all', mods: false, settings: true, saves: false, onlyNew: false, profiles: [] })
+    expect(pkg.ok).toBe(true)
+    expect(fs.existsSync(path.join(pkg.folder, 'games', 'xbox', 'Big Game (USA).iso'))).toBe(true)
+    // the Health check says why some saves stay inside the emulators
+    const health = await api<{ title: string }[]>(page, 'health')
+    expect(health.map((h) => h.title)).toContain('This drive can’t link folders')
+  } finally {
+    await app.close()
+  }
+})
