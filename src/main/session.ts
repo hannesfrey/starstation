@@ -29,6 +29,15 @@ export interface StartInfo {
 const file = () => dir('config', 'updates', 'session.json')
 let info: StartInfo | null = null
 
+/** Only bookkeeping (crash count): a full disk must never stop Starstation from starting or closing. */
+function save(st: SessionFile): void {
+  try {
+    writeJson(file(), st)
+  } catch {
+    /* nothing to do: the next start just can't tell how this one ended */
+  }
+}
+
 /** Read before anything else at start: a file of another shape must never stop Starstation from starting. */
 function load(): SessionFile {
   const st = readObject<Partial<SessionFile>>(file(), {})
@@ -48,7 +57,7 @@ export function startSession(version: string): StartInfo {
   st.crashesInARow = crashed ? st.crashesInARow + 1 : 0
   if (st.versions[0] !== version) st.versions = [version, ...st.versions.filter((v) => v !== version)].slice(0, 10)
   st.last = { version, startedAt: Date.now(), clean: false }
-  writeJson(file(), st)
+  save(st)
   info = {
     crashedLastTime: crashed,
     crashesInARow: st.crashesInARow,
@@ -65,7 +74,7 @@ export function endSession(): void {
   st.last.clean = true
   st.crashesInARow = 0
   st.cleanRuns[st.last.version] = (st.cleanRuns[st.last.version] ?? 0) + 1
-  writeJson(file(), st)
+  save(st)
 }
 
 export function startInfo(): StartInfo {

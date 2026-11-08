@@ -12,6 +12,14 @@ export interface WhatsNew {
 
 export const WHATS_NEW: WhatsNew[] = [
   {
+    version: '2.0.31',
+    summary: ['A full disk can no longer leave the menu stuck after a game'],
+    details: [
+      'If the play time couldn’t be saved when a game ended (for example because the drive was full), the menu kept thinking the game was still running and ignored the controller. Now it comes back as usual and tells you the play time wasn’t saved.',
+      'Starstation also starts and shows your games when it can’t write its own bookkeeping files (e.g. a full drive); before, it didn’t start at all.'
+    ]
+  },
+  {
     version: '2.0.30',
     summary: ['Better on USB sticks and exFAT / FAT32 drives'],
     details: [

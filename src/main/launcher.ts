@@ -277,14 +277,21 @@ async function prepareAndStart(gameId: string, mode: LaunchMode, extraArgs: stri
       if (running?.proc === proc) running = null
       if (discard && game) await discardSessionResume(game, startedAt).catch((e) => log.warn('could not drop the resume state', e))
       holdNotices(false)
-      couchMark('closed')
-      updateStats(gameId, (s) => ({
-        ...s,
-        playTime: s.playTime + seconds,
-        playCount: s.playCount + 1,
-        lastPlayed: Date.now()
-      }))
+      // the menu hears first that the game is over: if anything below fails (a full disk can't save the play
+      // time), the controller must still work in the menu again
       send('running', null)
+      try {
+        couchMark('closed')
+        updateStats(gameId, (s) => ({
+          ...s,
+          playTime: s.playTime + seconds,
+          playCount: s.playCount + 1,
+          lastPlayed: Date.now()
+        }))
+      } catch (e) {
+        log.error(`${gameId}: play time not saved`, e)
+        notify({ kind: 'warning', title: 'Play time not saved', detail: `${(e as Error).message}. Is the drive full?` })
+      }
       send('library', view())
       if (seconds < 4 && code !== 0) {
         notify({
@@ -294,7 +301,11 @@ async function prepareAndStart(gameId: string, mode: LaunchMode, extraArgs: stri
           action: { label: 'Open logs', command: 'open-folder', arg: 'logs' }
         })
       }
-      for (const h of afterHooks) Promise.resolve(h(gameId, seconds, code, startedAt)).catch((e) => log.warn('after-exit hook failed', e))
+      // each one on its own, also one that fails at once (not only later)
+      for (const h of afterHooks)
+        Promise.resolve()
+          .then(() => h(gameId, seconds, code, startedAt))
+          .catch((e) => log.warn('after-exit hook failed', e))
       bringToFront()
     })
   })

@@ -642,3 +642,44 @@ test("Starstation in a folder with accents, spaces, & and an apostrophe (another
     await app.close()
   }
 })
+
+test('a full disk when a game ends: the menu still comes back (controller works) and says the play time was not saved', async () => {
+  const { files, presets } = setup('disk-full', 300)
+  const { app, page } = await launchApp(files, presets)
+  try {
+    await expect(page.getByTestId('game-info')).toContainText('Alpha')
+    // from now on, saving play time fails like on a full disk
+    await app.evaluate(() => {
+      const fs = (process as unknown as { getBuiltinModule: (m: string) => typeof import('node:fs') }).getBuiltinModule('node:fs')
+      const open = fs.openSync
+      fs.openSync = ((p: string, ...rest: unknown[]) => {
+        if (String(p).includes('stats.json')) throw Object.assign(new Error('ENOSPC: no space left on device, open'), { code: 'ENOSPC' })
+        return (open as (...a: unknown[]) => number)(p, ...rest)
+      }) as typeof fs.openSync
+    })
+    expect((await api<{ ok: boolean }>(page, 'launch', 'testcon:alpha.tst')).ok).toBe(true)
+    await expect(page.getByTestId('running')).toHaveCount(0, { timeout: 15_000 })
+    await expect(page.getByTestId('notices')).toContainText('Play time not saved')
+    // the menu takes input again: the other game can be chosen and started
+    expect((await api<{ running: unknown }>(page, 'getState')).running).toBeNull()
+    expect((await api<{ ok: boolean }>(page, 'launch', 'testcon:beta.tst')).ok).toBe(true)
+    await expect(page.getByTestId('running')).toHaveCount(0, { timeout: 15_000 })
+  } finally {
+    await app.close()
+  }
+})
+
+test('files Starstation can not write at start (like a full disk): it still starts and shows the games', async () => {
+  const { files, presets } = setup('cant-write', 300)
+  // folders where these files belong: every write to them fails
+  fs.mkdirSync(path.join(files, 'config', 'updates', 'session.json'), { recursive: true })
+  fs.mkdirSync(path.join(files, 'config', 'library', 'library.json'), { recursive: true })
+  const { app, page } = await launchApp(files, presets)
+  try {
+    await expect(page.getByTestId('xmb')).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByTestId('game-info')).toContainText('Alpha', { timeout: 15_000 })
+    expect((await api<{ library: { games: unknown[] } }>(page, 'getState')).library.games).toHaveLength(2)
+  } finally {
+    await app.close()
+  }
+})

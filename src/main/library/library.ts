@@ -92,12 +92,21 @@ export function rescan(): LibraryView {
     }
   }
   games = dedupeInstalled(next)
-  writeJson(cacheFile(), { version: CACHE_VERSION, games } satisfies CacheFile)
+  saveCache()
   log.info(`scan: ${games.length} games (${added} new) in ${Date.now() - t0} ms`)
   return view()
 }
 
 /** A disc game in games\ps3 and its installed update in dev_hdd0 share a serial: keep the disc. */
+/** The cache only makes the next start faster: if it can't be written (full disk), the menu still gets the games. */
+function saveCache(): void {
+  try {
+    writeJson(cacheFile(), { version: CACHE_VERSION, games } satisfies CacheFile)
+  } catch (e) {
+    log.warn('library cache not saved', e)
+  }
+}
+
 function dedupeInstalled(list: (Game & { mtime: number })[]): (Game & { mtime: number })[] {
   const discSerials = new Set(list.filter((g) => g.kind !== 'installed' && g.serial).map((g) => `${g.console}:${g.serial}`))
   return list.filter((g) => g.kind !== 'installed' || !discSerials.has(`${g.console}:${g.serial}`))
@@ -208,7 +217,7 @@ export function reattachArtwork(): boolean {
     attachLocalArtwork(g)
     if (`${g.icon}|${g.background}|${g.manual}|${g.video}` !== before) changed = true
   }
-  if (changed) writeJson(cacheFile(), { version: CACHE_VERSION, games } satisfies CacheFile)
+  if (changed) saveCache()
   return changed
 }
 
