@@ -41,11 +41,12 @@ export function referencedFiles(file: string): string[] {
 }
 
 /** Disc image to read for a PS1/PS2 game file (resolves .cue/.m3u). */
-export function discImage(file: string): string | null {
+export function discImage(file: string, depth = 0): string | null {
   const ext = path.extname(file).toLowerCase()
   if (ext === '.m3u') {
+    // a playlist naming itself (or another playlist that names it back) stops here
     const first = referencedFiles(file)[0]
-    return first ? discImage(first) : null
+    return first && depth < 4 ? discImage(first, depth + 1) : null
   }
   if (ext === '.cue') return cueDataFile(file)
   if (['.iso', '.bin', '.img'].includes(ext)) return file
@@ -102,15 +103,24 @@ function cleanSfoTitle(t: string): string {
   return t.replace(/[\r\n]+/g, ' ').replace(/[™®]/g, '').replace(/\s+/g, ' ').trim()
 }
 
+/** The first bytes of a file; the file is always closed again (also when reading fails). */
+function head(file: string, len: number): Buffer {
+  const fd = fs.openSync(file, 'r')
+  try {
+    const b = Buffer.alloc(len)
+    fs.readSync(fd, b, 0, len, 0)
+    return b
+  } finally {
+    fs.closeSync(fd)
+  }
+}
+
 /** GameCube/Wii disc header: 6-char game ID at 0, title at 0x20 (plain .iso/.gcm only). */
 export function nintendoDiscId(file: string): { id: string; title: string } | null {
   const ext = path.extname(file).toLowerCase()
   if (!['.iso', '.gcm'].includes(ext)) return null
   try {
-    const fd = fs.openSync(file, 'r')
-    const b = Buffer.alloc(0x60)
-    fs.readSync(fd, b, 0, 0x60, 0)
-    fs.closeSync(fd)
+    const b = head(file, 0x60)
     const id = b.toString('latin1', 0, 6)
     if (!/^[A-Z0-9]{6}$/.test(id)) return null
     return { id, title: b.toString('latin1', 0x20, 0x60).replace(/\0.*$/s, '').trim() }
@@ -137,10 +147,7 @@ export function cleanTitle(name: string): string {
 export function n3dsTitleId(file: string): string | null {
   if (!/\.(3ds|cci)$/i.test(file)) return null
   try {
-    const fd = fs.openSync(file, 'r')
-    const b = Buffer.alloc(0x110)
-    fs.readSync(fd, b, 0, 0x110, 0)
-    fs.closeSync(fd)
+    const b = head(file, 0x110)
     if (b.toString('latin1', 0x100, 0x104) !== 'NCSD') return null
     return b.readBigUInt64LE(0x108).toString(16).toUpperCase().padStart(16, '0')
   } catch {
@@ -177,10 +184,7 @@ export function n3dsEncrypted(file: string): boolean | null {
 export function n64Header(file: string): { name: string; code: string } | null {
   if (!/\.(z64|n64|v64)$/i.test(file)) return null
   try {
-    const fd = fs.openSync(file, 'r')
-    const b = Buffer.alloc(0x40)
-    fs.readSync(fd, b, 0, 0x40, 0)
-    fs.closeSync(fd)
+    const b = head(file, 0x40)
     const magic = b.readUInt32BE(0)
     if (magic === 0x37804012) b.swap16() // .v64: byte-swapped
     else if (magic === 0x40123780) b.swap32() // .n64: little-endian

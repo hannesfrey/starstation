@@ -12,6 +12,15 @@ export interface WhatsNew {
 
 export const WHATS_NEW: WhatsNew[] = [
   {
+    version: '2.0.18',
+    summary: ['Damaged or odd game files can no longer trip Starstation up'],
+    details: [
+      'Two disc playlists (.m3u) that point at each other used to make Starstation go round in circles when adding, sorting or deleting the game. Now that stops at once.',
+      'A damaged disc image can’t make Starstation try to read gigabytes of it.',
+      'Game files are always let go after their header is read, also when reading fails.'
+    ]
+  },
+  {
     version: '2.0.17',
     summary: ['Questions that delete or change something now start on the safe answer'],
     details: [

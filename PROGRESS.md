@@ -4,9 +4,9 @@ Read SPEC.md first. This file tracks where the build stands and every small deci
 
 ## Current state
 
-- **Phase:** v2 done. Latest beta: **2.0.17** (2026-11-07: 2.0.13 trophies removed + reliability round, 2.0.14 follow-ups, 2.0.15 compact Settings + PS menu per player, 2.0.16 netplay + downloads, 2.0.17 safe default answers). v1.0.0 is still what everyone else gets; only Hannes presses "Release to everyone".
+- **Phase:** v2 done. Latest beta: **2.0.18** (2026-11-07: 2.0.13 trophies removed + reliability round, 2.0.14 follow-ups, 2.0.15 compact Settings + PS menu per player, 2.0.16 netplay + downloads, 2.0.17 safe default answers, 2.0.18 damaged-file robustness). v1.0.0 is still what everyone else gets; only Hannes presses "Release to everyone".
 - **Earlier sessions (2026-11-07):** 2.0.10 player 2 from the first start (padVars count + RPCS3 new pad copies player 1's Config, fresh = VID 1356/PID 616); 2.0.11 RPCS3 "Exclusive Fullscreen Mode": "Disable" + emulator-refused settings logged; 2.0.12 PS3 game updates from Sony (`src/main/ps3updates.ts`, `formats/ps3update.ts`, panel 'ps3-update'). Black Ops II updated for real to 01.19. Gran Turismo 6 (BCUS98296) still 01.00: 21 updates / 11.2 GB offered at its next start.
-- **Waiting on Hannes:** restart Starstation to get 2.0.17 (also brings 2.0.12–2.0.16); check the PS menu with two players (only the one who pressed PS should move it) and the new Settings groups; play BO2 to see if the freezes are gone (earlier crash = RPCS3 stall tripping the game's own 30 s hang watchdog, not Starstation). If it crashes again: read `Files\config\logs\emulators` (RPCS3 log is kept).
+- **Waiting on Hannes:** restart Starstation to get 2.0.18 (also brings 2.0.12–2.0.17); check the PS menu with two players (only the one who pressed PS should move it) and the new Settings groups; play BO2 to see if the freezes are gone (earlier crash = RPCS3 stall tripping the game's own 30 s hang watchdog, not Starstation). If it crashes again: read `Files\config\logs\emulators` (RPCS3 log is kept).
 - **Still open:** DsHidMini driver install on a real DS3; real-pad check of the PS button; MK7 Mii + 3DS controller check.
 - **Reliability round, part 2 (Hannes asked for this session + half the next):** done in 2.0.14–2.0.15: packages receive, compress, Steam writer, custom consoles, stuck screens (health, storage, import, packages, player screen), PS menu per player (ground truth only), packaged-build check before every release. Still open: the remaining renderer `api.x().then` calls without `.catch` are one-shot loads (only logged on failure); a real two-pad check of the PS menu lock.
 - **Release routine:** bump package.json + whatsnew.ts entry → tests (`npx vitest run`, `npx playwright test`) → commit → `git tag vX` → push tag → `node scripts/release.mjs "<notes>"` (beta pre-release) → note "Released: commit …" here and push.
@@ -246,6 +246,13 @@ The kept log (`rpcs3_20261107183640_…`) caught it: after 33 min of multiplayer
 - **Packages: Cancel didn't stop receiving** — it killed croc, and the receive loop took that as "not ready yet" and tried again for up to 10 minutes. Now a `cancelled` flag ends send/receive (and croc calls after it); the half-received folder is removed. The inventory step had used `cancelTransfer()` as its own timeout: it now kills only its croc (the new flag would otherwise have cancelled every receive — caught by the new test). One package transfer at a time (`handle()` marks the transfer channels exclusive); one EmuDeck import at a time. `packages.spec` — Cancel ends a waiting receive within seconds with nothing left, a second transfer meanwhile is refused.
 - Tests: `feel.spec` power — confirm opens on Cancel, ✕ does nothing, shutdown refused during a game; `reliability.spec` — profile delete asks, opens on Cancel, deletes only on the explicit choice.
 - Full e2e 59 passed (14 opt-in skipped), unit 77. Released: commit 7b2a06a, tag `v2.0.17`, GitHub pre-release (beta); its packaged check passed.
+
+### 2.0.18 — file readers vs damaged files (2026-11-08)
+
+- New unit `fuzz.test.ts`: every format reader (disc serial, PS3 ISO, GC/Wii, 3DS, N64, Xbox/360, PARAM.SFO, IPS/BPS, Mii DB, PS3 update XML, mod guessing) gets ~280–300 random and half-valid files (right signature + garbage, sizes 0 B–100 KB, fixed seed): each must return or throw an Error within 1.5 s. Callers of the throwing ones (parseSfo, patches) all catch.
+- Found: `.m3u` playlists pointing at each other (a → b → a) recursed forever in `partsOf` (used by delete game, add games, New downloads) and `discImage` → stack overflow. Now a visited set / depth limit. Mutation-checked: the old `partsOf` fails the test.
+- ISO reader: a folder entry claiming > 16 MB is refused (a damaged image could make it allocate gigabytes). GC/Wii, 3DS, N64 header readers close the file also when reading throws (`head()`).
+- Full e2e 59 passed (14 opt-in skipped), unit 80.
 
 ## How to work on it
 

@@ -7,15 +7,17 @@ import { referencedFiles } from './formats/gameid'
 // File helpers shared by the importer, save backups and "Add games".
 
 /** Files that belong to a game file: .cue tracks, .m3u discs (and their tracks). */
-export function partsOf(file: string): string[] {
+export function partsOf(file: string, seen = new Set<string>()): string[] {
   const ext = path.extname(file).toLowerCase()
   if (ext !== '.cue' && ext !== '.m3u') return []
+  // playlists that point at each other (a.m3u → b.m3u → a.m3u) must not go round forever
+  seen.add(file.toLowerCase())
   const out = new Set<string>()
   for (const r of referencedFiles(file)) {
     const real = realCase(r)
-    if (!real || real.toLowerCase() === file.toLowerCase()) continue
+    if (!real || seen.has(real.toLowerCase())) continue
     out.add(real)
-    for (const p of partsOf(real)) out.add(p)
+    for (const p of partsOf(real, seen)) out.add(p)
   }
   return [...out]
 }

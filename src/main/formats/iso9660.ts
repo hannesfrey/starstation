@@ -53,6 +53,8 @@ export class IsoReader {
   }
 
   private dirEntries(lba: number, size: number): { name: string; lba: number; size: number; dir: boolean }[] {
+    // real folders are a few sectors; a damaged entry can claim gigabytes (never read that much)
+    if (size > 16 * 1024 * 1024) throw new Error('Folder entry too large: damaged image')
     const buf = this.sector(lba, Math.ceil(size / 2048))
     const out: { name: string; lba: number; size: number; dir: boolean }[] = []
     let p = 0
