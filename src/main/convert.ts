@@ -99,10 +99,10 @@ export async function toXiso(file: string, trash: Trash): Promise<Note | null> {
  * RPCS3 installs a package without a window and then exits (`--headless`; with its window it asks
  * "Install?" and stays open afterwards). Returns the dev_hdd0\game folders that changed.
  */
-export async function rpcs3InstallPkg(file: string): Promise<{ code: number; changed: string[] }> {
+export async function rpcs3InstallPkg(file: string): Promise<{ code: number; changed: string[]; logOk: boolean }> {
   const ps3 = getConsole('ps3')
   const e = ps3 ? getEmulator(ps3.emulator) : undefined
-  if (!e || !fs.existsSync(emulatorExe(e))) return { code: -1, changed: [] }
+  if (!e || !fs.existsSync(emulatorExe(e))) return { code: -1, changed: [], logOk: false }
   const games = path.join(emulatorDir(e), 'dev_hdd0', 'game')
   const snapshot = () => {
     try {
@@ -123,8 +123,25 @@ export async function rpcs3InstallPkg(file: string): Promise<{ code: number; cha
   log.info(`installing PS3 package ${file}`)
   const code = await run(emulatorExe(e), ['--headless', '--installpkg', file], emulatorDir(e), 60 * 60_000)
   const changed = [...snapshot()].filter(([n, t]) => before.get(n) !== t).map(([n]) => n)
-  log.info(`RPCS3 --installpkg ${path.basename(file)}: code ${code}, changed ${changed.join(', ') || 'nothing'}`)
-  return { code, changed }
+  // RPCS3 exits with an error code even after a good headless install (0xC0000409, seen 2026-11-08 with every GT6
+  // update): its own log line "Successfully installed <file>" is what tells
+  let logOk = false
+  try {
+    logOk = fs.readFileSync(path.join(emulatorDir(e), 'log', 'RPCS3.log'), 'utf8').includes(`Successfully installed ${file}`)
+  } catch {
+    /* no log */
+  }
+  log.info(`RPCS3 --installpkg ${path.basename(file)}: code ${code}, log ${logOk ? 'says installed' : 'has no success line'}, changed ${changed.join(', ') || 'nothing'}`)
+  return { code, changed, logOk }
+}
+
+/**
+ * #13: a package counts as installed only when RPCS3 said so (exit code 0, or its log line "Successfully installed")
+ * and every game folder it touched has the game's files (PARAM.SFO). An install that was cut off also changes
+ * folders — then the .pkg must stay, it's the only good copy.
+ */
+export function pkgInstalled(code: number, logOk: boolean, changed: string[], gamesDir: string): boolean {
+  return (code === 0 || logOk) && changed.length > 0 && changed.every((n) => fs.existsSync(path.join(gamesDir, n, 'PARAM.SFO')))
 }
 
 /** PS3 package → installed into RPCS3's virtual hard disk (shows up as an installed game). */
@@ -138,9 +155,9 @@ export async function installPkg(file: string, trash: Trash): Promise<Note> {
   const ps3 = getConsole('ps3')
   const e = ps3 ? getEmulator(ps3.emulator) : undefined
   if (!e || !fs.existsSync(emulatorExe(e))) return { kind: 'error', title: `${name} was not installed`, detail: 'Install RPCS3 first (Settings → Games & emulators → Emulators), then add the package again.' }
-  const { code, changed } = await rpcs3InstallPkg(file)
-  if (!changed.length) {
-    log.warn(`RPCS3 --installpkg ${name}: code ${code}, nothing installed`)
+  const { code, changed, logOk } = await rpcs3InstallPkg(file)
+  if (!pkgInstalled(code, logOk, changed, path.join(emulatorDir(e), 'dev_hdd0', 'game'))) {
+    log.warn(`RPCS3 --installpkg ${name}: code ${code}, changed ${changed.join(', ') || 'nothing'}: not counted as installed`)
     return { kind: 'error', title: `${name} was not installed`, detail: 'RPCS3 could not install the package (it may need a license file, .rap, in RPCS3’s exdata folder). The package was kept.' }
   }
   await trash(file)
