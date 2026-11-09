@@ -278,3 +278,16 @@ test('per-game graphics, CRT filter and patches; controller mapping follows the 
   expect(JSON.parse(fs.readFileSync(path.join(emu, 'launched.json'), 'utf8'))).not.toContain('--crt')
   await app.close()
 })
+
+test('#34 right-click opens the menu of the game that was clicked, not the one selected before', async () => {
+  const { files, presets } = setup('rightclick', ['Alpha.tst', 'Beta.tst'])
+  const { app, page } = await launchApp(files, presets)
+  try {
+    await expect(page.getByTestId('game-info')).toContainText('Alpha')
+    await page.locator('[data-testid^="item-"]', { hasText: 'Beta' }).click({ button: 'right' })
+    await expect(page.getByTestId('panel-game')).toBeVisible()
+    await expect(page.getByTestId('panel-game').locator('.panel-title')).toContainText('Beta')
+  } finally {
+    await app.close()
+  }
+})

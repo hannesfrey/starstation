@@ -15,7 +15,8 @@ interface Props {
   onSelectColumn: (i: number) => void
   onSelectRow: (i: number) => void
   onActivate: () => void
-  onOptions: () => void
+  /** i: the row that was right-clicked (its menu, even before the selection has moved there). */
+  onOptions: (i?: number) => void
 }
 
 /** Category spacing and item height, in viewport-relative units (see styles.css). */
@@ -64,7 +65,7 @@ export function Xmb(p: Props) {
               onContextMenu={(e) => {
                 e.preventDefault()
                 p.onSelectRow(i)
-                p.onOptions()
+                p.onOptions(i)
               }}
             >
               <div className="xmb-item-icon">

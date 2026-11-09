@@ -1814,7 +1814,18 @@ export function App() {
                 setRows((m) => ({ ...m, [rowKey]: { index: i, key: items[i]?.key } }))
               }}
               onActivate={() => handler.current('confirm')}
-              onOptions={() => handler.current('options')}
+              onOptions={(i) => {
+                // #34 right-click: the menu of the game that was clicked — the selection moved there in this same
+                // click, and `current` is still the one selected before (with "Delete" in that menu)
+                const it = i === undefined ? undefined : items[i]
+                if (it?.game) {
+                  sfx.confirm()
+                  openPanel('game', it.game.id)
+                } else if (it?.options) {
+                  sfx.confirm()
+                  it.options()
+                } else handler.current('options')
+              }}
             />
           )}
           {entry && (
