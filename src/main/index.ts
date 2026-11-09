@@ -18,6 +18,7 @@ import { biosStatus } from './bios'
 import { findSources, planImport, runImport, summarize } from './importer'
 import { checkUpdates, emulatorInfos, installCore, installEmulator, markTested } from './emulators'
 import { loadLibrary, rescan, view, toggleFavorite, getGame, forgetGame, updateStats } from './library/library'
+import { begin, busyWith, exclusive } from './busy'
 import { backupOutcome, gameFiles, listBackups, noteResumeVersion, ownSaves, previousResume, pruneBackups, restoreBackup, restorePreviousResume, resumeInfo } from './gamedata'
 import { createCollection, deleteCollection, listCollections, removeGameFromCollections, renameCollection, toggleInCollection } from './collections'
 import { addGames } from './addgames'
@@ -423,7 +424,8 @@ function registerIpc(): void {
     const g = getGame(id)
     if (updatingGame() === id) return { ok: false, error: 'This game is being updated. It can start when the update is done.' }
     if (compressing === id) return { ok: false, error: 'This game is being compressed. It can start when that is done.' }
-    if (savesBusy.has(id)) return { ok: false, error: 'Its saves are being backed up or restored. It can start in a moment.' }
+    const busy = busyWith(id)
+    if (busy) return { ok: false, error: `${busy}. The game can start in a moment.` }
     const emu = g ? getConsole(g.console)?.emulator : undefined
     if (emu && installing.has(emu)) return { ok: false, error: 'Its emulator is being installed or updated. The game can start when that is done.' }
     if (switchPending()) return { ok: false, error: 'Switching profiles didn’t finish. Close Starstation and start it again, then play.' }
@@ -438,7 +440,7 @@ function registerIpc(): void {
     } catch (e) {
       return { ok: false, error: (e as Error).message }
     }
-    return launch(id, mode === 'resume' ? 'resume' : 'fresh', [], { args, vars })
+    return exclusive('A game is starting', id, () => launch(id, mode === 'resume' ? 'resume' : 'fresh', [], { args, vars }))
   })
   handle('health', () => healthCheck())
   handle('export-report', async () => {
@@ -545,9 +547,12 @@ function registerIpc(): void {
       return { ok: false, error: (e as Error).message }
     }
   })
-  handle('package-receive', async (_e, code: string, useSettings: boolean) =>
-    afterReceive(await receiveByCode(String(code), { useSettings: !!useSettings }, pkgProgress).catch((e) => ({ ok: false, error: (e as Error).message })))
-  )
+  handle('package-receive', async (_e, code: string, useSettings: boolean) => {
+    if (runningGame()) return { ok: false, error: 'Close the game first.' }
+    return exclusive('A package is being received', undefined, async () =>
+      afterReceive(await receiveByCode(String(code), { useSettings: !!useSettings }, pkgProgress).catch((e) => ({ ok: false, error: (e as Error).message })))
+    )
+  })
   handle('package-receive-folder', async (_e, useSettings: boolean, folder?: string) => {
     let f = folder
     if (!f || !HEADLESS) {
@@ -556,7 +561,11 @@ function registerIpc(): void {
       if (pick.canceled || !pick.filePaths[0]) return null
       f = pick.filePaths[0]
     }
-    return afterReceive({ ...(await receiveFromFolder(f, { useSettings: !!useSettings }, pkgProgress).catch((e) => ({ ok: false, error: (e as Error).message, added: 0, kept: 0 }))), folder: f })
+    if (runningGame()) return { ok: false, error: 'Close the game first.' }
+    const from = f
+    return exclusive('A package is being received', undefined, async () =>
+      afterReceive({ ...(await receiveFromFolder(from, { useSettings: !!useSettings }, pkgProgress).catch((e) => ({ ok: false, error: (e as Error).message, added: 0, kept: 0 }))), folder: from })
+    )
   })
   handle('package-cancel', () => cancelTransfer())
   // receiving PC: put "what I have" on a USB drive, so the package saved there only holds the rest
@@ -576,8 +585,11 @@ function registerIpc(): void {
     const f = path.resolve(String(folder))
     if (!f.toLowerCase().startsWith(dir('config', 'packages').toLowerCase()) && !(HEADLESS || pkgAskFolders.has(f.toLowerCase())))
       return { ok: false, error: 'Unknown package folder' }
-    const r = await afterReceive(
-      await receiveFromFolder(f, { useSettings: !!useSettings, profiles: choices }, pkgProgress).catch((e) => ({ ok: false, error: (e as Error).message, added: 0, kept: 0 }))
+    if (runningGame()) return { ok: false, error: 'Close the game first.' }
+    const r = await exclusive('A package is being received', undefined, async () =>
+      afterReceive(
+        await receiveFromFolder(f, { useSettings: !!useSettings, profiles: choices }, pkgProgress).catch((e) => ({ ok: false, error: (e as Error).message, added: 0, kept: 0 }))
+      )
     )
     if (r.ok && f.toLowerCase().startsWith(dir('config', 'packages').toLowerCase())) await fs.promises.rm(f, { recursive: true, force: true })
     return r
@@ -672,7 +684,7 @@ function registerIpc(): void {
   })
   handle('profile-switch', async (_e, id: string, pin?: string) => {
     if (runningGame()) return { ok: false, error: 'Close the game first.' }
-    const r = await switchProfile(String(id), pin === undefined ? undefined : String(pin))
+    const r = await exclusive('A profile switch is on its way', undefined, () => switchProfile(String(id), pin === undefined ? undefined : String(pin)))
     if (!r.ok) return r
     // everything that belongs to a profile is read again
     loadLibrary()
@@ -824,9 +836,13 @@ function registerIpc(): void {
   })
   handle('backup-now', async (_e, id: string) => {
     const g = getGame(id)
-    if (!g || savesBusy.has(id)) return null
-    savesBusy.add(id)
-    const o = await backupOutcome(g, 'manual').finally(() => savesBusy.delete(id))
+    if (!g) return null
+    const op = begin('Its saves are being backed up', id)
+    if ('error' in op) {
+      notify({ kind: 'info', title: 'Not now', detail: op.error })
+      return null
+    }
+    const o = await backupOutcome(g, 'manual').finally(op.end)
     if (o.status === 'made') await pruneBackups(g)
     const say = {
       made: { kind: 'save', title: 'Saves backed up' },
@@ -842,8 +858,8 @@ function registerIpc(): void {
     const g = getGame(id)
     if (!g) return { ok: false, error: 'Game not found' }
     if (runningGame()) return { ok: false, error: 'Close the game first.' }
-    if (savesBusy.has(id)) return { ok: false, error: 'Its saves are being restored right now.' }
-    savesBusy.add(id)
+    const op = begin('Its saves are being restored', id)
+    if ('error' in op) return { ok: false, error: op.error }
     try {
       await restoreBackup(g, backupId)
       notify({ kind: 'save', title: 'Saves restored', detail: g.title })
@@ -852,15 +868,15 @@ function registerIpc(): void {
       notify({ kind: 'error', title: 'Restore failed', detail: (e as Error).message })
       return { ok: false, error: (e as Error).message }
     } finally {
-      savesBusy.delete(id)
+      op.end()
     }
   })
   handle('resume-restore-previous', async (_e, id: string) => {
     const g = getGame(id)
     if (!g) return { ok: false, error: 'Game not found' }
     if (runningGame()) return { ok: false, error: 'Close the game first.' }
-    if (savesBusy.has(id)) return { ok: false, error: 'Its saves are being restored right now.' }
-    savesBusy.add(id)
+    const op = begin('Its resume point is being restored', id)
+    if ('error' in op) return { ok: false, error: op.error }
     try {
       await restorePreviousResume(g)
       notify({ kind: 'save', title: 'Earlier resume point is back', detail: g.title })
@@ -868,7 +884,7 @@ function registerIpc(): void {
     } catch (e) {
       return { ok: false, error: (e as Error).message }
     } finally {
-      savesBusy.delete(id)
+      op.end()
     }
   })
   handle('game-option-set', (_e, id: string, key: 'graphics' | 'crt' | 'patch', value: string | boolean, patchId?: string) => {
@@ -933,7 +949,7 @@ function registerIpc(): void {
   })
   handle('mod-profile-save', (_e, id: string, name: string) => withGame(id, (g) => void saveModProfile(g, String(name))))
   handle('mod-profile-delete', (_e, id: string, pid: string) => withGame(id, (g) => deleteModProfile(g, String(pid))))
-  handle('mod-profile-apply', (_e, id: string, pid: string) => notRunning(id) ?? withGame(id, (g) => applyModProfile(g, String(pid))))
+  handle('mod-profile-apply', (_e, id: string, pid: string) => notRunning(id) ?? withGame(id, (g) => exclusive('Its mods are being changed', id, () => applyModProfile(g, String(pid)))))
   // the menu (re)loaded (start, safe mode, profile switch, after a crash): it asks for questions still open
   handle('mod-inbox-open', () => openInboxQuestions())
   handle('mod-inbox-assign', (_e, id: string, gameId: string) => assignInbox(String(id), String(gameId ?? '')))
@@ -951,10 +967,10 @@ function registerIpc(): void {
   })
   handle('mod-place', (_e, id: string, pending: string, target: string) => withGame(id, (g) => finishAdd(g, pending, target).then(modAdded(g))))
   handle('mod-toggle', (_e, id: string, modId: string, on: boolean, winner?: 'this' | 'other') =>
-    notRunning(id) ?? withGame(id, (g) => setModEnabled(g, modId, !!on, winner === 'this' || winner === 'other' ? winner : undefined))
+    notRunning(id) ?? withGame(id, (g) => exclusive('Its mods are being changed', id, () => setModEnabled(g, modId, !!on, winner === 'this' || winner === 'other' ? winner : undefined)))
   )
   handle('mod-delete', async (_e, id: string, modId: string) => {
-    const r = await (notRunning(id) ?? withGame(id, (g) => deleteMod(g, modId)))
+    const r = await (notRunning(id) ?? withGame(id, (g) => exclusive('Its mods are being changed', id, () => deleteMod(g, modId))))
     if (!r.ok) notify({ kind: 'error', title: 'Mod not deleted', detail: r.error })
     return r
   })
@@ -1071,8 +1087,6 @@ async function doAddGames(paths: string[], consoleId?: string): Promise<AddGames
 }
 
 /** Move the game (and, if asked, its own saves) to the Recycle Bin, then forget it. */
-/** Games whose saves are being backed up or restored right now: no second restore, no start meanwhile. */
-const savesBusy = new Set<string>()
 
 /** Games being deleted right now (a second press while the first is binning the files does nothing). */
 const deleting = new Set<string>()
