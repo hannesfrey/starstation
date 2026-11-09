@@ -270,6 +270,15 @@ test('an emulator the menu pauses itself (3DS): paused on open, continued on Res
     await expect.poll(() => lines().slice(9)).toEqual(['paused'])
     await ov.getByTestId('overlay-resume').click()
     await expect.poll(() => lines().slice(9)).toEqual(['paused', 'continued'])
+
+    // #27 the menu's page crashes while it is open: the game is continued, not left paused behind it
+    await api(page, 'testHome')
+    await expect.poll(() => lines().slice(9)).toEqual(['paused', 'continued', 'paused'])
+    await app.evaluate(({ BrowserWindow }) => {
+      const w = BrowserWindow.getAllWindows().find((x) => x.webContents.getURL().includes('overlay'))
+      w?.webContents.forcefullyCrashRenderer()
+    })
+    await expect.poll(() => lines().slice(9)).toEqual(['paused', 'continued', 'paused', 'continued'])
   } finally {
     await app.close()
   }

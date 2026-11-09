@@ -59,11 +59,14 @@ function ensure(): BrowserWindow {
   w.webContents.on('render-process-gone', (_e, d) => {
     if (d.reason === 'clean-exit') return
     log.error('PS button menu page gone', d)
+    const wasOpen = win === w && open
     if (win === w) {
       win = null
       open = false
     }
     if (!w.isDestroyed()) w.destroy()
+    // #27 it was open over a game: that game is paused and has no focus — give both back, like "Resume"
+    if (wasOpen) void resumeAfterCrash()
   })
   loader?.(win)
   return win
@@ -187,6 +190,22 @@ export async function hideOverlay(resume: boolean): Promise<void> {
     await closeEmulatorMenu(pid)
   }
   if (resume && pid) await continueGame(pid)
+}
+
+/** The menu's page crashed while it was open: the game must not stay paused behind it (exported for tests). */
+export async function resumeAfterCrash(): Promise<void> {
+  const pid = runningPid()
+  if (!pid) return
+  log.warn('PS button menu crashed while open: resuming the game')
+  try {
+    if (!HEADLESS) {
+      await focusWindow(pid)
+      await closeEmulatorMenu(pid)
+    }
+    await continueGame(pid)
+  } catch (e) {
+    log.error('could not resume the game after the menu crashed', e)
+  }
 }
 
 /** Emulators that open their own menu on the PS / Guide button too (xemu can't be told not to): close it. */
