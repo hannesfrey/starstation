@@ -2,7 +2,7 @@
 
 Read PROJECT.md first (goal, users, how much process), then SPEC.md. This file tracks where the build stands and every small decision made.
 
-**2.1.0 "Solid ground" (`PLAN-2.1.0.md`): built 2026-11-09, not published yet** — Hannes says when the beta goes out.
+**2.1.0 "Solid ground" (`PLAN-2.1.0.md`): built and released as beta 2026-11-09** — Hannes is testing it with the checklist.
 One commit per item (`git log --oneline` from "Project goal docs"). What changed, in short:
 - A (saves): #01 `verifyTree(full)` + `moveFile` hashes everything before deleting; #02 backups/resume history under
   `config\profiles\<id>\backups` (main profile keeps `Files\backups`); #05 restore = stage `.ss-restore` + verify +
@@ -37,7 +37,7 @@ One commit per item (`git log --oneline` from "Project goal docs"). What changed
 - To watch: the first library scan now finishes a little after the menu appears (async). e2e `import.spec` clicked
   a column before it finished and landed on Users; it now waits for the "scan:" log line. If Hannes sees the menu
   jump at start, look at the column effect in App.tsx (`autoColumn`).
-- Not published: version 2.1.0 is committed locally (not pushed, no tag). Hannes says when the beta goes out.
+- **Released as beta 2026-11-09** (Hannes said go): tag v2.1.0, commit 28e07d0, pre-release on GitHub. Release run: 187 unit + 91 e2e + packaged check passed. Next: Hannes works through `DesktopStarstationTest checklist.txt` and says "read the test checklist". Not "Release to everyone" before that.
 
 ## Current state
 
