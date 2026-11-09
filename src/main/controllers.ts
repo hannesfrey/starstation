@@ -52,7 +52,17 @@ export function sdlName(id = ''): string {
   if (/^054c:(0ce6|0df2)$/.test(vp)) return 'PS5 Controller'
   if (/^054c:0268$/.test(vp)) return 'PS3 Controller'
   if (/^057e:2009$/.test(vp)) return 'Nintendo Switch Pro Controller'
-  return 'PS4 Controller'
+  // #25 any other pad (a cheap USB pad): SDL names it like the browser does, by the name the pad reports —
+  // not "PS4 Controller", which Dolphin would never find
+  const own = id.replace(/\s*\((?:STANDARD GAMEPAD\s*)?Vendor:.*$/i, '').trim()
+  return own || 'PS4 Controller'
+}
+
+/** What kind of pad a player has: decides which handler RPCS3 uses. */
+export function padKind(p: PlayerPad): 'xinput' | 'ps4' | 'ps5' | 'ps3' | 'switch' | 'generic' {
+  if (p.api === 'xinput') return 'xinput'
+  const n = sdlName(p.id)
+  return n === 'PS4 Controller' ? 'ps4' : n === 'PS5 Controller' ? 'ps5' : n === 'PS3 Controller' ? 'ps3' : n === 'Nintendo Switch Pro Controller' ? 'switch' : 'generic'
 }
 
 /**
@@ -87,7 +97,13 @@ export function padVars(order?: PlayerPad[]): Record<string, string> {
   // PCSX2 / DuckStation read every pad through SDL with raw input (2.1.0: their XInput polling waits ~70 ms per
   // empty slot on some PCs — GT4 ran at a few frames per second). SDL then numbers XInput-style pads by their
   // XInput slot (SDL-0 = XInput-0); other pads follow after them.
-  const xinputPads = players.slice(0, count).filter((p) => p.api === 'xinput').length
+  const active = players.slice(0, count)
+  const xinputPads = active.filter((p) => p.api === 'xinput').length
+  const sdlPads = active.filter((p) => p.api === 'sdl').length
+  // #25 RetroArch has one joypad driver for everyone: as soon as one player has a pad only SDL sees, SDL it is
+  // (its XInput driver can't see a DualSense); SDL lists such pads first, XInput-style pads after them
+  const raSdl = sdl || sdlPads > 0
+  v.rajoypad = raSdl ? 'sdl2' : 'xinput'
   players.forEach((p, i) => {
     const n = i === 0 ? '' : String(i + 1)
     const has = i < count
@@ -95,17 +111,24 @@ export function padVars(order?: PlayerPad[]): Record<string, string> {
     v[`pad${n}`] = `${p.api === 'sdl' ? 'SDL' : 'XInput'}-${p.index}`
     v[`sdlpad${n}`] = `SDL-${p.api === 'xinput' ? p.index : Math.max(xinputPads, 0) + p.index}`
     // RetroArch device index
-    v[`rapad${i + 1}`] = String(p.index)
-    // Dolphin device
+    v[`rapad${i + 1}`] = String(raSdl && p.api === 'xinput' && !sdl ? sdlPads + p.index : p.index)
+    // Dolphin device, and its face buttons for this player's pad (#25: per player, not the first pad's kind)
     v[`dolpad${i + 1}`] = p.api === 'sdl' ? `SDL/${p.index}/${sdlName(p.id)}` : `XInput/${p.index}/Gamepad`
+    const s = p.api === 'sdl'
+    v[`dolA${i + 1}`] = s ? '`Button S`' : '`Button A`'
+    v[`dolB${i + 1}`] = s ? '`Button E`' : '`Button B`'
+    v[`dolX${i + 1}`] = s ? '`Button W`' : '`Button X`'
+    v[`dolY${i + 1}`] = s ? '`Button N`' : '`Button Y`'
     // Dolphin GameCube port: 6 = standard controller, 0 = nothing plugged in (port 1 always has one)
     v[`gcport${i + 1}`] = i === 0 || has ? '6' : '0'
     // Dolphin Wii Remote: 1 = emulated remote on, 0 = off
     v[`wiisrc${i + 1}`] = i === 0 || has ? '1' : '0'
-    // RPCS3: its own DualShock 4 / DualSense handlers for PlayStation pads, XInput otherwise
-    const ps5 = p.api === 'sdl' && sdlName(p.id) === 'PS5 Controller'
-    v[`ps3handler${i + 1}`] = p.api === 'sdl' ? (ps5 ? 'DualSense' : 'DualShock 4') : 'XInput'
-    v[`ps3device${i + 1}`] = p.api === 'sdl' ? `${ps5 ? 'DualSense' : 'DS4'} Pad #${p.index + 1}` : `XInput Pad #${p.index + 1}`
+    // RPCS3: its own DualShock 4 / DualSense handlers for PlayStation pads, XInput for Xbox-style pads, and its
+    // plain joystick handler for any other pad (#25: a cheap USB pad is no DualShock 4)
+    const kind = padKind(p)
+    v[`ps3handler${i + 1}`] = kind === 'xinput' ? 'XInput' : kind === 'ps5' ? 'DualSense' : kind === 'ps4' ? 'DualShock 4' : 'MMJoystick'
+    v[`ps3device${i + 1}`] =
+      kind === 'xinput' ? `XInput Pad #${p.index + 1}` : kind === 'ps5' ? `DualSense Pad #${p.index + 1}` : kind === 'ps4' ? `DS4 Pad #${p.index + 1}` : `Joystick #${p.index + 1}`
   })
   return v
 }

@@ -67,3 +67,34 @@ describe('PS1 / PS2 read every pad through SDL (2.1.0: GT4 lag)', () => {
     }
   })
 })
+
+describe('#25 each player gets the buttons of their own kind of pad', () => {
+  const GENERIC = 'USB Gamepad (STANDARD GAMEPAD Vendor: 0079 Product: 0006)'
+
+  it('a cheap USB pad is not taken for a PS4 controller', async () => {
+    saved = { api: 'sdl', pads: [GENERIC] }
+    const { padVars, sdlName } = await import('../../src/main/controllers')
+    expect(sdlName(GENERIC)).toBe('USB Gamepad')
+    const v = padVars()
+    expect(v.dolpad1).toBe('SDL/0/USB Gamepad')
+    expect(v.ps3handler1).toBe('MMJoystick')
+    expect(v.ps3device1).toBe('Joystick #1')
+  })
+
+  it('Dolphin: an Xbox-style pad and a PS5 pad each get their own button names', async () => {
+    saved = { api: 'xinput', pads: [XBOX, PS5] }
+    const { padVars } = await import('../../src/main/controllers')
+    const v = padVars()
+    expect([v.dolA1, v.dolA2]).toEqual(['`Button A`', '`Button S`'])
+  })
+
+  it('RetroArch: a PS5 pad next to an Xbox-style pad makes it use SDL, so both are seen', async () => {
+    saved = { api: 'xinput', pads: [XBOX, PS5] }
+    const { padVars } = await import('../../src/main/controllers')
+    const v = padVars()
+    expect(v.rajoypad).toBe('sdl2')
+    expect([v.rapad1, v.rapad2]).toEqual(['1', '0'])
+    saved = { api: 'xinput', pads: [XBOX, XBOX] }
+    expect(padVars().rajoypad).toBe('xinput')
+  })
+})
