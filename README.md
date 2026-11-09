@@ -3,6 +3,8 @@
 A console-style menu for emulated games on Windows: every console in one crossbar menu, controller first.
 One folder holds everything — emulators, games, saves, mods — and nothing else on the PC is touched.
 
+Made for family and friends, not as a commercial product. **Working on the code? Read [PROJECT.md](PROJECT.md) first.**
+
 **Consoles:** NES, SNES, N64 (RetroArch) · GameCube, Wii (Dolphin) · 3DS (Azahar) · PS1 (DuckStation) · PS2 (PCSX2) · PS3 (RPCS3) · Xbox (xemu) · Xbox 360 (Xenia) · plus any other emulator through "Add a console".
 
 ## Install

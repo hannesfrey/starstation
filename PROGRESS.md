@@ -1,6 +1,8 @@
 # Starstation — Progress
 
-Read SPEC.md first. This file tracks where the build stands and every small decision made.
+Read PROJECT.md first (goal, users, how much process), then SPEC.md. This file tracks where the build stands and every small decision made.
+
+**Next update: `PLAN-2.1.0.md` ("Solid ground", agreed with Hannes 2026-11-09).** Not started yet. Uncommitted: PS2 preset → SDL raw input (GT4 lag fix, 2026-11-08, already copied into Hannes's installed app), PROJECT.md / AGENTS.md / CLAUDE.md / PLAN-2.1.0.md.
 
 ## Current state
 
