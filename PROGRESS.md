@@ -33,6 +33,11 @@ One commit per item (`git log --oneline` from "Project goal docs"). What changed
   `release.mjs` runs tsc + vitest + playwright first and refuses a tag already released to everyone; #43 `redact()`
   on every text file in Export report.
 - Checklist for Hannes: `Desktop\Starstation\Test checklist.txt` rewritten for 2.1.0 (round 2 had no answers).
+- Tests at 2.1.0: 187 unit, e2e 91 passed / 14 opt-in skipped (full run + reruns of the 5 files touched).
+- To watch: the first library scan now finishes a little after the menu appears (async). e2e `import.spec` clicked
+  a column before it finished and landed on Users; it now waits for the "scan:" log line. If Hannes sees the menu
+  jump at start, look at the column effect in App.tsx (`autoColumn`).
+- Not published: version 2.1.0 is committed locally (not pushed, no tag). Hannes says when the beta goes out.
 
 ## Current state
 
