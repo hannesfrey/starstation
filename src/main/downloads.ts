@@ -55,9 +55,26 @@ interface Sig {
 
 /** name → signature at the previous look */
 const seen = new Map<string, string>()
-/** items already handled this session that are still there (asked, not a game, failed): not again until they change */
+/** items already handled this session that are still there (asked, not a game): not again until they change */
 const done = new Set<string>()
+/**
+ * #29: folders already handled, by a cheap look (the folder's own time + its entries): a big unpacked folder
+ * that stays in New downloads is not walked file by file every few seconds.
+ */
+const doneQuick = new Map<string, string>()
+/** Items that failed (damaged archive, a file in use): tried again after this time, if they haven't changed. */
+const failed = new Map<string, number>()
+export const RETRY_FAILED_MS = Number(process.env.STARSTATION_DOWNLOADS_RETRY) || 5 * 60_000
 let busy = false
+
+function quickSig(p: string): string | null {
+  try {
+    const st = fs.statSync(p)
+    return st.isDirectory() ? `${st.mtimeMs}:${fs.readdirSync(p).length}` : null
+  } catch {
+    return null
+  }
+}
 
 export function signature(p: string): Sig | null {
   try {
@@ -101,6 +118,13 @@ export function stillWriting(p: string): boolean {
 function markDone(p: string): void {
   const s = signature(p)
   if (s) done.add(`${path.basename(p)}|${s.id}`)
+  const q = quickSig(p)
+  if (q) doneQuick.set(path.basename(p), q)
+}
+
+function markFailed(p: string): void {
+  const s = signature(p)
+  if (s) failed.set(`${path.basename(p)}|${s.id}`, Date.now() + RETRY_FAILED_MS)
 }
 
 /** Game files and game folders (PS3 / Xbox dumps) inside a folder. */
@@ -156,7 +180,7 @@ async function sortTree(h: DownloadHooks, root: string): Promise<{ ok: boolean; 
   return { ok: failed === 0 && r.added.length + asked.length + dup > 0, found: candidates.length, added: r.added.length + asked.length, dup }
 }
 
-async function handleArchive(h: DownloadHooks, p: string): Promise<void> {
+async function handleArchive(h: DownloadHooks, p: string): Promise<'failed' | void> {
   const name = path.basename(p)
   const size = fs.statSync(p).size
   const work = dir('config', 'downloads')
@@ -173,8 +197,8 @@ async function handleArchive(h: DownloadHooks, p: string): Promise<void> {
     await unpack(p, tmp)
   } catch (e) {
     log.warn(`unpack ${name} failed`, e)
-    h.notify({ kind: 'error', title: 'Could not unpack a download', detail: `${name} may be damaged or not fully downloaded. It stays in New downloads.` })
-    return
+    h.notify({ kind: 'error', title: 'Could not unpack a download', detail: `${name} may be damaged or not fully downloaded. It stays in New downloads; Starstation tries again in a few minutes.` })
+    return 'failed'
   }
   try {
     const r = await sortTree(h, tmp)
@@ -220,8 +244,12 @@ export async function checkDownloads(h: DownloadHooks): Promise<void> {
       // Firefox keeps the final name next to a .part file until it's done
       if (names.some((o) => o !== n && o.startsWith(n) && PARTIAL.test(o))) continue
       const p = path.join(root, n)
+      const q = doneQuick.get(n)
+      if (q && q === quickSig(p)) continue // a handled folder that hasn't changed at its top: no walk
       const sig = signature(p)
       if (!sig || done.has(`${n}|${sig.id}`)) continue
+      const retry = failed.get(`${n}|${sig.id}`)
+      if (retry && Date.now() < retry) continue
       const prev = seen.get(n)
       seen.set(n, sig.id)
       if (prev !== sig.id || Date.now() - sig.mtime < SETTLE) continue
@@ -247,15 +275,19 @@ export async function checkDownloads(h: DownloadHooks): Promise<void> {
         h.notify({ kind: 'warning', title: 'Split archive', detail: `${n}: Starstation unpacks .zip, .7z (also .7z.001) and .rar. Unpack this one yourself; the game is then sorted.` })
         continue
       }
+      let outcome: 'failed' | void = undefined
       try {
-        if (!isDir && ARCHIVE.test(n)) await handleArchive(h, p)
+        if (!isDir && ARCHIVE.test(n)) outcome = await handleArchive(h, p)
         else if (isDir && !detectConsoles(p).length) await handleFolder(h, p)
         else plain.push(p)
       } catch (e) {
         log.error(`could not handle ${n}`, e)
         h.notify({ kind: 'error', title: 'Download not sorted', detail: `${n}: ${(e as Error).message}` })
+        outcome = 'failed'
       }
-      if (fs.existsSync(p)) markDone(p)
+      if (!fs.existsSync(p)) continue
+      if (outcome === 'failed') markFailed(p)
+      else if (!plain.includes(p)) markDone(p)
     }
     // single game files together, so a .cue brings its .bin tracks
     if (plain.length) {
