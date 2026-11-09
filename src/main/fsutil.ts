@@ -91,8 +91,11 @@ export async function copyTree(from: string, to: string, onFile: () => void, con
   await Promise.all(Array.from({ length: 6 }, worker))
 }
 
-/** Verify every file of `from` exists in `to` with the same size; small files (< 64 MB) are compared by SHA-1. */
-export async function verifyTree(from: string, to: string): Promise<string[]> {
+/**
+ * Verify every file of `from` exists in `to` with the same size; small files (< 64 MB) are compared by SHA-1.
+ * `full`: every file is compared by content, whatever its size — used whenever the original is deleted afterwards.
+ */
+export async function verifyTree(from: string, to: string, full = false): Promise<string[]> {
   const bad: string[] = []
   const walk = async (a: string, b: string) => {
     const st = await fsp.stat(a)
@@ -105,7 +108,7 @@ export async function verifyTree(from: string, to: string): Promise<string[]> {
         return
       }
       if (bs.size !== st.size) bad.push(b)
-      else if (st.size < 64 * 1024 * 1024 && (await sha1(a)) !== (await sha1(b))) bad.push(b)
+      else if ((full || st.size < 64 * 1024 * 1024) && (await sha1(a)) !== (await sha1(b))) bad.push(b)
       return
     }
     for (const n of await fsp.readdir(a)) await walk(path.join(a, n), path.join(b, n))
@@ -156,10 +159,13 @@ export async function moveFile(from: string, to: string): Promise<void> {
     await renameRetry(from, to) // same drive: instant, nothing copied
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code !== 'EXDEV') throw e
-    // other drive: copy, verify by hash, then remove the original
+    // other drive: copy, verify every file by content, then remove the original
     await copyTree(from, to, () => undefined, [])
-    const bad = await verifyTree(from, to)
-    if (bad.length) throw new Error(`copy of ${from} did not verify`)
+    const bad = await verifyTree(from, to, true)
+    if (bad.length) {
+      await fsp.rm(to, { recursive: true, force: true }) // the bad copy goes, the original stays
+      throw new Error(`copy of ${from} did not verify`)
+    }
     await fsp.rm(from, { recursive: true })
   }
 }

@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { partsOf, renameRetry } from '../../src/main/fsutil'
+import { moveFile, partsOf, renameRetry, verifyTree } from '../../src/main/fsutil'
 
 describe('partsOf: the files of a game', () => {
   it('only files in the game folder (or below), never ones a sheet names elsewhere', () => {
@@ -55,5 +55,36 @@ describe('renameRetry', () => {
     vi.spyOn(fsp, 'rename').mockRejectedValue(busy('ENOENT'))
     await expect(renameRetry('a', 'b')).rejects.toThrow('ENOENT')
     expect(fsp.rename).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('#01 checking copies by content before an original is deleted', () => {
+  afterEach(() => vi.restoreAllMocks())
+
+  it('full check finds a big file that has the right size but different content', async () => {
+    const d = fs.mkdtempSync(path.join(process.env.TEMP ?? os.tmpdir(), 'verify-'))
+    fs.mkdirSync(path.join(d, 'a'))
+    fs.mkdirSync(path.join(d, 'b'))
+    const big = Buffer.alloc(65 * 1024 * 1024, 7)
+    fs.writeFileSync(path.join(d, 'a', 'game.iso'), big)
+    big[big.length - 1] = 8
+    fs.writeFileSync(path.join(d, 'b', 'game.iso'), big)
+    expect(await verifyTree(path.join(d, 'a'), path.join(d, 'b'))).toEqual([]) // quick check: size only
+    expect(await verifyTree(path.join(d, 'a'), path.join(d, 'b'), true)).toEqual([path.join(d, 'b', 'game.iso')])
+    fs.rmSync(d, { recursive: true, force: true })
+  })
+
+  it('a move to another drive keeps the original when the copy came out wrong', async () => {
+    const d = fs.mkdtempSync(path.join(process.env.TEMP ?? os.tmpdir(), 'move-'))
+    const from = path.join(d, 'src', 'game.iso')
+    const to = path.join(d, 'dst', 'game.iso')
+    fs.mkdirSync(path.dirname(from))
+    fs.writeFileSync(from, 'the real game')
+    vi.spyOn(fsp, 'rename').mockRejectedValue(Object.assign(new Error('EXDEV'), { code: 'EXDEV' }))
+    vi.spyOn(fsp, 'copyFile').mockImplementation(async (_a, b) => fs.writeFileSync(b as string, 'the real gamX'))
+    await expect(moveFile(from, to)).rejects.toThrow('did not verify')
+    expect(fs.readFileSync(from, 'utf8')).toBe('the real game')
+    expect(fs.existsSync(to)).toBe(false)
+    fs.rmSync(d, { recursive: true, force: true })
   })
 })
