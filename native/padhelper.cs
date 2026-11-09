@@ -861,10 +861,23 @@ static class PadHelper
         poll.Start();
         Say("ready");
 
-        string line;
-        while ((line = Console.In.ReadLine()) != null)
+        string raw;
+        while ((raw = Console.In.ReadLine()) != null)
         {
-            var a = line.Trim().Split(new[] { ' ' }, 3);
+            // "#<id> <command>": the answer starts with the same "#<id> ", so a late answer can only reach its own
+            // request (2.1.0); a line without an id is answered without one
+            string line = raw.Trim();
+            string id = null;
+            if (line.StartsWith("#"))
+            {
+                int sp = line.IndexOf(' ');
+                if (sp < 0) continue;
+                id = line.Substring(1, sp - 1);
+                line = line.Substring(sp + 1).Trim();
+            }
+            string tag = id == null ? "" : "#" + id + " ";
+            Action<string> reply = (text) => Say(tag + text);
+            var a = line.Split(new[] { ' ' }, 3);
             if (a.Length == 0 || a[0].Length == 0) continue;
             try
             {
@@ -873,58 +886,74 @@ static class PadHelper
                 switch (a[0])
                 {
                     case "quit": return;
-                    case "xstate": Say("xstate " + lastXState); break;
+                    case "xstate": reply("xstate " + lastXState); break;
                     case "fg":
                         {
                             uint p;
                             GetWindowThreadProcessId(GetForegroundWindow(), out p);
-                            Say("fg " + p);
+                            reply("fg " + p);
                             break;
                         }
-                    case "close": Say(Close(pid) ? "ok close" : "err close no window"); break;
-                    case "focus": Say(Focus(pid) ? "ok focus" : "err focus no window"); break;
-                    case "audio": Say("audio " + AudioList()); break;
-                    case "audioset": Say(a.Length > 1 && AudioSet(line.Trim().Substring(9)) ? "ok audioset" : "err audioset"); break;
-                    case "display": Say("display " + DisplayList()); break;
+                    case "close": reply(Close(pid) ? "ok close" : "err close no window"); break;
+                    case "focus": reply(Focus(pid) ? "ok focus" : "err focus no window"); break;
+                    case "audio": reply("audio " + AudioList()); break;
+                    case "audioset": reply(a.Length > 1 && AudioSet(line.Substring(9)) ? "ok audioset" : "err audioset"); break;
+                    case "display": reply("display " + DisplayList()); break;
                     case "displayset":
                     case "displaytest":
                         {
                             // displayset <w> <h> <hz> (all in a[1] + a[2] split again)
-                            var v = line.Trim().Split(' ');
+                            var v = line.Split(' ');
                             int r = DisplaySet(int.Parse(v[1]), int.Parse(v[2]), int.Parse(v[3]), a[0] == "displaytest");
-                            Say(r == 0 ? "ok " + a[0] : "err " + a[0] + " " + r);
+                            reply(r == 0 ? "ok " + a[0] : "err " + a[0] + " " + r);
                             break;
                         }
-                    case "bt": Say("bt " + BtList(a.Length > 1 && a[1] == "scan")); break;
-                    case "btpair": { string r = BtPair(a.Length > 1 ? a[1] : ""); Say(r == "ok" ? "ok btpair" : "err btpair " + r); break; }
-                    case "btremove": { ulong ad = Convert.ToUInt64(a.Length > 1 ? a[1] : "0", 16); Say(BluetoothRemoveDevice(ref ad) == 0 ? "ok btremove" : "err btremove"); break; }
+                    case "bt":
+                        {
+                            bool scan = a.Length > 1 && a[1] == "scan";
+                            var r = reply;
+                            var t = new Thread(() => { try { r("bt " + BtList(scan)); } catch (Exception e) { r("err bt " + e.Message.Replace('\n', ' ')); } });
+                            t.IsBackground = true;
+                            t.Start();
+                            break;
+                        }
+                    case "btpair":
+                        {
+                            string addr = a.Length > 1 ? a[1] : "";
+                            var r = reply;
+                            var t = new Thread(() => { try { string res = BtPair(addr); r(res == "ok" ? "ok btpair" : "err btpair " + res); } catch (Exception e) { r("err btpair " + e.Message.Replace('\n', ' ')); } });
+                            t.IsBackground = true;
+                            t.Start();
+                            break;
+                        }
+                    case "btremove": { ulong ad = Convert.ToUInt64(a.Length > 1 ? a[1] : "0", 16); reply(BluetoothRemoveDevice(ref ad) == 0 ? "ok btremove" : "err btremove"); break; }
                     case "idle":
                         {
                             // ms since the last keyboard / mouse input (couch test waits until nobody uses the PC)
                             var li = new LASTINPUTINFO();
                             li.cbSize = (uint)Marshal.SizeOf(li);
                             GetLastInputInfo(ref li);
-                            Say("idle " + unchecked((uint)Environment.TickCount - li.dwTime));
+                            reply("idle " + unchecked((uint)Environment.TickCount - li.dwTime));
                             break;
                         }
                     case "focushwnd":
                         {
                             // a window by its handle (Starstation's PS button menu: the same process owns two windows)
                             long hwnd = a.Length > 1 ? long.Parse(a[1]) : 0;
-                            Say(hwnd != 0 && FocusHwnd(new IntPtr(hwnd)) ? "ok focushwnd" : "err focushwnd");
+                            reply(hwnd != 0 && FocusHwnd(new IntPtr(hwnd)) ? "ok focushwnd" : "err focushwnd");
                             break;
                         }
-                    case "keys": Say(a.Length > 2 && Keys(pid, a[2]) ? "ok keys" : "err keys " + (a.Length > 2 ? a[2] : "")); break;
+                    case "keys": reply(a.Length > 2 && Keys(pid, a[2]) ? "ok keys" : "err keys " + (a.Length > 2 ? a[2] : "")); break;
                     case "mute":
                         {
                             int n = Mute(pid, a.Length < 3 || a[2] != "0");
-                            Say(n > 0 ? "ok mute " + n : "err mute no audio yet");
+                            reply(n > 0 ? "ok mute " + n : "err mute no audio yet");
                             break;
                         }
-                    default: Say("err " + a[0] + " unknown"); break;
+                    default: reply("err " + a[0] + " unknown"); break;
                 }
             }
-            catch (Exception e) { Say("err " + a[0] + " " + e.Message.Replace('\n', ' ')); }
+            catch (Exception e) { reply("err " + a[0] + " " + e.Message.Replace('\n', ' ')); }
         }
     }
 }

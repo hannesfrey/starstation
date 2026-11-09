@@ -44,8 +44,20 @@ function pushFeed(f: XPadFeed): void {
   xfeed = f
   for (const l of xpadListeners) l(f)
 }
-/** Waiting commands; an answer goes to the oldest one with its command name (a late answer can't land on another). */
-const waiting: { cmd: string; done: (line: string) => void }[] = []
+/**
+ * Waiting commands. Each request carries its own number ("#12 close 4711"), and the helper answers with it
+ * ("#12 ok close"): an answer that comes after its request gave up can't confirm the next request (#26 — a late
+ * "ok close" once looked like the new game had been closed). An answer without a number (a helper from before
+ * 2.1.0) goes to the oldest request with its command name.
+ */
+const waiting: { id: number; cmd: string; done: (line: string) => void }[] = []
+let nextId = 1
+
+/** "#12 ok close" → { id: 12, line: "ok close" } (exported for tests). */
+export function splitAnswer(raw: string): { id: number | null; line: string } {
+  const m = /^#(\d+) (.*)$/.exec(raw)
+  return m ? { id: Number(m[1]), line: m[2] } : { id: null, line: raw }
+}
 
 /** "ok keys" / "err keys …" → keys; "audio […]" → audio; "fg 123" → fg. */
 function answerTo(line: string): string {
@@ -79,7 +91,14 @@ export function startPadHelper(): void {
     log.error('helper failed to start', e)
     gone(p, e.message)
   })
-  createInterface({ input: p.stdout! }).on('line', (line) => {
+  createInterface({ input: p.stdout! }).on('line', (raw) => {
+    const { id, line } = splitAnswer(raw)
+    if (id !== null) {
+      const i = waiting.findIndex((w) => w.id === id)
+      if (i >= 0) waiting.splice(i, 1)[0].done(line)
+      else log.info(`late answer ignored: ${line.slice(0, 60)}`)
+      return
+    }
     if (line.startsWith('home ')) {
       const pad = line.slice(5)
       log.info(`home button on ${pad}`)
@@ -178,8 +197,10 @@ export async function xinputSnapshot(): Promise<XSlot[]> {
 function ask(cmd: string, timeoutMs = 5000): Promise<string> {
   if (!proc?.stdin) return Promise.resolve('err no helper')
   const name = cmd.split(' ')[0]
+  const id = nextId++
   return new Promise((resolve) => {
     const w = {
+      id,
       cmd: name,
       done: (line: string) => {
         clearTimeout(t)
@@ -192,7 +213,7 @@ function ask(cmd: string, timeoutMs = 5000): Promise<string> {
       resolve('err timeout')
     }, timeoutMs)
     waiting.push(w)
-    proc!.stdin!.write(`${cmd}\n`)
+    proc!.stdin!.write(`#${id} ${cmd}\n`)
   })
 }
 
