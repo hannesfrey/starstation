@@ -59,7 +59,7 @@ import { CLOSE_TIMEOUT, closeRunning, launch, setLauncherWindow, runningGame, ru
 import { keepEmulatorLog } from './emulogs'
 import { hideOverlay, overlayAction, overlayOpen, overlayState, sendOverlay, setupOverlay, toggleOverlay } from './overlay'
 import { audioOutputs, bluetoothDevices, bluetoothPair, bluetoothRemove, displayModes, foregroundPid, onHome, setAudioOutput, setDisplayMode, startPadHelper, stopPadHelper, xinputSnapshot, onXPads, xpadFeed } from './padhelper'
-import { loadGpuDrivers, markGuideSeen, newHomeConflicts } from './system'
+import { gameBarButtonOff, loadGpuDrivers, markGuideSeen, newHomeConflicts } from './system'
 import { couchMark, couchStatus, saveCouchCheck, startCouchCheck } from './couchcheck'
 import type { OverlayAction } from '../shared/types'
 import { attachWindow, notify, send } from './notify'
@@ -252,6 +252,11 @@ async function runCommand(command: string, arg?: string): Promise<void> {
           ? { kind: 'success', title: 'PS3 controller ready', detail: 'The driver is installed. Your controller works in Starstation and every game.' }
           : { kind: r.cancelled ? 'warning' : 'error', title: 'PS3 controller driver not installed', detail: r.error ?? '', action: { label: 'Try again', command: 'install-ds3-driver' } }
       )
+      return
+    }
+    case 'gamebar-off': {
+      const r = gameBarButtonOff()
+      notify(r.ok ? { kind: 'success', title: 'Game Bar fixed', detail: 'The PS / Home button now only opens Starstation’s menu.' } : { kind: 'error', title: 'Game Bar not changed', detail: r.error ?? '' })
       return
     }
     case 'install-emulator':

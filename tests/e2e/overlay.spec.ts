@@ -156,6 +156,13 @@ test('Steam and Game Bar: a one-time guide, never a change to their settings', a
     // the health check keeps listing it
     const issues = await api<{ title: string }[]>(page, 'health')
     expect(issues.map((i) => i.title)).toEqual(expect.arrayContaining(['Xbox Game Bar takes the PS / Home button', 'Steam is running']))
+    // 2.1.0: the Game Bar one has "Fix it" (only on request); afterwards it is gone, Steam stays (only Steam can change it)
+    const gb = (issues as { title: string; fix?: { command: string } }[]).find((i) => i.title.startsWith('Xbox Game Bar'))
+    expect(gb?.fix?.command).toBe('gamebar-off')
+    await api(page, 'runCommand', 'gamebar-off')
+    const after = await api<{ title: string }[]>(page, 'health')
+    expect(after.map((i) => i.title)).not.toContain('Xbox Game Bar takes the PS / Home button')
+    expect(after.map((i) => i.title)).toContain('Steam is running')
   } finally {
     await app.close()
   }

@@ -6,7 +6,7 @@ import { logger } from './log'
 
 /**
  * Things outside Starstation that get in the way of playing from the couch (SPEC-v2 A).
- * Only read, never changed: Starstation shows how to switch them off instead.
+ * Read, and shown with how to switch them off; the Game Bar button can be switched off by "Fix it" (2.1.0).
  */
 
 const log = logger('system')
@@ -39,6 +39,34 @@ export function homeConflicts(): HomeConflicts {
     gameBar = true // not set: Windows' default, the controller button opens the Game Bar
   }
   return { steam, gameBar }
+}
+
+/**
+ * Health check "Fix it": the controller's Home button stops opening the Xbox Game Bar (the same switch as Windows
+ * Settings → Gaming → Xbox Game Bar → "Open Xbox Game Bar using this button on a controller"). Only for this
+ * Windows user, no admin needed; the old value is noted in config\gamebar-before.json so it can be put back.
+ */
+export function gameBarButtonOff(): { ok: boolean; error?: string } {
+  if (process.env.STARSTATION_TEST_CONFLICTS !== undefined) {
+    process.env.STARSTATION_TEST_CONFLICTS = process.env.STARSTATION_TEST_CONFLICTS.replace('gamebar', '')
+    return { ok: true }
+  }
+  const reg = path.join(sys32, 'reg.exe')
+  try {
+    let before: string | null = null
+    try {
+      before = execFileSync(reg, ['query', 'HKCU\\Software\\Microsoft\\GameBar', '/v', 'UseNexusForGameBarEnabled'], { encoding: 'utf8', timeout: 5000, windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] })
+    } catch {
+      /* not set yet */
+    }
+    writeJson(dir('config', 'gamebar-before.json'), { at: new Date().toISOString(), value: before ? /0x1\b/.test(before) ? 1 : 0 : null })
+    execFileSync(reg, ['add', 'HKCU\\Software\\Microsoft\\GameBar', '/v', 'UseNexusForGameBarEnabled', '/t', 'REG_DWORD', '/d', '0', '/f'], { timeout: 5000, windowsHide: true, stdio: 'ignore' })
+    log.info('Xbox Game Bar: controller button switched off (HKCU GameBar UseNexusForGameBarEnabled = 0)')
+    return { ok: true }
+  } catch (e) {
+    log.warn('could not switch off the Game Bar controller button', e)
+    return { ok: false, error: 'Windows didn’t allow the change. Switch it off in Windows Settings → Gaming → Xbox Game Bar.' }
+  }
 }
 
 const guidesFile = () => dir('config', 'guides.json')

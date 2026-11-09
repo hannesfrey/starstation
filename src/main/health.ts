@@ -122,13 +122,14 @@ export function healthCheck(): HealthIssue[] {
     issues.push({
       severity: 'warning',
       title: 'Xbox Game Bar takes the PS / Home button',
-      detail: 'Windows Settings → Gaming → Xbox Game Bar: switch off "Open Xbox Game Bar using this button on a controller". Starstation doesn’t change it for you.'
+      detail: 'Pressing the PS / Home button opens the Game Bar on top of your game. "Fix it" switches that off (only this button, only for you; Windows Settings → Gaming → Xbox Game Bar switches it back on).',
+      fix: { label: 'Fix it', command: 'gamebar-off' }
     })
   if (hc.steam)
     issues.push({
       severity: 'info',
       title: 'Steam is running',
-      detail: 'Steam can take the PS / Home button: in Steam → Settings → Controller, switch off "Guide button focuses Steam" — or close Steam while you play here.'
+      detail: 'Steam can take the PS / Home button. In Steam: Settings → Controller → switch off "Guide Button Focuses Steam". Or close Steam while you play here.'
     })
 
   // old graphics drivers are the most common reason for crashes and glitches in PS3 / Xbox 360 / Switch-era emulators
