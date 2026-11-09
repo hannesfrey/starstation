@@ -5,7 +5,7 @@ import { dir } from './paths'
 import { allConsoles, getEmulator, emulatorDir, fill, vars, type ConsolePreset, type EmulatorPreset } from './presets'
 import { matchesBios } from './bios'
 import { scanConsole } from './library/scan'
-import { copyTree, moveFile, partsOf, verifyTree } from './fsutil'
+import { copyTree, moveGroup, partsOf, verifyTree } from './fsutil'
 import { writeJson, readJson } from './store'
 import { logger } from './log'
 import { versionFromAsset } from './formats/version'
@@ -320,11 +320,8 @@ export async function runImport(plan: ImportPlan, progress: (p: ImportProgress) 
   for (const t of gameTasks) {
     progress({ phase: 'move', done: g++, total: gameTasks.length, current: t.label })
     try {
-      for (const part of t.parts ?? []) {
-        const rel = path.relative(path.dirname(t.from), part)
-        await moveFile(part, path.join(path.dirname(t.to), rel))
-      }
-      await moveFile(t.from, t.to)
+      const parts = (t.parts ?? []).map((part) => ({ from: part, to: path.join(path.dirname(t.to), path.relative(path.dirname(t.from), part)) }))
+      await moveGroup([...parts, { from: t.from, to: t.to }])
       result.moved++
     } catch (e) {
       result.errors.push(`${t.label}: ${(e as Error).message}`)

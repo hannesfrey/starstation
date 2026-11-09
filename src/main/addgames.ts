@@ -4,7 +4,7 @@ import { dir } from './paths'
 import { allConsoles } from './presets'
 import { cueDataFile, discImage } from './formats/gameid'
 import { withIso } from './formats/iso9660'
-import { moveFile, partsOf } from './fsutil'
+import { moveGroup, partsOf } from './fsutil'
 import { logger } from './log'
 import type { AddGamesResult } from '../shared/types'
 
@@ -149,12 +149,11 @@ export async function addGames(paths: string[], consoleId?: string): Promise<Add
     }
     try {
       const isFile = fs.statSync(p).isFile()
-      for (const part of isFile ? partsOf(p) : []) {
+      const group = (isFile ? partsOf(p) : []).map((part) => {
         const rel = path.relative(path.dirname(p), part)
-        const dest = rel.startsWith('..') || path.isAbsolute(rel) ? path.join(targetDir, path.basename(part)) : path.join(targetDir, rel)
-        if (!fs.existsSync(dest)) await moveFile(part, dest)
-      }
-      await moveFile(p, to)
+        return { from: part, to: rel.startsWith('..') || path.isAbsolute(rel) ? path.join(targetDir, path.basename(part)) : path.join(targetDir, rel) }
+      })
+      await moveGroup([...group, { from: p, to }])
       res.added.push({ path: to, console: c })
       log.info(`added ${p} → ${to}`)
     } catch (e) {

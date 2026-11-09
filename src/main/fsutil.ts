@@ -165,6 +165,39 @@ export async function renameRetry(from: string, to: string, tries = 12): Promise
   }
 }
 
+/**
+ * Move the files of one game together (a .cue and its .bin tracks…): #09 every target is checked before anything
+ * moves, and a move that fails half-way puts the moved files back — a game is never split between two folders.
+ * #10 a target that already exists counts as "already there" only when it is the very same file (size and
+ * content); a different file with the same name (two games' "Track 1.bin") is a conflict and nothing moves.
+ * Returns the targets that were already there (their sources stay where they are).
+ */
+export async function moveGroup(items: { from: string; to: string }[]): Promise<{ alreadyThere: string[] }> {
+  const alreadyThere: string[] = []
+  const todo: { from: string; to: string }[] = []
+  for (const it of items) {
+    const there = fs.statSync(it.to, { throwIfNoEntry: false })
+    if (!there) {
+      todo.push(it)
+      continue
+    }
+    const st = fs.statSync(it.from)
+    if (there.isFile() && st.isFile() && there.size === st.size && (await sha1(it.from)) === (await sha1(it.to))) alreadyThere.push(it.to)
+    else throw new Error(`a different file named ${path.basename(it.to)} is already there (from another game?). Nothing was moved.`)
+  }
+  const done: { from: string; to: string }[] = []
+  try {
+    for (const it of todo) {
+      await moveFile(it.from, it.to)
+      done.push(it)
+    }
+  } catch (e) {
+    for (const it of done.reverse()) await moveFile(it.to, it.from).catch(() => undefined)
+    throw e
+  }
+  return { alreadyThere }
+}
+
 export async function moveFile(from: string, to: string): Promise<void> {
   await fsp.mkdir(path.dirname(to), { recursive: true })
   if (fs.existsSync(to)) throw new Error(`${to} already exists`)
