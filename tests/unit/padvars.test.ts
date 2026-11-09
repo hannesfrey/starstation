@@ -33,3 +33,37 @@ describe('players for the emulators when no order was chosen', () => {
     expect([v.pad, v.pad2]).toEqual(['SDL-0', 'XInput-0'])
   })
 })
+
+describe('PS1 / PS2 read every pad through SDL (2.1.0: GT4 lag)', () => {
+  it('Xbox-style pads keep their slot: XInput-0 → SDL-0, XInput-1 → SDL-1', async () => {
+    saved = { api: 'xinput', pads: [XBOX, XBOX] }
+    const { padVars } = await import('../../src/main/controllers')
+    const v = padVars()
+    expect([v.sdlpad, v.sdlpad2]).toEqual(['SDL-0', 'SDL-1'])
+  })
+
+  it('the order picked on the player screen is kept', async () => {
+    saved = { api: 'xinput', pads: [XBOX, XBOX] }
+    const { padVars } = await import('../../src/main/controllers')
+    const v = padVars([{ api: 'xinput', index: 1 }, { api: 'xinput', index: 0 }])
+    expect([v.sdlpad, v.sdlpad2]).toEqual(['SDL-1', 'SDL-0'])
+  })
+
+  it('a PlayStation pad without a driver comes after the Xbox-style ones', async () => {
+    saved = { api: 'xinput', pads: [XBOX, PS5] }
+    const { padVars } = await import('../../src/main/controllers')
+    const v = padVars()
+    expect([v.sdlpad, v.sdlpad2]).toEqual(['SDL-0', 'SDL-1'])
+  })
+
+  it('the presets use it, and switch XInput off', async () => {
+    const fs = await import('node:fs')
+    const path = await import('node:path')
+    for (const c of ['ps1', 'ps2']) {
+      const text = fs.readFileSync(path.resolve(__dirname, '..', '..', 'presets', 'consoles', `${c}.json`), 'utf8')
+      expect(text, c).not.toMatch(/"\{pad2?\}\//)
+      expect(text, c).toMatch(/"XInput": "false"/)
+      expect(text, c).toMatch(/"SDL_XINPUT_ENABLED": "0"/)
+    }
+  })
+})

@@ -84,11 +84,16 @@ export function padVars(order?: PlayerPad[]): Record<string, string> {
     // so player 2 can join without restarting the game
     players: String(count)
   }
+  // PCSX2 / DuckStation read every pad through SDL with raw input (2.1.0: their XInput polling waits ~70 ms per
+  // empty slot on some PCs — GT4 ran at a few frames per second). SDL then numbers XInput-style pads by their
+  // XInput slot (SDL-0 = XInput-0); other pads follow after them.
+  const xinputPads = players.slice(0, count).filter((p) => p.api === 'xinput').length
   players.forEach((p, i) => {
     const n = i === 0 ? '' : String(i + 1)
     const has = i < count
     // PCSX2 / DuckStation device prefix
     v[`pad${n}`] = `${p.api === 'sdl' ? 'SDL' : 'XInput'}-${p.index}`
+    v[`sdlpad${n}`] = `SDL-${p.api === 'xinput' ? p.index : Math.max(xinputPads, 0) + p.index}`
     // RetroArch device index
     v[`rapad${i + 1}`] = String(p.index)
     // Dolphin device
