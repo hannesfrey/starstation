@@ -94,3 +94,38 @@ describe('save backups', () => {
     expect(fs.readFileSync(sp, 'utf8')).toBe('big brother')
   })
 })
+
+describe('profile switch', () => {
+  it('#04 a leftover copy in the store is put aside, not allowed to keep the live saves in place', async () => {
+    const main = profiles.listProfiles().find((p) => p.main)!
+    const brother = profiles.listProfiles().find((p) => p.name === 'Sister')!
+    expect(profiles.activeProfile()).toBe(main.id)
+    const hdd = dir('bios', 'xbox', 'xbox_hdd.qcow2')
+    fs.mkdirSync(path.dirname(hdd), { recursive: true })
+    fs.writeFileSync(hdd, 'main hdd')
+    const stale = dir('config', 'profiles', main.id, 'emulator-saves', 'xbox-hdd.qcow2')
+    fs.mkdirSync(path.dirname(stale), { recursive: true })
+    fs.writeFileSync(stale, 'stale copy')
+
+    expect((await profiles.switchProfile(brother.id)).ok).toBe(true)
+    expect(fs.existsSync(hdd)).toBe(false) // the sister starts with her own (none yet), not with main's disk
+    expect(fs.readFileSync(stale, 'utf8')).toBe('main hdd')
+    const kept = fs.readdirSync(path.dirname(stale)).filter((n) => n.includes('.leftover-'))
+    expect(kept.length).toBe(1)
+    expect(fs.readFileSync(path.join(path.dirname(stale), kept[0]), 'utf8')).toBe('stale copy')
+    expect(profiles.switchPending()).toBe(false)
+
+    expect((await profiles.switchProfile(main.id)).ok).toBe(true)
+    expect(fs.readFileSync(hdd, 'utf8')).toBe('main hdd')
+  })
+
+  it('#03 a switch cut off after the moves (before the profile was saved) is finished at the next start', async () => {
+    const main = profiles.listProfiles().find((p) => p.main)!
+    const sister = profiles.listProfiles().find((p) => p.name === 'Sister')!
+    fs.writeFileSync(dir('config', 'profiles-switch.json'), JSON.stringify({ from: main.id, to: sister.id, steps: [] }))
+    expect(profiles.switchPending()).toBe(true)
+    await profiles.finishInterruptedSwitch()
+    expect(profiles.activeProfile()).toBe(sister.id)
+    expect(profiles.switchPending()).toBe(false)
+  })
+})

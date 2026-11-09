@@ -168,7 +168,8 @@ const store = (profile: string, key: string) => dir('config', 'profiles', profil
 interface Journal {
   from: string
   to: string
-  steps: { live: string; out: string; in: string; done: boolean }[]
+  /** hadLive / hadIn: what existed when the switch began (#04), so a resumed switch knows what each move was. */
+  steps: { live: string; out: string; in: string; done: boolean; hadLive?: boolean; hadIn?: boolean }[]
 }
 
 async function backupBeforeFirstSwap(spots: Spot[]): Promise<void> {
@@ -179,24 +180,53 @@ async function backupBeforeFirstSwap(spots: Spot[]): Promise<void> {
   log.info(`emulator saves backed up to ${b} before the first profile switch`)
 }
 
-/** Do (or finish) the swaps written in the journal. Each rename is noted as done right after it. */
+/**
+ * Do (or finish) the swaps written in the journal. Each step is noted as done right after it. The journal stays
+ * until the caller has saved the new profile as active (#03): a crash in between finishes the switch at the next
+ * start instead of leaving the old profile active on the new one's saves.
+ */
 async function runJournal(j: Journal): Promise<void> {
   for (const st of j.steps) {
     if (st.done) continue
+    const old = st.hadLive === undefined // journal from before 2.1.0: the old rules
     // 1. the outgoing profile's saves leave the emulator (if they haven't already)
-    if (fs.existsSync(st.live) && !fs.existsSync(st.out)) {
-      await fsp.mkdir(path.dirname(st.out), { recursive: true })
-      await renameRetry(st.live, st.out)
+    if ((old || st.hadLive) && fs.existsSync(st.live)) {
+      if (fs.existsSync(st.out)) {
+        if (!old) throw new Error(`both ${st.live} and ${st.out} exist: not moving either`)
+      } else {
+        await fsp.mkdir(path.dirname(st.out), { recursive: true })
+        await renameRetry(st.live, st.out)
+      }
     }
     // 2. the incoming profile's saves move in (or the place stays empty: the emulator starts fresh)
-    if (fs.existsSync(st.in) && !fs.existsSync(st.live)) {
+    if ((old || st.hadIn) && fs.existsSync(st.in) && !fs.existsSync(st.live)) {
       await fsp.mkdir(path.dirname(st.live), { recursive: true })
       await renameRetry(st.in, st.live)
     }
     st.done = true
     writeJson(journalFile(), j)
   }
-  fs.rmSync(journalFile(), { force: true })
+}
+
+/**
+ * Before a switch: a copy left in the outgoing profile's store (an older switch that went wrong) would stop its
+ * live saves from moving out. It is put aside under a dated name — never deleted, never mixed in.
+ */
+async function planSteps(from: string, to: string, spots: Spot[]): Promise<Journal> {
+  const steps: Journal['steps'] = []
+  for (const sp of spots) {
+    const live = sp.live
+    const out = store(from, sp.key)
+    const inn = store(to, sp.key)
+    const hadLive = fs.existsSync(live)
+    if (hadLive && fs.existsSync(out)) {
+      const aside = `${out}.leftover-${Date.now()}`
+      log.warn(`profile switch: ${out} was already there; kept as ${aside}`)
+      await renameRetry(out, aside)
+    }
+    steps.push({ live, out, in: inn, done: false, hadLive, hadIn: fs.existsSync(inn) })
+  }
+  return { from, to, steps }
 }
 
 /** A switch was cut off half-way and isn't finished yet: no game may start (it would play on mixed saves). */
@@ -213,6 +243,7 @@ export async function finishInterruptedSwitch(): Promise<void> {
   const s = load()
   s.active = j.to
   save(s)
+  fs.rmSync(journalFile(), { force: true })
 }
 
 /** A switch is moving save folders right now: a second one (a double press) must not move them at the same time. */
@@ -237,7 +268,7 @@ async function switchNow(id: string, pin?: string): Promise<{ ok: boolean; error
   if (target?.pinHash && !pinOk(target, pin ?? '')) return { ok: false, error: 'Wrong PIN.' }
   const spots = emulatorSaveSpots()
   await backupBeforeFirstSwap(spots)
-  const j: Journal = { from: s.active, to: id, steps: spots.map((sp) => ({ live: sp.live, out: store(s.active, sp.key), in: store(id, sp.key), done: false })) }
+  const j = await planSteps(s.active, id, spots)
   writeJson(journalFile(), j)
   try {
     await runJournal(j)
@@ -255,6 +286,7 @@ async function switchNow(id: string, pin?: string): Promise<{ ok: boolean; error
   const leaving = s.active
   s.active = id
   save(s)
+  fs.rmSync(journalFile(), { force: true }) // only now: the new profile is saved as active
   if (leaving === GUEST) await clearGuest()
   applyProfilePaths()
   log.info(`profile ${leaving} → ${id}`)
