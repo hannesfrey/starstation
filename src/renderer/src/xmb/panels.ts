@@ -16,6 +16,8 @@ export interface PanelExtra {
   importing: boolean
   /** Triangle-menu data per game (resume state, backups). */
   details: Record<string, GameDetails>
+  /** #35 what could not be loaded ("details:<game>", "mods:<game>"): "Try again" instead of "Loading…" for ever. */
+  failed?: Record<string, boolean>
   /** Files whose console has to be picked by hand. */
   addAsk?: AddGamesResult['ask']
   mods: Record<string, ModsView>
@@ -85,6 +87,8 @@ export interface Panel {
 }
 
 export interface PanelHandlers {
+  /** Load a game's details / mods again after it failed (#35). */
+  retryLoad: (what: 'details' | 'mods', gameId: string) => void
   setSetting: <K extends keyof Settings>(k: K, v: Settings[K]) => void
   command: (cmd: string, arg?: string) => void
   launch: (g: Game, anyway?: boolean, noUpdate?: boolean) => void
@@ -1088,7 +1092,12 @@ export function buildPanel(id: string, arg: string | undefined, state: AppState,
       if (!g) return null
       const d = x.details[g.id]
       const items: PItem[] = [{ key: 'now', label: 'Back up now', run: () => (h.backupNow(g), 'keep') }]
-      if (!d) items.push({ key: 'loading', label: 'Loading…', info: true })
+      if (!d)
+        items.push(
+          x.failed?.[`details:${g.id}`]
+            ? { key: 'retry', label: 'Couldn’t load this. Try again', run: () => (h.retryLoad('details', g.id), 'keep') }
+            : { key: 'loading', label: 'Loading…', info: true }
+        )
       else if (!d.backups.length) items.push({ key: 'none', label: 'No backups yet. Saves are backed up every time you start the game (last 5 kept).', info: true })
       for (const b of d?.backups ?? [])
         items.push({
@@ -1156,7 +1165,16 @@ export function buildPanel(id: string, arg: string | undefined, state: AppState,
       const g = state.library.games.find((x) => x.id === arg)
       if (!g) return null
       const v = x.mods[g.id]
-      if (!v) return { id, title: 'Mods', items: [{ key: 'loading', label: 'Loading…', info: true }] }
+      if (!v)
+        return {
+          id,
+          title: 'Mods',
+          items: [
+            x.failed?.[`mods:${g.id}`]
+              ? { key: 'retry', label: 'Couldn’t load the mods. Try again', run: () => (h.retryLoad('mods', g.id), 'keep') }
+              : { key: 'loading', label: 'Loading…', info: true }
+          ]
+        }
       const items: PItem[] = []
       if (v.reason) items.push({ key: 'reason', label: `${v.reason} Patch files still work.`, info: true })
       if (v.mods.length)

@@ -232,9 +232,22 @@ export function App() {
   const loadDetails = useCallback(async (id: string) => {
     // a failure (logged by the main process) must not stop ✕ from starting the game: it starts without the extras
     const d = await api.gameDetails(id).catch(() => null)
-    if (d) setExtra((x) => ({ ...x, details: { ...x.details, [id]: d } }))
+    setExtra((x) => ({ ...x, ...(d ? { details: { ...x.details, [id]: d } } : {}), failed: { ...x.failed, [`details:${id}`]: !d } }))
     return d
   }, [])
+  /** A game's mods for its panels; a failure shows "Try again" (#35). */
+  const fetchMods = useCallback(async (gid: string) => {
+    const v = await api.mods(gid).catch(() => null)
+    setExtra((x) => ({ ...x, ...(v ? { mods: { ...x.mods, [gid]: v } } : {}), failed: { ...x.failed, [`mods:${gid}`]: !v } }))
+    return v
+  }, [])
+  const retryLoad = useCallback(
+    (what: 'details' | 'mods', gid: string) => {
+      setExtra((x) => ({ ...x, failed: { ...x.failed, [`${what}:${gid}`]: false } }))
+      void (what === 'details' ? loadDetails(gid) : fetchMods(gid))
+    },
+    [loadDetails, fetchMods]
+  )
 
   const stateRef = useRef<AppState | null>(null)
   stateRef.current = state
@@ -405,7 +418,7 @@ export function App() {
     setPanels((p) => [...p, { id, arg, index: 0 }])
     if (arg && ['game', 'backups', 'delete'].includes(id)) void loadDetails(arg)
     // the game's options show its mod profile too
-    if (arg && id === 'game') void api.mods(arg).then((v) => v && setExtra((x) => ({ ...x, mods: { ...x.mods, [arg]: v } })))
+    if (arg && id === 'game') void fetchMods(arg)
     if (id === 'about') void api.updateState().then((update) => setExtra((x) => ({ ...x, update })))
     if (id === 'mod-sources') void api.nexusStatus().then((nexusStatus) => setExtra((x) => ({ ...x, nexusStatus })))
     if (id === 'system' || id === 'sound' || id === 'screen') {
@@ -438,7 +451,7 @@ export function App() {
     if (id === 'steam') void api.steamStatus().then((steam) => setExtra((x) => ({ ...x, steam })))
     if (id === 'licenses' || id === 'emulator') void api.licenses().then((licenses) => setExtra((x) => ({ ...x, licenses })))
     if (id === 'emulator') void api.emulators().then((emulators) => setExtra((x) => ({ ...x, emulators })))
-    if (arg && id === 'mods') void api.mods(arg).then((v) => v && setExtra((x) => ({ ...x, mods: { ...x.mods, [arg]: v } })))
+    if (arg && id === 'mods') void fetchMods(arg)
     if (arg && id === 'gb-mod') {
       const mid = Number(arg.split('|')[1])
       api
@@ -492,10 +505,9 @@ export function App() {
   }, [])
   // ---- mods ----
   const loadMods = useCallback(async (gid: string) => {
-    const v = await api.mods(gid)
-    if (v) setExtra((x) => ({ ...x, mods: { ...x.mods, [gid]: v } }))
+    await fetchMods(gid)
     void loadDetails(gid)
-  }, [loadDetails])
+  }, [loadDetails, fetchMods])
   const onModAdded = useCallback(
     (gid: string, r: ModAddResult | null) => {
       if (!r) return
@@ -1245,6 +1257,7 @@ export function App() {
       ref.arg,
       state,
       {
+        retryLoad,
         setSetting,
         command,
         launch,
@@ -1349,6 +1362,7 @@ export function App() {
     collectionToggle,
     collectionDelete,
     backupNow,
+    retryLoad,
     restoreBackup,
     restorePreviousResume,
     setGameOption,
