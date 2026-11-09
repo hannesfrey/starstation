@@ -50,10 +50,29 @@ export async function checkDs3(): Promise<Ds3Status> {
   }
   const ids = ds3Instances(await run(path.join(sys32, 'pnputil.exe'), ['/enum-devices', '/connected']))
   if (!ids.length) return (last = { state: 'none' })
+  // the registry still names DsHidMini after its driver files were removed (Windows: "Error", code 19 — Hannes,
+  // 2026-11-08: the pads stopped working and Starstation said all was fine). pnputil /problem lists only devices
+  // Windows has a problem with, in any language
+  const broken = problemDs3(await run(path.join(sys32, 'pnputil.exe'), ['/enum-devices', '/connected', '/problem']))
+  if (broken.length) {
+    log.warn(`PS3 controller has a driver problem: ${broken.join(', ')}`)
+    return (last = { state: 'needs-driver', service: 'driver missing' })
+  }
   const keys = await Promise.all(ids.map((id) => run(path.join(sys32, 'reg.exe'), ['query', `HKLM\\SYSTEM\\CurrentControlSet\\Enum\\${id}`])))
   const notReady = keys.find((k) => !isDsHidMini(k))
   last = notReady === undefined ? { state: 'ready', service: 'dshidmini' } : { state: 'needs-driver', service: serviceOf(notReady) }
   return last
+}
+
+/**
+ * pnputil /enum-devices /connected /problem output → PS3 controllers Windows reports a problem for (exported for
+ * tests). Only listed devices have a problem; a Windows too old for /problem prints an error and lists none.
+ */
+export function problemDs3(pnputilProblemOutput: string): string[] {
+  return pnputilProblemOutput
+    .split(/\r?\n\s*\r?\n/)
+    .filter((block) => /\[CM_PROB_|\(0x[0-9a-f]+\)/i.test(block))
+    .flatMap((block) => ds3Instances(block))
 }
 
 /**

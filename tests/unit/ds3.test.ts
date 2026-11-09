@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { ds3Instances, isDsHidMini, serviceOf, setupCommand } from '../../src/main/ds3'
+import { ds3Instances, isDsHidMini, problemDs3, serviceOf, setupCommand } from '../../src/main/ds3'
 
 describe('driver setup command', () => {
   // runs the real command (without the Windows permission prompt) on a stand-in script that records what it got;
@@ -78,5 +78,30 @@ describe('PS3 controller detection', () => {
     expect(isDsHidMini('    Service    REG_SZ    WinUSB\r\n    Mfg    REG_SZ    Scarlet.Crush Productions\r\n')).toBe(false)
     expect(isDsHidMini('    Service    REG_SZ    mshidumdf\r\n    Mfg    REG_SZ    Someone Else\r\n')).toBe(false)
     expect(isDsHidMini('')).toBe(false)
+  })
+})
+
+describe('a PS3 controller whose driver is gone (Windows code 19)', () => {
+  // real pnputil output on Hannes's PC is Spanish: only the [CM_PROB_…] / (0x..) parts are the same everywhere
+  const spanish = [
+    'Utilidad PnP de Microsoft',
+    '',
+    String.raw`Id. de instancia:                PCI\VEN_8086&DEV_7A24&SUBSYS_7D931462&REV_11\3&11583659&0&FD`,
+    'Estado:                     Problema',
+    'Código del problema:               28 (0x1C) [CM_PROB_FAILED_INSTALL]',
+    '',
+    String.raw`Id. de instancia:                USB\VID_054C&PID_0268\6&2b8b5fd9&0&3`,
+    'Descripción del dispositivo:         PLAYSTATION(R)3 Controller',
+    'Estado:                     Problema',
+    'Código del problema:               19 (0x13) [CM_PROB_REGISTRY]',
+    ''
+  ].join('\r\n')
+
+  it('is found in any language', () => {
+    expect(problemDs3(spanish)).toEqual([String.raw`USB\VID_054C&PID_0268\6&2b8b5fd9&0&3`])
+  })
+  it('no problem listed (or a Windows without /problem): nothing', () => {
+    expect(problemDs3('Utilidad PnP de Microsoft\r\n\r\nNo se encontraron dispositivos.\r\n')).toEqual([])
+    expect(problemDs3('Invalid option /problem.')).toEqual([])
   })
 })
