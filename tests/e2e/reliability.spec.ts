@@ -683,3 +683,32 @@ test('files Starstation can not write at start (like a full disk): it still star
     await app.close()
   }
 })
+
+test('#24 changing your own PIN asks for the current one first', async () => {
+  const { files, presets } = setup('pin-change', 300)
+  const { app, page } = await launchApp(files, presets)
+  try {
+    await expect(page.getByTestId('game-info')).toContainText('Alpha')
+    const me = (await api<{ id: string; main: boolean }[]>(page, 'profiles')).find((p) => p.main)!
+    expect((await api<{ ok: boolean }>(page, 'profilePin', me.id, '1234')).ok).toBe(true)
+    await page.reload()
+    await page.getByTestId('cat-users').dispatchEvent('click')
+    await page.getByTestId(`item-user-${me.id}`).dispatchEvent('click')
+    await page.keyboard.press(' ')
+    await expect(page.getByTestId('panel-profile')).toBeVisible()
+    await page.getByTestId('pitem-pin').dblclick()
+    // first the current PIN, then the new one
+    await expect(page.getByTestId('entry-field')).toContainText('Current PIN')
+    await page.keyboard.type('1234')
+    await page.keyboard.press('Enter')
+    await expect(page.getByTestId('entry-field')).toContainText('New PIN')
+    await page.keyboard.type('5678')
+    await page.keyboard.press('Enter')
+    await expect(page.getByTestId('notices')).toContainText('PIN set')
+    // the new PIN is the one that works now; a wrong current PIN changes nothing
+    expect((await api<{ ok: boolean }>(page, 'profilePin', me.id, '1111', '1234')).ok).toBe(false)
+    expect((await api<{ ok: boolean }>(page, 'profilePin', me.id, '1111', '5678')).ok).toBe(true)
+  } finally {
+    await app.close()
+  }
+})

@@ -551,6 +551,8 @@ export function App() {
     [loadMods]
   )
   // ---- profiles ----
+  /** The current PIN typed before a new one (#24), kept only until the new PIN is sent. */
+  const oldPinRef = useRef<string | undefined>(undefined)
   const askField = useCallback((title: string, target: string, value = '') => {
     setPanels([])
     setEntry({ kind: 'field', title, value, row: 0, col: 0, focus: 'keys', result: 0, target })
@@ -572,6 +574,12 @@ export function App() {
       const p = profiles.find((x) => x.id === id)
       if (!p) return
       if (what === 'name') return askField('New name', `pname:${id}`, p.name)
+      // #24 changing or removing a PIN asks for the current one first — except the first profile resetting
+      // someone else's (a forgotten PIN)
+      const me = profiles.find((x) => x.active)
+      const needOld = p.hasPin && !(me?.main && !p.main)
+      oldPinRef.current = undefined
+      if (needOld && (what === 'pin' || what === 'nopin')) return askField(`Current PIN of ${p.name}`, `oldpin:${what === 'pin' ? 'set' : 'remove'}:${id}`)
       if (what === 'pin') return askField(p.hasPin ? 'New PIN (4 digits)' : 'PIN (4 digits)', `setpin:${id}`)
       if (what === 'nopin')
         return void api.profilePin(id, null).then((r) => {
@@ -1050,6 +1058,20 @@ export function App() {
         return
       }
       const tg = entry.target as string
+      if (tg.startsWith('oldpin:')) {
+        const [, step, pid] = tg.split(':')
+        oldPinRef.current = value
+        if (step === 'set') return askField('New PIN (4 digits)', `setpin:${pid}`)
+        setEntry(null)
+        const old = oldPinRef.current
+        oldPinRef.current = undefined
+        void api.profilePin(pid, null, old).then((r) => {
+          if (!r.ok) notify({ kind: 'error', title: 'PIN not removed', detail: r.error })
+          else notify({ kind: 'success', title: 'PIN removed' })
+          void api.profiles().then(applyProfiles)
+        })
+        return
+      }
       if (/^(pin|setpin|pname):/.test(tg) || tg === 'newprofile') {
         setEntry(null)
         const pid = tg.slice(tg.indexOf(':') + 1)
@@ -1057,13 +1079,15 @@ export function App() {
           void api.profileSwitch(pid, value).then((r) => {
             if (!r.ok && !r.busy) notify({ kind: 'error', title: 'Profile not switched', detail: r.error })
           })
-        else if (tg.startsWith('setpin:'))
-          void api.profilePin(pid, value, undefined).then((r) => {
+        else if (tg.startsWith('setpin:')) {
+          const old = oldPinRef.current
+          oldPinRef.current = undefined
+          void api.profilePin(pid, value, old).then((r) => {
             if (!r.ok) notify({ kind: 'error', title: 'PIN not set', detail: r.error })
             else notify({ kind: 'success', title: 'PIN set' })
             void api.profiles().then(applyProfiles)
           })
-        else if (tg.startsWith('pname:')) void api.profileUpdate(pid, { name: value }).then(applyProfiles)
+        } else if (tg.startsWith('pname:')) void api.profileUpdate(pid, { name: value }).then(applyProfiles)
         else if (value) void api.profileAdd(value).then(applyProfiles)
         return
       }
