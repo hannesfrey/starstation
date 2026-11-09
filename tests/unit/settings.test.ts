@@ -11,11 +11,11 @@ const { getSettings, setSetting } = await import('../../src/main/settings')
 describe('setSetting', () => {
   it('keeps the old value when saving fails', () => {
     const before = getSettings().sounds
-    // the settings file can't be written: a folder sits where it belongs
-    fs.mkdirSync(path.join(FILES, 'config', 'settings.json'), { recursive: true })
+    // the settings can't be written at all: a file sits where the config folder belongs
+    fs.writeFileSync(path.join(FILES, 'config'), 'not a folder')
     expect(() => setSetting('sounds', !before)).toThrow()
     expect(getSettings().sounds).toBe(before)
-    fs.rmSync(path.join(FILES, 'config', 'settings.json'), { recursive: true })
+    fs.rmSync(path.join(FILES, 'config'))
     expect(setSetting('sounds', !before).sounds).toBe(!before)
     expect(getSettings().sounds).toBe(!before)
   })

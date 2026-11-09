@@ -5,7 +5,7 @@ import { spawn } from 'node:child_process'
 import { pathToFileURL } from 'node:url'
 import { filesDir, dir, ensureDataDirs, redirectElectronPaths } from './paths'
 import { logger } from './log'
-import { writeJson } from './store'
+import { flushPendingWrites, writeJson } from './store'
 import { getSettings, isTester, setSetting } from './settings'
 import { enterSafeMode, inSafeMode, leaveSafeMode, restoreSuspended } from './safemode'
 import { endSession, startSession, type StartInfo } from './session'
@@ -1449,6 +1449,7 @@ app.on('will-quit', () => {
   stopPadHelper()
   // a normal close is not a crash
   endSession()
+  flushPendingWrites()
 })
 /** Windows is logging off / shutting down (a window event: `app` has none). Not a crash. */
 function onWindowsEnding(): void {

@@ -111,3 +111,34 @@ describe('#21 the .bak copy gets the same checks', () => {
     expect(readJson(f, { list: [] as number[] })).toEqual({ list: [1] })
   })
 })
+
+describe('#31 a file Windows holds for a moment', () => {
+  it('does not stop Starstation: the write finishes in the background, reads see the new content meanwhile', async () => {
+    const { writesPending } = await import('../../src/main/store')
+    const f = path.join(tmp, 'config', 'held.json')
+    fs.mkdirSync(path.dirname(f), { recursive: true })
+    writeJson(f, { v: 1 })
+    // hold the file the way antivirus does: Windows refuses the rename while it is open without delete sharing
+    const fd = fs.openSync(f, 'r')
+    const realRename = fs.renameSync
+    let held = true
+    fs.renameSync = ((a: fs.PathLike, b: fs.PathLike) => {
+      if (held && String(b) === f) throw Object.assign(new Error('EBUSY'), { code: 'EBUSY' })
+      return realRename(a, b)
+    }) as typeof fs.renameSync
+    try {
+      const t0 = Date.now()
+      writeJson(f, { v: 2 })
+      expect(Date.now() - t0).toBeLessThan(200) // no long wait on the main process
+      expect(writesPending()).toBe(1)
+      expect(readJson(f, {})).toEqual({ v: 2 })
+      held = false
+      fs.closeSync(fd)
+      await expect.poll(() => writesPending(), { timeout: 3000 }).toBe(0)
+      expect(JSON.parse(fs.readFileSync(f, 'utf8'))).toEqual({ v: 2 })
+    } finally {
+      fs.renameSync = realRename
+      try { fs.closeSync(fd) } catch { /* closed already */ }
+    }
+  })
+})
