@@ -23,9 +23,9 @@ export function readJson<T>(file: string, fallback: T): T {
     // valid JSON of another shape than expected (null or a list where an object belongs, e.g. after editing by
     // hand) would reach code that reads its fields: the fallback is used instead (the file stays as it is)
     if (sameShape(parsed.value, fallback)) return parsed.value
-    if (!reported.has(file)) log.warn(`${file} doesn't hold what Starstation expects; using defaults`)
+    if (!reported.has(file)) log.warn(`${file} doesn't hold what Starstation expects; trying the last good copy`)
     reported.add(file)
-    return fallback
+    return goodBackup(file, fallback) ?? fallback
   }
   // some files are read very often (secrets.json on every menu update): note and keep a damaged one only once
   const first = !reported.has(file)
@@ -38,16 +38,19 @@ export function readJson<T>(file: string, fallback: T): T {
       /* best effort */
     }
   }
+  const bak = goodBackup(file, fallback)
+  if (bak !== null && first) log.warn(`${file}: using the last good copy`)
+  return bak ?? fallback
+}
+
+/** The .bak copy, with the same checks as the file itself (#21): readable and of the expected shape. */
+function goodBackup<T>(file: string, fallback: T): T | null {
   try {
     const bak = parse<T>(fs.readFileSync(`${file}.bak`, 'utf8'))
-    if (bak.ok) {
-      if (first) log.warn(`${file}: using the last good copy`)
-      return bak.value
-    }
+    return bak.ok && sameShape(bak.value, fallback) && bak.value !== null ? bak.value : null
   } catch {
-    /* no backup */
+    return null // no backup
   }
-  return fallback
 }
 
 /**

@@ -95,3 +95,19 @@ describe('JSON store', () => {
     expect(fs.existsSync(`${f}.bak`)).toBe(false) // only JSON keeps a backup
   })
 })
+
+describe('#21 the .bak copy gets the same checks', () => {
+  it('a damaged file whose .bak has the wrong shape gives the fallback, not the wrong shape', () => {
+    const f = path.join(tmp, 'config', 'bakshape.json')
+    fs.mkdirSync(path.dirname(f), { recursive: true })
+    fs.writeFileSync(f, '{"cut off')
+    fs.writeFileSync(`${f}.bak`, '[1,2,3]')
+    expect(readJson(f, { a: 1 })).toEqual({ a: 1 })
+  })
+  it('a wrong-shape file uses a good .bak when there is one', () => {
+    const f = path.join(tmp, 'config', 'bakgood.json')
+    fs.writeFileSync(f, 'null')
+    fs.writeFileSync(`${f}.bak`, '{"list":[1]}')
+    expect(readJson(f, { list: [] as number[] })).toEqual({ list: [1] })
+  })
+})

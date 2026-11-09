@@ -46,8 +46,8 @@ export function setSetting<K extends keyof Settings>(key: K, value: Settings[K])
   }
   const s = { ...getSettings() }
   s[key] = value
+  writeJson(file(), s) // first saved: if that fails (disk full, file held), the old value stays in effect (#22)
   cache = s
-  writeJson(file(), s)
   return s
 }
 
