@@ -6,7 +6,8 @@ import { dir } from './paths'
 import { emulatorDir, getConsole, getEmulator, vars, type ConsolePreset } from './presets'
 import { readJson, writeJson } from './store'
 import { artKey, getGame, getStats } from './library/library'
-import { partsOf, renameRetry } from './fsutil'
+import { partsOf, renameRetry, verifyTree } from './fsutil'
+import { activeProfile, profileRoot } from './profiles'
 import { knownPlayers } from './controllers'
 import { logger } from './log'
 import type { BackupInfo, Game, ResumeInfo } from '../shared/types'
@@ -107,8 +108,14 @@ interface Manifest {
   items: { source: string; stored: string; dir: boolean }[]
 }
 
+/**
+ * Backups and kept resume points belong to the profile that is playing (#02): the first profile keeps the old
+ * place (Files\backups), the others keep theirs in their profile folder — a sibling's restore can never put
+ * another sibling's saves back.
+ */
 function backupRoot(g: Game): string {
-  return dir('backups', g.console, artKey(g))
+  const root = profileRoot(activeProfile())
+  return root ? path.join(root, 'backups', g.console, artKey(g)) : dir('backups', g.console, artKey(g))
 }
 
 function walkFiles(p: string, out: { rel: string; size: number; mtime: number }[], rel = '', depth = 0): void {
@@ -164,6 +171,30 @@ function latestFingerprint(g: Game): string | null {
   return b ? (readJson<Manifest | null>(path.join(b.folder, 'manifest.json'), null)?.fingerprint ?? null) : null
 }
 
+/** What a backup really did (#23): only "made", "unchanged" and "no-saves" mean nothing is at risk. */
+export type BackupOutcome =
+  | { status: 'made'; backup: BackupInfo }
+  | { status: 'unchanged' | 'no-saves' }
+  | { status: 'too-big'; bytes: number }
+  | { status: 'failed'; error: string }
+
+export const backupIsSafe = (o: BackupOutcome): boolean => o.status === 'made' || o.status === 'unchanged' || o.status === 'no-saves'
+
+/** Like backupGame, but says what happened instead of returning null or throwing. */
+export async function backupOutcome(g: Game, reason: BackupInfo['reason']): Promise<BackupOutcome> {
+  try {
+    const entries = saveEntries(g)
+    const fp = entries.length ? fingerprint(entries) : null
+    if (!fp?.files) return { status: 'no-saves' }
+    if (fp.bytes > MAX_BACKUP_BYTES) return { status: 'too-big', bytes: fp.bytes }
+    const b = await backupGame(g, reason)
+    return b ? { status: 'made', backup: b } : { status: 'unchanged' }
+  } catch (e) {
+    log.error(`${g.id}: backup (${reason}) failed`, e)
+    return { status: 'failed', error: (e as Error).message }
+  }
+}
+
 /** Copy the game's saves into backups\<console>\<game>\<time>. Skips if nothing changed since the last backup. */
 export async function backupGame(g: Game, reason: BackupInfo['reason']): Promise<BackupInfo | null> {
   const entries = saveEntries(g)
@@ -214,25 +245,57 @@ export async function pruneBackups(g: Game, keep = KEEP_BACKUPS): Promise<void> 
   for (const b of listBackups(g).slice(keep)) await fsp.rm(b.folder, { recursive: true, force: true })
 }
 
-/** Restore a backup. The current saves are backed up first, so a restore can always be undone. */
+/**
+ * Restore a backup. The current saves are backed up first, so a restore can always be undone; if that backup
+ * can't be made, nothing is changed (#23). Every item is first copied next to its place and checked, and only
+ * then swapped in (#05): a broken or unreadable backup leaves the current saves exactly as they were.
+ */
 export async function restoreBackup(g: Game, id: string): Promise<void> {
   const b = listBackups(g).find((x) => x.id === id)
   if (!b) throw new Error('That backup no longer exists.')
   const m = readJson<Manifest | null>(path.join(b.folder, 'manifest.json'), null)
-  if (!m) throw new Error('The backup is damaged (manifest missing).')
-  await backupGame(g, 'before-restore')
-  for (const it of m.items) {
-    const from = path.join(b.folder, it.stored)
-    if (it.dir) {
-      // keep the folder itself (it may be a link into the emulator), replace what's inside
-      await fsp.mkdir(it.source, { recursive: true })
-      const real = fs.realpathSync(it.source)
-      for (const n of await fsp.readdir(real)) await fsp.rm(path.join(real, n), { recursive: true, force: true })
-      await fsp.cp(from, real, { recursive: true, preserveTimestamps: true })
-    } else {
-      await fsp.mkdir(path.dirname(it.source), { recursive: true })
-      await fsp.copyFile(from, it.source)
+  if (!m || !Array.isArray(m.items)) throw new Error('The backup is damaged (manifest missing).')
+  for (const it of m.items)
+    if (!fs.existsSync(path.join(b.folder, it.stored))) throw new Error(`The backup is incomplete (${it.stored} is missing). Nothing was changed.`)
+  const before = await backupOutcome(g, 'before-restore')
+  if (before.status === 'too-big') throw new Error(`The current saves are too big to back up first (${Math.round(before.bytes / 1e6)} MB), so nothing was changed.`)
+  if (before.status === 'failed') throw new Error(`The current saves could not be backed up first (${before.error}), so nothing was changed.`)
+
+  // 1) stage: a checked copy of every item right next to its place
+  const staged: { dir: boolean; live: string; stage: string }[] = []
+  try {
+    for (const it of m.items) {
+      const from = path.join(b.folder, it.stored)
+      let live = it.source
+      if (it.dir) {
+        await fsp.mkdir(it.source, { recursive: true })
+        live = fs.realpathSync(it.source) // keep the folder itself (it may be a link into the emulator)
+      } else await fsp.mkdir(path.dirname(it.source), { recursive: true })
+      const stage = `${live}.ss-restore`
+      staged.push({ dir: it.dir, live, stage })
+      await fsp.rm(stage, { recursive: true, force: true })
+      await fsp.cp(from, stage, { recursive: true, preserveTimestamps: true })
+      const bad = await verifyTree(from, stage, true)
+      if (bad.length) throw new Error(`The backup could not be read back correctly (${path.basename(bad[0])}). Nothing was changed.`)
     }
+  } catch (e) {
+    for (const s of staged) await fsp.rm(s.stage, { recursive: true, force: true }).catch(() => undefined)
+    throw e
+  }
+  // 2) swap: the current contents step aside, the checked ones move in; the old ones go only at the very end
+  for (const { dir: isDir, live, stage } of staged) {
+    const old = `${live}.ss-old`
+    await fsp.rm(old, { recursive: true, force: true })
+    if (isDir) {
+      await fsp.mkdir(old, { recursive: true })
+      for (const n of await fsp.readdir(live)) await renameRetry(path.join(live, n), path.join(old, n))
+      for (const n of await fsp.readdir(stage)) await renameRetry(path.join(stage, n), path.join(live, n))
+      await fsp.rm(stage, { recursive: true, force: true })
+    } else {
+      if (fs.existsSync(live)) await renameRetry(live, old)
+      await renameRetry(stage, live)
+    }
+    await fsp.rm(old, { recursive: true, force: true })
   }
   log.info(`${g.id}: restored backup ${id}`)
 }

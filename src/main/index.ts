@@ -18,7 +18,7 @@ import { biosStatus } from './bios'
 import { findSources, planImport, runImport, summarize } from './importer'
 import { checkUpdates, emulatorInfos, installCore, installEmulator, markTested } from './emulators'
 import { loadLibrary, rescan, view, toggleFavorite, getGame, forgetGame, updateStats } from './library/library'
-import { backupGame, gameFiles, listBackups, noteResumeVersion, ownSaves, previousResume, pruneBackups, restoreBackup, restorePreviousResume, resumeInfo, saveEntries } from './gamedata'
+import { backupOutcome, gameFiles, listBackups, noteResumeVersion, ownSaves, previousResume, pruneBackups, restoreBackup, restorePreviousResume, resumeInfo } from './gamedata'
 import { createCollection, deleteCollection, listCollections, removeGameFromCollections, renameCollection, toggleInCollection } from './collections'
 import { addGames } from './addgames'
 import { afterAdd, installPkg } from './convert'
@@ -826,10 +826,17 @@ function registerIpc(): void {
     const g = getGame(id)
     if (!g || savesBusy.has(id)) return null
     savesBusy.add(id)
-    const b = await backupGame(g, 'manual').finally(() => savesBusy.delete(id))
-    if (b) await pruneBackups(g)
-    notify(b ? { kind: 'save', title: 'Saves backed up', detail: g.title } : { kind: 'info', title: saveEntries(g).length ? 'Saves unchanged since the last backup' : 'No saves found yet', detail: g.title })
-    return b
+    const o = await backupOutcome(g, 'manual').finally(() => savesBusy.delete(id))
+    if (o.status === 'made') await pruneBackups(g)
+    const say = {
+      made: { kind: 'save', title: 'Saves backed up' },
+      unchanged: { kind: 'info', title: 'Saves unchanged since the last backup' },
+      'no-saves': { kind: 'info', title: 'No saves found yet' },
+      'too-big': { kind: 'warning', title: 'Saves too big to back up (over 1 GB)' },
+      failed: { kind: 'error', title: 'Backup failed' }
+    } as const
+    notify({ ...say[o.status], detail: o.status === 'failed' ? `${g.title}: ${o.error}` : g.title })
+    return o.status === 'made' ? o.backup : null
   })
   handle('backup-restore', async (_e, id: string, backupId: string) => {
     const g = getGame(id)
@@ -1146,8 +1153,10 @@ function registerHooks(): void {
   onBeforeLaunch(async (id) => {
     const g = getGame(id)
     if (!g) return
-    const b = await backupGame(g, 'launch')
-    if (b) await pruneBackups(g)
+    const o = await backupOutcome(g, 'launch')
+    if (o.status === 'made') await pruneBackups(g)
+    // the game still starts (the saves are where they were), but nobody should believe there is a fresh backup
+    if (o.status === 'failed') notify({ kind: 'warning', title: 'Saves could not be backed up before starting', detail: `${g.title}: ${o.error}` })
   })
   onAfterExit(async (id, seconds) => {
     const g = getGame(id)
