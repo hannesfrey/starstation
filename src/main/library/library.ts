@@ -9,7 +9,7 @@ import { x360TitleId } from '../formats/xdvdfs'
 import { compatFor } from '../compat'
 import { profileFile } from '../profiles'
 import { loadSerialDb, stripDisc } from './titledb'
-import { folderSize, scanConsole, type ScanEntry } from './scan'
+import { folderSize, scanConsoleAsync, UnreachableError, type ScanEntry } from './scan'
 import { logger } from '../log'
 import type { Game, GameStats, LibraryView } from '../../shared/types'
 
@@ -57,23 +57,39 @@ export function gameCount(consoleId: string): number {
   return games.filter((g) => g.console === consoleId).length
 }
 
-/** Rescan all consoles. Unchanged games keep their cached identity; new ones are identified. */
-export function rescan(): LibraryView {
+let scanQueue: Promise<unknown> = Promise.resolve()
+
+/**
+ * Rescan all consoles. Unchanged games keep their cached identity; new ones are identified. #28: the folders are
+ * read without blocking (the menu keeps answering), one scan at a time, and a console whose folder can't be
+ * reached keeps its games.
+ */
+export function rescan(): Promise<LibraryView> {
+  const job = scanQueue.then(scanNow)
+  scanQueue = job.catch(() => undefined)
+  return job
+}
+
+async function scanNow(): Promise<LibraryView> {
   const t0 = Date.now()
-  const prev = new Map(games.map((g) => [g.id, g]))
+  const before = games
+  const prev = new Map(before.map((g) => [g.id, g]))
   const next: (Game & { mtime: number })[] = []
   let added = 0
+  let identified = 0
   for (const c of allConsoles()) {
     let entries: ScanEntry[]
     try {
-      entries = scanConsole(c)
+      entries = await scanConsoleAsync(c)
     } catch (e) {
-      // keep what was known: a failed look must not make the console's games disappear
-      log.error(`scan failed for ${c.id}`, e)
-      next.push(...games.filter((g) => g.console === c.id))
+      // keep what was known: a failed look (a drive that is gone) must not make the console's games disappear
+      if (e instanceof UnreachableError) log.warn(`scan: ${e.message}; its games are kept`)
+      else log.error(`scan failed for ${c.id}`, e)
+      next.push(...before.filter((g) => g.console === c.id))
       continue
     }
     for (const e of entries) {
+      if (++identified % 25 === 0) await new Promise<void>((r) => setImmediate(r))
       const old = prev.get(e.id)
       if (old && old.mtime === e.mtime && (e.size < 0 || old.size === e.size)) {
         next.push(old)

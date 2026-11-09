@@ -242,7 +242,7 @@ async function runCommand(command: string, arg?: string): Promise<void> {
       return
     }
     case 'rescan':
-      scanAndArt()
+      void scanAndArt().catch((e) => log.error('scan failed', e))
       return
     case 'install-ds3-driver': {
       notify({ kind: 'info', title: 'Installing the PS3 controller driver', detail: 'Windows asks for permission — choose Yes.' })
@@ -401,7 +401,7 @@ function registerIpc(): void {
     importing = true
     const result = await runImport(planImport(source), (p) => send('import-progress', p)).finally(() => (importing = false))
     for (const c of allConsoles()) applyConsoleConfig(c)
-    send('library', rescan())
+    send('library', await rescan())
     send('consoles', consoleInfos())
     notify({
       kind: result.ok ? 'success' : 'error',
@@ -420,8 +420,8 @@ function registerIpc(): void {
     if (key === 'tvMode') applyTvMode()
     return s
   })
-  handle('rescan', () => {
-    const l = rescan()
+  handle('rescan', async () => {
+    const l = await rescan()
     send('consoles', consoleInfos())
     return l
   })
@@ -478,17 +478,17 @@ function registerIpc(): void {
     return r
   })
   handle('custom-console', (_e, id: string) => customConsoleForm(id))
-  handle('custom-console-save', (_e, form: CustomConsoleForm) => {
+  handle('custom-console-save', async (_e, form: CustomConsoleForm) => {
     const r = saveCustomConsole(form)
     if (r.ok) {
-      send('library', rescan())
+      send('library', await rescan())
       send('consoles', consoleInfos())
     }
     return r
   })
-  handle('custom-console-remove', (_e, id: string) => {
+  handle('custom-console-remove', async (_e, id: string) => {
     removeCustomConsole(id)
-    send('library', rescan())
+    send('library', await rescan())
     send('consoles', consoleInfos())
   })
   handle('pick-exe', async () => {
@@ -498,7 +498,7 @@ function registerIpc(): void {
   handle('library-clear-cache', () => {
     fs.rmSync(dir('config', 'library', 'library.json'), { force: true })
     loadLibrary()
-    scanAndArt()
+    void scanAndArt().catch((e) => log.error('scan failed', e))
   })
   // ---- packages ----
   const pkgProgress = (p: PackageProgress) => send('package-progress', p)
@@ -516,7 +516,7 @@ function registerIpc(): void {
     }
     loadPresets()
     for (const c of allConsoles()) if (getEmulator(c.emulator)) applyConsoleConfig(c)
-    const lib = rescan()
+    const lib = await rescan()
     for (const g of lib.games) await enablePending(getGame(g.id)!).catch((e) => log.warn('mod re-enable failed', e))
     send('library', view())
     send('consoles', consoleInfos())
@@ -1034,7 +1034,7 @@ async function doCompress(id: string): Promise<{ ok: boolean; error?: string }> 
       return r
     }
     // the file has a new name: play time, favorite, collections and game options follow it
-    const lib = rescan()
+    const lib = await rescan()
     const next = lib.games.find((x) => x.path.toLowerCase() === r.path.toLowerCase())
     if (next && next.id !== id) {
       moveStats(id, next.id)
@@ -1077,11 +1077,11 @@ async function doAddGames(paths: string[], consoleId?: string): Promise<AddGames
     paths.filter((p) => !pkgs.includes(p)),
     consoleId
   )
-  if (pkgs.length && !r.added.length) send('library', rescan())
+  if (pkgs.length && !r.added.length) send('library', await rescan())
   // conversion on import: Xbox → XISO, multi-disc playlists, 3DS encryption check
   if (r.added.length) for (const n of await afterAdd(r.added, trash).catch((e) => (log.warn('conversion after adding failed', e), []))) notify(n)
   if (r.added.length) {
-    const lib = rescan()
+    const lib = await rescan()
     send('library', lib)
     send('consoles', consoleInfos())
     for (const a of r.added) a.title = lib.games.find((g) => g.path.toLowerCase() === a.path.toLowerCase())?.title
@@ -1117,12 +1117,12 @@ async function deleteGameNow(id: string, withSaves: boolean): Promise<{ ok: bool
   } catch (e) {
     log.error(`delete ${id} failed`, e)
     notify({ kind: 'error', title: 'Could not delete the game', detail: (e as Error).message })
-    send('library', rescan())
+    send('library', await rescan())
     return { ok: false, error: (e as Error).message }
   }
   forgetGame(id)
   send('collections', removeGameFromCollections(id))
-  send('library', rescan())
+  send('library', await rescan())
   send('consoles', consoleInfos())
   log.info(`deleted ${id} (${targets.length} item(s), saves ${withSaves ? 'deleted' : 'kept'})`)
   notify({ kind: 'info', title: 'Game deleted', detail: `${g.title} is in the Recycle Bin${withSaves ? ' with its saves' : ''}.` })
@@ -1144,8 +1144,8 @@ async function trash(p: string): Promise<void> {
  * After every scan: fetch missing artwork in the background and show it as it arrives.
  * atStart: look again for every game that still has none, even if nothing was found last time.
  */
-function scanAndArt(atStart = false): void {
-  const lib = rescan()
+async function scanAndArt(atStart = false): Promise<void> {
+  const lib = await rescan()
   send('library', lib)
   send('consoles', consoleInfos())
   // PS3 game updates: only Sony's small update lists, once a day per game
@@ -1334,7 +1334,7 @@ async function start(): Promise<void> {
   })
   // scan after the window is up so startup stays fast (cache is shown first)
   win.webContents.once('did-finish-load', () => {
-    setTimeout(() => scanAndArt(true), 50)
+    setTimeout(() => void scanAndArt(true).catch((e) => log.error('scan failed', e)), 50)
     startBatteryPolling()
     // a PS3 controller needs a driver (Starstation brings it): offer it when one is plugged in
     if (!HEADLESS || process.env.STARSTATION_TEST_DS3) watchDs3()
