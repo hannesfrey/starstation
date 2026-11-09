@@ -167,6 +167,27 @@ export function packageSize(c: PackageChoice): number {
   return planPackage(c).entries.reduce((n, e) => n + treeSize(e.from).bytes, 0)
 }
 
+/** Settings files that may hold a login (RetroAchievements, RPCN, web services) — checked line by line (#07). */
+const SETTINGS_EXT = new Set(['.ini', '.cfg', '.yml', '.yaml', '.json', '.conf', '.toml', '.xml', '.txt'])
+const SECRET_LINE = /^(\s*["']?[\w.\- ]*?(?:token|password|passwd|api_?key|secret|session_?id)[\w.\- ]*?["']?\s*[=:]\s*)(.+?)(\s*,?\s*)$/i
+
+/**
+ * A settings file with every login value emptied (key kept, value ""): packages go to friends, logins must not.
+ * Quoted values stay quoted (RetroArch: cheevos_token = ""). Returns the text unchanged when there is nothing.
+ */
+export function scrubSecrets(text: string): string {
+  return text
+    .split(/(\r?\n)/)
+    .map((line) => {
+      const m = SECRET_LINE.exec(line)
+      if (!m || !m[2].trim()) return line
+      const v = m[2].trim()
+      const q = /^".*"$/.test(v) ? '""' : /^'.*'$/.test(v) ? "''" : ''
+      return `${m[1]}${q}${m[3]}`
+    })
+    .join('')
+}
+
 /** Copy (or hard-link, for a temporary send folder) every entry into `to`. Links are followed. */
 async function writeTree(from: string, to: string, link: boolean, onFile: (bytes: number) => void, rel = '', skip?: (rel: string, st: fs.Stats) => boolean): Promise<void> {
   const st = await fsp.stat(from)
@@ -178,6 +199,16 @@ async function writeTree(from: string, to: string, link: boolean, onFile: (bytes
   // smart packages: the other PC has it already, or it hasn't changed since the last package there
   if (skip?.(rel, st)) return
   await fsp.mkdir(path.dirname(to), { recursive: true })
+  if (SETTINGS_EXT.has(path.extname(from).toLowerCase()) && st.size < 4 * 1024 * 1024) {
+    const text = await fsp.readFile(from, 'utf8')
+    const clean = scrubSecrets(text)
+    if (clean !== text) {
+      log.info(`package: logins left out of ${rel}`)
+      await fsp.writeFile(to, clean, 'utf8')
+      onFile(st.size)
+      return
+    }
+  }
   if (link) {
     try {
       await fsp.link(from, to)
