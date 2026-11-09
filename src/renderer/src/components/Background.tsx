@@ -50,16 +50,32 @@ interface Props {
   dim: boolean
   /** Settings → Theme ("monthly" if not set). */
   theme?: string
+  /** #33 Reduced animations: drawn twice a second instead of every frame. */
+  reduced?: boolean
 }
 
-export function Background({ paused, dim, theme = 'monthly' }: Props) {
+export function Background({ paused, dim, theme = 'monthly', reduced = false }: Props) {
   const ref = useRef<HTMLCanvasElement>(null)
   const pausedRef = useRef(paused)
   const dimRef = useRef(dim)
   const themeRef = useRef(theme)
+  const reducedRef = useRef(reduced)
+  const wakeRef = useRef<() => void>(() => undefined)
   pausedRef.current = paused
   dimRef.current = dim
   themeRef.current = theme
+  reducedRef.current = reduced
+  // #33 paused (a game runs) or the window hidden: no frames at all; they start again when it's back
+  useEffect(() => {
+    if (!paused) wakeRef.current()
+  }, [paused, reduced])
+  useEffect(() => {
+    const onVis = () => {
+      if (!document.hidden) wakeRef.current()
+    }
+    document.addEventListener('visibilitychange', onVis)
+    return () => document.removeEventListener('visibilitychange', onVis)
+  }, [])
 
   useEffect(() => {
     const canvas = ref.current!
@@ -76,11 +92,22 @@ export function Background({ paused, dim, theme = 'monthly' }: Props) {
     resize()
     window.addEventListener('resize', resize)
 
+    let slow = 0
+    const schedule = () => {
+      if (raf || slow) return
+      if (reducedRef.current) slow = window.setTimeout(() => ((slow = 0), draw(performance.now())), 500)
+      else raf = requestAnimationFrame((n) => ((raf = 0), draw(n)))
+    }
+    wakeRef.current = () => {
+      last = performance.now()
+      schedule()
+    }
     const draw = (now: number) => {
-      raf = requestAnimationFrame(draw)
-      const dt = Math.min(100, now - last)
+      // stop while paused or hidden: nothing is scheduled until wakeRef is called
+      if (pausedRef.current || document.hidden) return
+      schedule()
+      const dt = Math.min(reducedRef.current ? 600 : 100, now - last)
       last = now
-      if (pausedRef.current) return
       t += (dt / 1000) * (dimRef.current ? 0.25 : 1)
       const w = canvas.width
       const h = canvas.height
@@ -139,9 +166,11 @@ export function Background({ paused, dim, theme = 'monthly' }: Props) {
       ctx.fillStyle = glow
       ctx.fillRect(0, h * 0.42, w, h * 0.3)
     }
-    raf = requestAnimationFrame(draw)
+    schedule()
     return () => {
       cancelAnimationFrame(raf)
+      clearTimeout(slow)
+      wakeRef.current = () => undefined
       window.removeEventListener('resize', resize)
     }
   }, [])

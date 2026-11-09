@@ -76,6 +76,8 @@ export async function launchApp(files: string, presets?: string): Promise<{ app:
       ...(presets ? { STARSTATION_PRESETS: presets } : {}),
       // the fake emulator has no window to close: it is ended after this instead of 20 s
       ...(presets ? { STARSTATION_CLOSE_TIMEOUT: process.env.STARSTATION_CLOSE_TIMEOUT ?? '2500' } : {}),
+      // fake installers in tests are a few bytes (a real one is well over 50 MB)
+      STARSTATION_TEST_MIN_INSTALLER: '10',
       ELECTRON_RENDERER_URL: ''
     }
   })

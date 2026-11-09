@@ -29,7 +29,7 @@ async function runUntilExit(files: string, env: Record<string, string> = {}): Pr
     executablePath: path.join(SOURCE, 'node_modules', 'electron', 'dist', 'electron.exe'),
     args: [SOURCE],
     cwd: SOURCE,
-    env: { ...process.env, STARSTATION_FILES: files, STARSTATION_HEADLESS: '1', ELECTRON_RENDERER_URL: '', ...env }
+    env: { ...process.env, STARSTATION_FILES: files, STARSTATION_HEADLESS: '1', STARSTATION_TEST_MIN_INSTALLER: '10', ELECTRON_RENDERER_URL: '', ...env }
   })
   await new Promise<void>((resolve) => {
     if (app.process().exitCode !== null) resolve()
@@ -221,5 +221,24 @@ test('rescue without a kept installer: downloads it (streamed); an error page in
   } finally {
     delete process.env.STARSTATION_GITHUB_DOWNLOADS
     server.close()
+  }
+})
+
+test('#37 Undo update with a damaged kept installer: nothing happens, Starstation stays open and says why', async () => {
+  const files = makeFiles('undo-damaged')
+  writeSettings(files, { bootAnimation: false })
+  fakeInstaller(files, '1.8.0')
+  fs.writeFileSync(updates(files, 'installers', 'Starstation-Setup-1.8.0.exe'), 'not a program at all') // damaged
+  const { app, page } = await launchApp(files)
+  try {
+    const r = await api<{ ok: boolean; error?: string }>(page, 'undoUpdate', '1.8.0')
+    expect(r.ok).toBe(false)
+    expect(r.error).toMatch(/damaged or missing/)
+    await page.waitForTimeout(800)
+    expect(app.process().exitCode).toBeNull() // still running
+    expect(fs.existsSync(updates(files, 'test-runs.json'))).toBe(false)
+    expect(fs.existsSync(updates(files, 'skip.json'))).toBe(false)
+  } finally {
+    await app.close()
   }
 })

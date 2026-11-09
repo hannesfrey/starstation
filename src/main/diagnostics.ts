@@ -11,10 +11,24 @@ import { consoleInfos } from './consoles'
 import { emulatorInfos, tarExe } from './emulators'
 import { healthCheck } from './health'
 import { view } from './library/library'
+import { redact } from './redact'
+
+/** #43 every text file going into a report: passwords, tokens and keys removed (friends send these to Hannes). */
+async function redactTree(d: string): Promise<void> {
+  for (const ent of await fsp.readdir(d, { withFileTypes: true })) {
+    const p = path.join(d, ent.name)
+    if (ent.isDirectory()) await redactTree(p)
+    else if (/\.(log|txt|json|ini|cfg|yml|yaml)$/i.test(ent.name)) {
+      const text = await fsp.readFile(p, 'utf8')
+      const clean = redact(text)
+      if (clean !== text) await fsp.writeFile(p, clean)
+    }
+  }
+}
 
 /**
  * Settings → Diagnostics → Export report: logs + settings + a summary in one zip.
- * Never included: secrets.json (logins), saves, BIOS, games.
+ * Never included: secrets.json (logins), saves, BIOS, games; passwords / tokens / keys in the logs are removed.
  */
 export async function exportReport(to: string): Promise<string> {
   const stage = dir('config', 'electron', 'temp', `report-${Date.now()}`)
@@ -44,6 +58,7 @@ export async function exportReport(to: string): Promise<string> {
       health: healthCheck()
     }
     await fsp.writeFile(path.join(stage, 'summary.json'), JSON.stringify(summary, null, 2))
+    await redactTree(stage)
     await fsp.mkdir(path.dirname(to), { recursive: true })
     await fsp.rm(to, { force: true })
     // Windows' own tar writes .zip files (-a picks the format from the name). It reads its command line in the

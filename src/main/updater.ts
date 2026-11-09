@@ -117,10 +117,36 @@ async function keepInstaller(file: string, v: string): Promise<void> {
   log.info(`kept installer ${v}`)
 }
 
+/**
+ * #37 a kept installer is only used when it looks whole: there, a Windows program ("MZ"), and not cut short
+ * (a real one is well over 50 MB). Exported for tests.
+ */
+export function installerLooksWhole(file: string): boolean {
+  try {
+    const st = fs.statSync(file)
+    if (!st.isFile() || st.size < MIN_INSTALLER_BYTES) return false
+    const head = Buffer.alloc(2)
+    const fd = fs.openSync(file, 'r')
+    try {
+      fs.readSync(fd, head, 0, 2, 0)
+    } finally {
+      fs.closeSync(fd)
+    }
+    return head[0] === 0x4d && head[1] === 0x5a
+  } catch {
+    return false
+  }
+}
+const MIN_INSTALLER_BYTES = Number(process.env.STARSTATION_TEST_MIN_INSTALLER ?? 50 * 1024 * 1024)
+
 /** Download a version's installer from its GitHub release into the keep folder. */
 async function fetchInstaller(v: string): Promise<string> {
   const to = path.join(installersDir(), installerName(v))
-  if (fs.existsSync(to)) return to
+  if (installerLooksWhole(to)) return to
+  if (fs.existsSync(to)) {
+    log.warn(`kept installer ${v} is damaged; downloading it again`)
+    await fsp.rm(to, { force: true })
+  }
   // streamed to disk (about 230 MB: never all in memory)
   await fsp.mkdir(installersDir(), { recursive: true })
   try {
@@ -143,23 +169,45 @@ async function fetchInstaller(v: string): Promise<string> {
  * Install another version: silent NSIS install into the same folder, then it starts itself
  * (--force-run). Starstation quits so the installer can replace it. Hidden tests only note the call.
  */
-function runInstaller(v: string, why: string): void {
+async function runInstaller(v: string, why: string): Promise<{ ok: boolean; error?: string }> {
   const exe = path.join(installersDir(), installerName(v))
+  // #37 a damaged copy is fetched again; if that fails too, Starstation stays as it is
+  if (!installerLooksWhole(exe)) {
+    try {
+      await fetchInstaller(v)
+    } catch (e) {
+      log.error(`installer ${v} is damaged and could not be downloaded again`, e)
+    }
+    if (!installerLooksWhole(exe)) return { ok: false, error: `The installer for ${v} is damaged or missing. Nothing was changed.` }
+  }
   log.info(`installing ${v} (${why}): ${exe}`)
-  endSession() // leaving on purpose: not a crash
   if (HEADLESS) {
     const runs = readJson<{ version: string; why: string; args: string[] }[]>(updatesDir('test-runs.json'), [])
     writeJson(updatesDir('test-runs.json'), [...runs, { version: v, why, args: ['/S', '--force-run'] }])
-  } else spawn(exe, ['/S', '--force-run'], { detached: true, stdio: 'ignore' }).unref()
+  } else {
+    // quit only once Windows has really started it: an installer that can't start leaves Starstation open
+    const started = await new Promise<Error | null>((resolve) => {
+      const p = spawn(exe, ['/S', '--force-run'], { detached: true, stdio: 'ignore' })
+      p.once('spawn', () => resolve(null))
+      p.once('error', (e) => resolve(e))
+      p.unref()
+    })
+    if (started) {
+      log.error(`installer ${v} could not start`, started)
+      return { ok: false, error: `The installer for ${v} could not start (${started.message}). Starstation stays as it is.` }
+    }
+  }
+  endSession() // leaving on purpose: not a crash
   setTimeout(() => app.exit(0), 500)
+  return { ok: true }
 }
 
 /** Settings → About → Undo update. */
 export async function undoUpdate(to: string): Promise<{ ok: boolean; error?: string }> {
   if (!previousVersions().includes(to)) return { ok: false, error: `Version ${to} is not kept on this PC.` }
-  writeJson(updatesDir('skip.json'), { skip: version(), at: new Date().toISOString() })
-  runInstaller(to, 'undo update')
-  return { ok: true }
+  const r = await runInstaller(to, 'undo update')
+  if (r.ok) writeJson(updatesDir('skip.json'), { skip: version(), at: new Date().toISOString() })
+  return r
 }
 
 /**
@@ -179,7 +227,13 @@ export async function maybeRescue(info: StartInfo): Promise<boolean> {
   log.warn(`rescue: ${cur} crashed ${info.crashesInARow} times right after updating, going back to ${prev}`)
   writeJson(updatesDir('rescued.json'), { from: cur, to: prev, at: new Date().toISOString(), shown: false })
   writeJson(updatesDir('skip.json'), { skip: cur, at: new Date().toISOString() })
-  runInstaller(prev, 'rescue')
+  const r = await runInstaller(prev, 'rescue')
+  if (!r.ok) {
+    // the old version can't be put back: keep starting this one rather than leaving nothing
+    log.error(`rescue to ${prev} not possible: ${r.error}`)
+    fs.rmSync(updatesDir('rescued.json'), { force: true })
+    return false
+  }
   return true
 }
 

@@ -12,6 +12,30 @@ export interface WhatsNew {
 
 export const WHATS_NEW: WhatsNew[] = [
   {
+    version: '2.1.0',
+    summary: ['Saves are safer than ever', 'PS1 and PS2 games run smoothly with PS3 controllers', 'Many small fixes for everyday use'],
+    details: [
+      'Each profile has its own save backups now: a brother or sister can never restore their saves over yours.',
+      'Restoring a backup first checks the backup, then swaps it in. A broken backup leaves your current save exactly as it was. If the current saves can’t be backed up first, nothing is changed.',
+      'Switching profiles can be cut off by a crash or power cut without mixing saves: the switch is finished at the next start.',
+      'Games moved to another drive are checked byte for byte before the original is deleted. A game’s files (.cue and its tracks) always move together.',
+      'Two things that change the same saves or mods can no longer run at the same time (a restore while the game starts, a profile switch while a package arrives).',
+      'Mods can only put files inside their own folders. A mod that can’t be switched off (a file in use) isn’t deleted.',
+      'Packages no longer carry your logins (RetroAchievements and others) inside emulator settings, and reports you export have passwords and tokens removed.',
+      'Downloads never hang: a stalled one stops after a minute and is tried again; nothing half-downloaded is ever used. Emulator updates keep the old version until the new one is fully in place.',
+      'PS3 game packages go to the Recycle Bin only after RPCS3 really installed them.',
+      'PS1 and PS2 read controllers a faster way: Gran Turismo 4 and others lagged with PS3 controllers on some PCs. The order chosen on "Who’s playing?" is kept.',
+      'A PS3 controller whose driver was removed is noticed, and Starstation offers the driver again.',
+      'Health check: "Fix it" stops the Xbox Game Bar from taking the PS button, and clearer steps for Steam.',
+      'Each player gets the right buttons for their own kind of controller (GameCube/Wii, RetroArch, PS3), also cheap USB pads.',
+      'If the PS menu itself crashes, the game goes on instead of staying paused.',
+      'Right-click opens the menu of the game you clicked. Changing your PIN asks for the current one first.',
+      'Screens that wait for something show "Try again" instead of loading for ever. A big library or a slow USB drive no longer makes Starstation stop answering, and games on an unplugged drive don’t disappear.',
+      'New option: Settings → General → Reduced animations, for slower PCs. The menu background stops completely while a game runs.',
+      'Undo update checks the kept installer first; if it’s damaged, Starstation stays as it is and says so.'
+    ]
+  },
+  {
     version: '2.0.36',
     summary: ['Almost every controller works in the menu', 'Starstation uses next to no computer power while waiting'],
     details: [

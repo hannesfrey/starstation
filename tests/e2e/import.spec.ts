@@ -37,6 +37,9 @@ test('import copies and verifies everything, then moves only games', async () =>
   const { app, page } = await launchApp(files)
   delete process.env.STARSTATION_IMPORT_SOURCE
 
+  // the first library scan runs in steps now (2.1.0 #28): let it finish before moving around
+  const logDir = path.join(files, 'config', 'logs')
+  await expect.poll(() => fs.existsSync(logDir) && fs.readdirSync(logDir).some((n) => /scan: \d+ games/.test(fs.readFileSync(path.join(logDir, n), 'utf8'))), { timeout: 15_000 }).toBe(true)
   await page.getByTestId('cat-settings').dispatchEvent('click')
   // further down the Settings list: move there first (only items near the selection are drawn)
   for (let i = 0; i < 30 && !(await page.getByTestId('item-games').count()); i++) await page.keyboard.press('ArrowDown')
@@ -75,7 +78,7 @@ test('import copies and verifies everything, then moves only games', async () =>
   // emulator config now points at Starstation's folders, other settings kept
   const ini = fs.readFileSync(F('emulators/pcsx2/inis/PCSX2.ini'), 'utf8')
   expect(ini).toContain(`Bios = ${F('bios\\ps2')}`)
-  expect(ini).toContain('Cross = XInput-0/A')
+  expect(ini).toContain('Cross = SDL-0/A') // 2.1.0: PS2 reads pads through SDL
   expect(ini).toContain('BIOS = SCPH-70004_BIOS_V12_EUR_200.BIN')
   expect(fs.readFileSync(F('emulators/rpcs3/config/vfs.yml'), 'utf8')).toContain('/dev_hdd0/: ' + F('emulators/rpcs3/dev_hdd0').replace(/\\/g, '/') + '/')
   // the game shows up in the menu

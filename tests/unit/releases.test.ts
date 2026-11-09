@@ -42,3 +42,20 @@ describe("What's new", () => {
     expect(whatsNewFor('1.0.0', compareVersions)).toBeNull()
   })
 })
+
+describe('release script (#38, #39)', () => {
+  it('runs every test before it builds, and never replaces the files of a version released to everyone', async () => {
+    const fs = await import('node:fs')
+    const path = await import('node:path')
+    const s = fs.readFileSync(path.resolve(__dirname, '..', '..', 'scripts', 'release.mjs'), 'utf8')
+    const at = (needle: string) => {
+      const i = s.indexOf(needle)
+      expect(i, needle).toBeGreaterThan(-1)
+      return i
+    }
+    const builder = at("run('npx', ['electron-builder'")
+    for (const t of ["run('npx', ['tsc'", "run('npx', ['vitest', 'run'])", "run('npx', ['playwright', 'test'])"]) expect(at(t)).toBeLessThan(builder)
+    expect(at('!existing.isPrerelease')).toBeLessThan(at("run('npx', ['tsc'"))
+    expect(s).toMatch(/if \(existing\) execFileSync\(gh, \['release', 'upload'.*--clobber/)
+  })
+})

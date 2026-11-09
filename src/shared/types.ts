@@ -18,6 +18,8 @@ export interface Settings {
   netplayRelay: string
   /** Seconds the boot animation lasts (0 = skip). */
   bootAnimation: boolean
+  /** Weak PCs (#33): the background moves slowly and menus switch without sliding. */
+  reducedMotion: boolean
   /** Download missing artwork in the background. */
   artworkAuto: boolean
   /** Unpack and sort games saved to games\New downloads. */
@@ -47,6 +49,7 @@ export const DEFAULT_SETTINGS: Settings = {
   netplayNickname: 'Player',
   netplayRelay: 'madrid',
   bootAnimation: true,
+  reducedMotion: false,
   artworkAuto: true,
   sortDownloads: true,
   tvMode: false,

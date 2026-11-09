@@ -782,7 +782,11 @@ function registerIpc(): void {
   })
   // couch test: who has the focus right now (the game, the PS button menu or Starstation)?
   handle('test-fg', async () => (COUCH_TEST ? { fg: await foregroundPid(), emulator: runningPid(), starstation: process.pid } : null))
-  handle('undo-update', (_e, to: string) => undoUpdate(String(to)))
+  handle('undo-update', async (_e, to: string) => {
+    const r = await undoUpdate(String(to))
+    if (!r.ok) notify({ kind: 'error', title: 'Update not undone', detail: r.error })
+    return r
+  })
   handle('release-everyone', async () => {
     const r = await releaseToEveryone()
     notify(
@@ -954,7 +958,7 @@ function registerIpc(): void {
   })
   handle('mod-profile-save', (_e, id: string, name: string) => withGame(id, (g) => void saveModProfile(g, String(name))))
   handle('mod-profile-delete', (_e, id: string, pid: string) => withGame(id, (g) => deleteModProfile(g, String(pid))))
-  handle('mod-profile-apply', (_e, id: string, pid: string) => notRunning(id) ?? withGame(id, (g) => exclusive('Its mods are being changed', id, () => applyModProfile(g, String(pid)))))
+  handle('mod-profile-apply', (_e, id: string, pid: string) => notRunning(id) ?? withGame(id, (g) => exclusive('Its mods are being changed', id, () => applyModProfile(g, String(pid)), { share: true })))
   // the menu (re)loaded (start, safe mode, profile switch, after a crash): it asks for questions still open
   handle('mod-inbox-open', () => openInboxQuestions())
   handle('mod-inbox-assign', (_e, id: string, gameId: string) => assignInbox(String(id), String(gameId ?? '')))
@@ -972,10 +976,10 @@ function registerIpc(): void {
   })
   handle('mod-place', (_e, id: string, pending: string, target: string) => withGame(id, (g) => finishAdd(g, pending, target).then(modAdded(g))))
   handle('mod-toggle', (_e, id: string, modId: string, on: boolean, winner?: 'this' | 'other') =>
-    notRunning(id) ?? withGame(id, (g) => exclusive('Its mods are being changed', id, () => setModEnabled(g, modId, !!on, winner === 'this' || winner === 'other' ? winner : undefined)))
+    notRunning(id) ?? withGame(id, (g) => exclusive('Its mods are being changed', id, () => setModEnabled(g, modId, !!on, winner === 'this' || winner === 'other' ? winner : undefined), { share: true }))
   )
   handle('mod-delete', async (_e, id: string, modId: string) => {
-    const r = await (notRunning(id) ?? withGame(id, (g) => exclusive('Its mods are being changed', id, () => deleteMod(g, modId))))
+    const r = await (notRunning(id) ?? withGame(id, (g) => exclusive('Its mods are being changed', id, () => deleteMod(g, modId), { share: true })))
     if (!r.ok) notify({ kind: 'error', title: 'Mod not deleted', detail: r.error })
     return r
   })

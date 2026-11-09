@@ -2,7 +2,37 @@
 
 Read PROJECT.md first (goal, users, how much process), then SPEC.md. This file tracks where the build stands and every small decision made.
 
-**Next update: `PLAN-2.1.0.md` ("Solid ground", agreed with Hannes 2026-11-09).** Not started yet. Uncommitted: PS2 preset → SDL raw input (GT4 lag fix, 2026-11-08, already copied into Hannes's installed app), PROJECT.md / AGENTS.md / CLAUDE.md / PLAN-2.1.0.md.
+**2.1.0 "Solid ground" (`PLAN-2.1.0.md`): built 2026-11-09, not published yet** — Hannes says when the beta goes out.
+One commit per item (`git log --oneline` from "Project goal docs"). What changed, in short:
+- A (saves): #01 `verifyTree(full)` + `moveFile` hashes everything before deleting; #02 backups/resume history under
+  `config\profiles\<id>\backups` (main profile keeps `Files\backups`); #05 restore = stage `.ss-restore` + verify +
+  swap (`.ss-old`); #23 `backupOutcome()` (made / unchanged / no-saves / too-big / failed), restore refuses when the
+  protective backup fails; #03/#04 profile journal kept until `active` is saved, steps record `hadLive`/`hadIn`,
+  leftovers renamed `.leftover-<time>`; #06 `insideOf()` for mod files; #14 `deleteMod` returns `{ok,error}`, no
+  delete if switching off failed; #07 `scrubSecrets()` empties login values in settings files going into packages;
+  #08 `busy.ts` (`begin` / `exclusive` / `busyWith`): launch, restore, backup, mods, profile switch, package receive;
+  #21 `.bak` shape-checked; #22 settings saved before memory changes.
+- B: #11 `download()` → `.part`, 60 s stall abort, write errors, 2 retries (Nexus uses it); #12 `installStaged()`
+  (unpack beside, check exe, per-file swap, roll back; replaced files in `config\emulator-previous\<id>`); #13
+  `pkgInstalled()` — **RPCS3 exits 0xC0000409 even after good headless installs**, so its log line
+  "Successfully installed <file>" counts as success; #09/#10 `moveGroup()` (all targets checked first, same-name
+  different track = conflict, roll back); #29 New downloads: quick folder signature, failed items retried after 5 min.
+- C: PS1+PS2 via SDL raw input (`{sdlpad}` = SDL-<xinput slot>, others after) — fixes GT4 lag; DS3 "driver gone"
+  via `pnputil /enum-devices /connected /problem` (language-independent `[CM_PROB_…]`); Health "Fix it" for the Game
+  Bar (`gameBarButtonOff`, old value in `config\gamebar-before.json`); #25 Dolphin buttons per player
+  (`{dolA1}`…), RetroArch sdl2 when any player has an SDL pad, generic pads keep their own SDL name + RPCS3
+  MMJoystick; #26 pad helper requests numbered (`#<id> cmd` → `#<id> answer`), Bluetooth on its own thread;
+  #27 PS menu page crash → `resumeAfterCrash()`.
+  **Not changed (no evidence of the slow-slot lag there): RetroArch / Dolphin / RPCS3** — checklist B4 asks.
+- D: #34 right-click passes its row; #24 PIN asks current one (`oldpin:` entry); #35 `timed()` (20 s) + "Try again"
+  for details/mods; #28 `rescan()` async (`scanConsoleAsync`, yields, one at a time, `UnreachableError` keeps a
+  linked folder's games); #31 `writeJson` never waits long: held files finished in the background (`pending`,
+  read by `readJson`, `flushPendingWrites` on quit); emulator config writes still wait (must be on disk);
+  #33 Background stops its frame loop while paused/hidden + Settings → General → Reduced animations.
+- E: #37 `installerLooksWhole()` before undo/rescue, quit only after the installer really started; #38/#39
+  `release.mjs` runs tsc + vitest + playwright first and refuses a tag already released to everyone; #43 `redact()`
+  on every text file in Export report.
+- Checklist for Hannes: `Desktop\Starstation\Test checklist.txt` rewritten for 2.1.0 (round 2 had no answers).
 
 ## Current state
 

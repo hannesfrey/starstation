@@ -1,6 +1,7 @@
 # Plan: Starstation 2.1.0 "Solid ground"
 
 Planned 2026-11-09 by Claude with Hannes. Goal and scale: see `PROJECT.md` (family + friends, stabilize first).
+**Status: built 2026-11-09 (every item below, one commit each; see PROGRESS.md). Beta not published yet.**
 Sources: ChatGPT's audit (`Documents\Codex\2026-11-08\…\outputs\Starstation-Claude-Code-Implementation-Brief.md`,
 findings #01–#44) and the problems Hannes hit on 2026-11-08 (driver removed, PS button, GT4 lag).
 

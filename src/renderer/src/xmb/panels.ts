@@ -304,7 +304,8 @@ export function buildPanel(id: string, arg: string | undefined, state: AppState,
             label: 'Start with Windows',
             value: onOff(s.startWithWindows),
             run: () => (h.setSetting('startWithWindows', !s.startWithWindows), 'keep')
-          }
+          },
+          { key: 'motion', label: 'Reduced animations', value: s.reducedMotion ? 'On (for slower PCs)' : 'Off', run: () => (h.setSetting('reducedMotion', !s.reducedMotion), 'keep') },
         ]
       }
     }

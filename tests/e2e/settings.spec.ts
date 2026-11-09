@@ -125,12 +125,20 @@ test('health, diagnostics, RetroAchievements, netplay, Steam and custom consoles
     await page.keyboard.press('Escape')
 
     // ---- diagnostics: zip with logs + summary, never secrets
+    // #43 a log line with a download key and a token (as an emulator or a link could write them)
+    fs.writeFileSync(path.join(files, 'config', 'logs', 'planted.log'), 'GET https://cdn/x.zip?key=PLANTEDKEY123&expires=99\ncheevos_token = "PLANTEDTOKEN"\n')
     const zip = await api<string>(page, 'exportReport')
     const list = execFileSync(TAR, ['-tf', zip], { encoding: 'utf8' })
     expect(list).toContain('summary.json')
     expect(list).toContain('settings.json')
     expect(list).toMatch(/logs\//)
     expect(list).not.toContain('secrets')
+    const out = fs.mkdtempSync(path.join(files, 'report-'))
+    execFileSync(TAR, ['-xf', zip, '-C', out])
+    const planted = fs.readFileSync(path.join(out, 'logs', 'planted.log'), 'utf8')
+    expect(planted).not.toContain('PLANTEDKEY123')
+    expect(planted).not.toContain('PLANTEDTOKEN')
+    expect(planted).toContain('key=[removed]')
 
     // ---- RetroAchievements: log in with secrets.json → token only, written into the emulator at launch
     expect((await api<{ loggedIn: boolean }>(page, 'raStatus')).loggedIn).toBe(false)
@@ -241,5 +249,19 @@ test('health, diagnostics, RetroAchievements, netplay, Steam and custom consoles
   } finally {
     await app.close()
     server.close()
+  }
+})
+
+test('#33 Reduced animations: menus stop sliding (and it can be switched on in Settings → General)', async () => {
+  const files = makeFiles('reduced-motion')
+  writeSettings(files, { bootAnimation: false, reducedMotion: true })
+  const { app, page } = await launchApp(files)
+  try {
+    await expect(page.getByTestId('xmb')).toBeVisible()
+    await expect(page.locator('.app.reduced-motion')).toHaveCount(1)
+    const st = await api<{ settings: { reducedMotion: boolean } }>(page, 'getState')
+    expect(st.settings.reducedMotion).toBe(true)
+  } finally {
+    await app.close()
   }
 })

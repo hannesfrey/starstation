@@ -1803,8 +1803,8 @@ export function App() {
   // a console's own wallpaper on its column, else the user's picture (none in safe mode)
   const wallpaper = (column && walls.consoles[column.id]) || walls.own
   return (
-    <div className={`app ${idle ? 'idle' : ''} ${running ? 'running' : ''} text-${state?.settings.textSize ?? 'normal'}`}>
-      <Background paused={!!running} dim={idle} theme={state?.settings.theme} />
+    <div className={`app ${idle ? 'idle' : ''} ${running ? 'running' : ''} ${state?.settings.reducedMotion ? 'reduced-motion' : ''} text-${state?.settings.textSize ?? 'normal'}`}>
+      <Background paused={!!running} dim={idle} theme={state?.settings.theme} reduced={!!state?.settings.reducedMotion} />
       {wallpaper && <div className="wallpaper" key={wallpaper} style={{ backgroundImage: `url("${api.mediaUrl(wallpaper)}")` }} data-testid="wallpaper" />}
       {bgArt && !preview && <div className="game-bg" style={{ backgroundImage: `url("${api.mediaUrl(bgArt)}")` }} />}
       {preview && !activePanel && !entry && (

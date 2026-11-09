@@ -962,3 +962,12 @@ body,
   font-size: 1.1vw;
   opacity: 0.7;
 }
+
+/* #33 Reduced animations (Settings → Theme & display, for slower PCs): menus switch without sliding or fading */
+.app.reduced-motion *,
+.app.reduced-motion *::before,
+.app.reduced-motion *::after {
+  transition-duration: 0s !important;
+  animation-duration: 0s !important;
+  animation-iteration-count: 1 !important;
+}
