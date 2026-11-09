@@ -342,7 +342,7 @@ export interface StarstationApi {
   modInboxAssign(id: string, gameId: string): Promise<void>
   modPlace(gameId: string, pending: string, target: string): Promise<ModAddResult>
   modToggle(gameId: string, modId: string, on: boolean, winner?: 'this' | 'other'): Promise<ModToggleResult>
-  modDelete(gameId: string, modId: string): Promise<void>
+  modDelete(gameId: string, modId: string): Promise<{ ok: boolean; error?: string }>
   gbSearch(gameId: string, name?: string): Promise<{ games: GbGame[]; chosen?: number }>
   gbChoose(gameId: string, gbGameId: number): Promise<void>
   gbMods(gbGameId: number, page: number): Promise<{ mods: GbMod[]; more: boolean }>

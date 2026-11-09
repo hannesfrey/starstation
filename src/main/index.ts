@@ -953,7 +953,11 @@ function registerIpc(): void {
   handle('mod-toggle', (_e, id: string, modId: string, on: boolean, winner?: 'this' | 'other') =>
     notRunning(id) ?? withGame(id, (g) => setModEnabled(g, modId, !!on, winner === 'this' || winner === 'other' ? winner : undefined))
   )
-  handle('mod-delete', (_e, id: string, modId: string) => notRunning(id) ?? withGame(id, (g) => deleteMod(g, modId)))
+  handle('mod-delete', async (_e, id: string, modId: string) => {
+    const r = await (notRunning(id) ?? withGame(id, (g) => deleteMod(g, modId)))
+    if (!r.ok) notify({ kind: 'error', title: 'Mod not deleted', detail: r.error })
+    return r
+  })
   handle('gb-search', async (_e, id: string, name?: string) => {
     const g = getGame(id)
     if (!g) return { games: [] }

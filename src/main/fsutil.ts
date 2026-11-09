@@ -29,6 +29,19 @@ export function partsOf(file: string, seen = new Set<string>(), root = path.dirn
   return [...out]
 }
 
+/**
+ * `rel` joined onto `root`, or null when it would land outside `root` (#06): an absolute path, a drive letter,
+ * ".." climbing out, or an empty name. For paths that come from data files (mod lists, packages from friends).
+ */
+export function insideOf(root: string, rel: string): string | null {
+  if (typeof rel !== 'string' || !rel.trim() || path.isAbsolute(rel) || /^[a-zA-Z]:/.test(rel) || rel.includes('\0')) return null
+  const base = path.resolve(root)
+  const full = path.resolve(base, rel)
+  const r = path.relative(base, full)
+  if (!r || r === '..' || r.startsWith(`..${path.sep}`) || path.isAbsolute(r)) return null
+  return full
+}
+
 export function realCase(lower: string): string | null {
   const d = path.dirname(lower)
   try {

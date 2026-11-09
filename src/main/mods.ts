@@ -12,7 +12,7 @@ import { extract } from './emulators'
 import { makePatchedCopy, patchKind } from './patchmods'
 import { PatchError } from './formats/patch'
 import { logger } from './log'
-import { renameRetry } from './fsutil'
+import { insideOf, renameRetry } from './fsutil'
 import type { Game, ModInfo } from '../shared/types'
 
 /**
@@ -354,6 +354,12 @@ async function toggleMod(g: Game, id: string, on: boolean, winner?: 'this' | 'ot
       await backupGame(g, 'before-mod').catch((e) => log.warn('backup before mod failed', e))
       m.everEnabled = true
     }
+    // #06: every file must come from the mod's own folder and land inside the target folder, or nothing is placed
+    const bad = m.files.findIndex((rel, i) => !insideOf(src, rel) || !insideOf(base, m.placement[i] ?? ''))
+    if (bad >= 0) {
+      log.warn(`${g.id}: mod ${id} refused: file ${m.files[bad]} → ${m.placement[bad]} would land outside its folder`)
+      return { ok: false, error: 'This mod has a file that points outside its folder, so it was not switched on.' }
+    }
     let skipped = 0
     try {
       m.files.forEach((rel, i) => {
@@ -389,15 +395,16 @@ async function toggleMod(g: Game, id: string, on: boolean, winner?: 'this' | 'ot
   // (what was done is saved even if a file can't be removed, so a second try picks up where this stopped)
   try {
     for (const rel of m.placement) {
-      const to = path.join(base, rel)
+      const to = insideOf(base, rel)
+      if (!to) continue // #06: never delete outside the target folder
       const k = to.toLowerCase()
       if (st.owners[k] !== m.id) continue
       if (fs.existsSync(to)) fs.rmSync(to)
       delete st.owners[k]
       const heir = st.mods.find((x) => x.id !== m.id && x.enabled && x.target === m.target && x.placement.some((p) => key(p) === k))
-      if (heir) {
-        const i = heir.placement.findIndex((p) => key(p) === k)
-        linkOrCopy(path.join(modsRoot(g), heir.id, heir.files[i]), to)
+      const heirFile = heir && insideOf(path.join(modsRoot(g), heir.id), heir.files[heir.placement.findIndex((p) => key(p) === k)] ?? '')
+      if (heir && heirFile) {
+        linkOrCopy(heirFile, to)
         st.owners[k] = heir.id
       } else removeEmptyDirs(to, base)
     }
@@ -412,14 +419,20 @@ async function toggleMod(g: Game, id: string, on: boolean, winner?: 'this' | 'ot
   return { ok: true, skipped: 0 }
 }
 
-export function deleteMod(g: Game, id: string): Promise<void> {
+/** Delete a mod. If its files can't be taken out of the game (a file in use), it stays listed and nothing is deleted (#14). */
+export function deleteMod(g: Game, id: string): Promise<{ ok: boolean; error?: string }> {
   return withModLock(g.id, async () => {
     const st = load(g)
-    if (st.mods.find((x) => x.id === id)?.enabled) await toggleMod(g, id, false)
+    if (!insideOf(modsRoot(g), id)) return { ok: false, error: 'Mod not found.' }
+    if (st.mods.find((x) => x.id === id)?.enabled) {
+      const off = await toggleMod(g, id, false)
+      if (!off.ok) return { ok: false, error: `The mod was not deleted: ${'error' in off ? off.error : 'it could not be switched off'} Close the game or program using it and try again.` }
+    }
     const after = load(g)
     after.mods = after.mods.filter((x) => x.id !== id)
     save(g, after)
     await fsp.rm(path.join(modsRoot(g), id), { recursive: true, force: true })
+    return { ok: true }
   })
 }
 
