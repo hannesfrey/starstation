@@ -314,6 +314,61 @@ export async function installCore(core: string, onProgress?: (text: string) => v
   log.info(`installed core ${core}`)
 }
 
+/** Where the program files an update replaced are kept (one generation per emulator), to put them back by hand. */
+export const previousDir = (e: EmulatorPreset) => dir('config', 'emulator-previous', e.id)
+
+/**
+ * #12: unpack into a separate folder, check the program is there, then move the new files in. The files they
+ * replace move to config\emulator-previous\<id> first; if anything fails half-way, they are put back, so the
+ * old version keeps working. Settings, saves and everything else the archive doesn't contain stay untouched.
+ */
+export async function installStaged(e: EmulatorPreset, archive: string): Promise<void> {
+  const live = emulatorDir(e)
+  const stage = `${live}.new-${Date.now()}`
+  try {
+    await extract(archive, stage)
+    const exeRel = path.relative(live, emulatorExe(e))
+    if (!path.isAbsolute(e.exe) && !fs.existsSync(path.join(stage, exeRel)))
+      throw new Error(`The download doesn't contain ${path.basename(e.exe)}. Nothing was changed; ${e.name} stays as it was.`)
+    const files: string[] = []
+    const walk = async (d: string, rel = ''): Promise<void> => {
+      for (const ent of await fsp.readdir(d, { withFileTypes: true })) {
+        const r = rel ? path.join(rel, ent.name) : ent.name
+        if (ent.isDirectory()) await walk(path.join(d, ent.name), r)
+        else files.push(r)
+      }
+    }
+    await walk(stage)
+    const prev = previousDir(e)
+    await fsp.rm(prev, { recursive: true, force: true })
+    const moved: { rel: string; hadOld: boolean }[] = []
+    try {
+      for (const rel of files) {
+        const dst = path.join(live, rel)
+        const hadOld = fs.existsSync(dst)
+        if (hadOld) {
+          await fsp.mkdir(path.dirname(path.join(prev, rel)), { recursive: true })
+          await renameRetry(dst, path.join(prev, rel))
+        }
+        moved.push({ rel, hadOld })
+        await fsp.mkdir(path.dirname(dst), { recursive: true })
+        await renameRetry(path.join(stage, rel), dst)
+      }
+    } catch (err) {
+      // put the old version back exactly as it was
+      log.error(`${e.id}: update stopped half-way, putting the old files back`, err)
+      for (const { rel, hadOld } of moved.reverse()) {
+        const dst = path.join(live, rel)
+        await fsp.rm(dst, { force: true }).catch(() => undefined)
+        if (hadOld) await renameRetry(path.join(prev, rel), dst).catch((x) => log.error(`could not put back ${rel}`, x))
+      }
+      throw new Error(`${e.name} could not be updated (${(err as Error).message}). The old version was kept.`)
+    }
+  } finally {
+    await fsp.rm(stage, { recursive: true, force: true })
+  }
+}
+
 /**
  * Install or update an emulator from its official source. Settings and data inside the emulator
  * folder are kept: new files overwrite program files only (archives don't contain user configs).
@@ -344,7 +399,7 @@ export async function installEmulator(id: string, onProgress?: (text: string) =>
   onProgress?.(`Downloading ${e.name}…`)
   await download(url, dl, (d, t) => t && onProgress?.(`Downloading ${e.name}… ${Math.round((d / t) * 100)}%`))
   onProgress?.(`Installing ${e.name}…`)
-  await extract(dl, emulatorDir(e))
+  await installStaged(e, dl)
   await fsp.rm(dl, { force: true })
   writeJson(path.join(emulatorDir(e), '.starstation.json'), { version, tag, asset: name, source: url, installedAt: new Date().toISOString() })
   for (const c of allConsoles().filter((x) => x.emulator === e.id)) applyConsoleConfig(c)
