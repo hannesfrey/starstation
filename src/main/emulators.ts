@@ -218,25 +218,86 @@ export async function extract(archive: string, to: string, opts: { flatten?: boo
   await fsp.rm(tmp, { recursive: true, force: true })
 }
 
-/** Download to a file without holding it in memory (mods and emulators can be gigabytes). */
-export async function download(url: string, file: string, onProgress?: (done: number, total: number) => void): Promise<void> {
-  const r = await net.fetch(url, { headers: { 'User-Agent': 'Starstation' } })
-  if (!r.ok || !r.body) throw new Error(`Download failed: HTTP ${r.status}`)
-  const total = Number(r.headers.get('content-length') ?? 0)
-  await fsp.mkdir(path.dirname(file), { recursive: true })
-  const out = fs.createWriteStream(file)
-  let done = 0
-  const reader = r.body.getReader()
-  for (;;) {
-    const { done: end, value } = await reader.read()
-    if (end) break
-    done += value.length
-    if (!out.write(value)) await new Promise<void>((res) => out.once('drain', () => res()))
-    onProgress?.(done, total)
+export interface DownloadOptions {
+  /** No data for this long: the download is given up (default 60 s) instead of hanging for ever. */
+  stallMs?: number
+  /** Extra tries after a dropped connection (default 2). HTTP errors (404…) and disk errors are not tried again. */
+  retries?: number
+  /** Tests: a fetch stand-in. */
+  fetch?: (url: string, init: RequestInit) => Promise<Response>
+}
+
+class HttpError extends Error {}
+
+/**
+ * Download to a file without holding it in memory (mods and emulators can be gigabytes). #11: the data goes to
+ * "<file>.part" and gets its real name only when complete; a stalled connection is given up after a minute; a
+ * write error (disk full) stops it at once; a dropped connection is tried again. Nothing half-written is left.
+ */
+export async function download(url: string, file: string, onProgress?: (done: number, total: number) => void, opts: DownloadOptions = {}): Promise<void> {
+  const tries = 1 + (opts.retries ?? 2)
+  for (let i = 1; ; i++) {
+    try {
+      return await downloadOnce(url, file, onProgress, opts)
+    } catch (e) {
+      const disk = !!(e as NodeJS.ErrnoException).code
+      if (i >= tries || e instanceof HttpError || disk) throw e
+      log.warn(`download ${path.basename(file)} dropped (${(e as Error).message}); try ${i + 1} of ${tries}`)
+      await new Promise((r) => setTimeout(r, 1000 * i))
+    }
   }
-  await new Promise<void>((res, rej) => out.end((err?: Error | null) => (err ? rej(err) : res())))
-  // a connection that ended early without an error: never unpack half a file
-  if (total && done !== total) throw new Error(`Download incomplete (${done} of ${total} bytes). Try again.`)
+}
+
+async function downloadOnce(url: string, file: string, onProgress: ((done: number, total: number) => void) | undefined, opts: DownloadOptions): Promise<void> {
+  const stallMs = opts.stallMs ?? 60_000
+  const ctl = new AbortController()
+  let timer: NodeJS.Timeout | undefined
+  const stalled = () => {
+    clearTimeout(timer)
+    timer = setTimeout(() => ctl.abort(new Error(`The download stopped (no data for ${Math.round(stallMs / 1000)} s). Try again.`)), stallMs)
+  }
+  const part = `${file}.part`
+  await fsp.mkdir(path.dirname(file), { recursive: true })
+  let out: fs.WriteStream | null = null
+  try {
+    stalled()
+    const doFetch = opts.fetch ?? ((u: string, init: RequestInit) => net.fetch(u, init))
+    const r = await doFetch(url, { headers: { 'User-Agent': 'Starstation' }, signal: ctl.signal })
+    if (!r.ok || !r.body) throw new HttpError(`Download failed: HTTP ${r.status}`)
+    const total = Number(r.headers.get('content-length') ?? 0)
+    out = fs.createWriteStream(part)
+    let writeError: Error | null = null
+    out.on('error', (err) => {
+      writeError = err
+      ctl.abort(err)
+    })
+    let done = 0
+    const reader = r.body.getReader()
+    ctl.signal.addEventListener('abort', () => void reader.cancel().catch(() => undefined), { once: true })
+    for (;;) {
+      const { done: end, value } = await reader.read()
+      if (ctl.signal.aborted) throw ctl.signal.reason
+      if (end) break
+      stalled()
+      done += value.length
+      if (!out.write(value)) await new Promise<void>((res) => out!.once('drain', () => res()).once('error', () => res()))
+      if (writeError) throw writeError
+      onProgress?.(done, total)
+    }
+    const o = out
+    await new Promise<void>((res, rej) => o.end((err?: Error | null) => (err ? rej(err) : res())))
+    if (writeError) throw writeError
+    // a connection that ended early without an error: never unpack half a file
+    if (total && done !== total) throw new Error(`Download incomplete (${done} of ${total} bytes). Try again.`)
+    await fsp.rm(file, { force: true })
+    await renameRetry(part, file)
+  } catch (e) {
+    if (out && !out.closed) await new Promise<void>((res) => out!.destroy().once('close', () => res()))
+    await fsp.rm(part, { force: true }).catch(() => undefined)
+    throw ctl.signal.aborted && ctl.signal.reason instanceof Error ? ctl.signal.reason : e
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 /** Install a RetroArch core from the official libretro buildbot. */

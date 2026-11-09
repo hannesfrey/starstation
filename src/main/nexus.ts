@@ -1,10 +1,9 @@
-import fs from 'node:fs'
-import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { app, net } from 'electron'
 import { dir } from './paths'
 import { getSecrets } from './settings'
 import { logger } from './log'
+import { download } from './emulators'
 import type { NexusRequest } from '../shared/types'
 
 /**
@@ -74,21 +73,7 @@ export async function downloadNxm(url: string, onProgress?: (pct: number) => voi
   if (!uri) throw new Error('Nexus Mods gave no download for this file.')
   const name = decodeURIComponent(path.basename(new URL(uri).pathname)) || `nexus-${l.mod}-${l.file}.zip`
   const to = dir('config', 'downloads', name.replace(/[\\/:*?"<>|]/g, '_'))
-  const r = await net.fetch(uri, { headers: { 'User-Agent': 'Starstation' } })
-  if (!r.ok || !r.body) throw new Error(`Download failed: HTTP ${r.status}`)
-  const total = Number(r.headers.get('content-length') ?? 0)
-  await fsp.mkdir(path.dirname(to), { recursive: true })
-  const out = fs.createWriteStream(to)
-  const reader = r.body.getReader()
-  let done = 0
-  for (;;) {
-    const { done: end, value } = await reader.read()
-    if (end) break
-    done += value.length
-    if (!out.write(value)) await new Promise<void>((res) => out.once('drain', () => res()))
-    if (total) onProgress?.(Math.round((done / total) * 100))
-  }
-  await new Promise<void>((res, rej) => out.end((err?: Error | null) => (err ? rej(err) : res())))
+  await download(uri, to, (done, total) => total && onProgress?.(Math.round((done / total) * 100)))
   // not the link itself: it carries the download key and the user's Nexus id (logs go into diagnostics reports)
   log.info(`downloaded Nexus Mods ${l.domain} mod ${l.mod} file ${l.file} → ${to}`)
   return to
