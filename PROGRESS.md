@@ -37,7 +37,7 @@ One commit per item (`git log --oneline` from "Project goal docs"). What changed
 - To watch: the first library scan now finishes a little after the menu appears (async). e2e `import.spec` clicked
   a column before it finished and landed on Users; it now waits for the "scan:" log line. If Hannes sees the menu
   jump at start, look at the column effect in App.tsx (`autoColumn`).
-- **Released as beta 2026-11-09** (Hannes said go): tag v2.1.0, commit 28e07d0, pre-release on GitHub. Release run: 187 unit + 91 e2e + packaged check passed. Next: Hannes works through `DesktopStarstationTest checklist.txt` and says "read the test checklist". Not "Release to everyone" before that.
+- **Released as beta 2026-11-09** (Hannes said go): tag v2.1.0, commit 28e07d0, pre-release on GitHub. Release run: 187 unit + 91 e2e + packaged check passed. Next: Hannes works through `Desktop\Starstation\Test checklist.txt` and says "read the test checklist". Not "Release to everyone" before that.
 
 ## Current state
 
